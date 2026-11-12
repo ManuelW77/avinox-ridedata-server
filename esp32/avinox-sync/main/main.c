@@ -76,7 +76,7 @@ static void button_task(void *arg)
         if (prev >= BOOT_HOLD_MS && !pressed) {
             ESP_LOGW(TAG, "BOOT losgelassen: Neustart in den Einrichtungsmodus");
             led_set_override(LED_SETUP);
-            if (config_request_portal() != ESP_OK) {
+            if (config_request_portal(true) != ESP_OK) {
                 ESP_LOGE(TAG, "Merker nicht gespeichert");
             }
             vTaskDelay(pdMS_TO_TICKS(300));
@@ -184,10 +184,13 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(500));
 
     config_load(&s_cfg);
-    bool want_portal = config_take_portal_request();
+    portal_request_t req = config_take_portal_request();
+    bool want_portal = req != PORTAL_REQ_NONE;
+    bool rescue = req == PORTAL_REQ_RESCUE;     /* BOOT im Betrieb gehalten: Notfallmodus */
     if (boot_held_at_start()) {
         ESP_LOGI(TAG, "BOOT beim Start gedrückt");
         want_portal = true;
+        rescue = true;
     }
     if (!config_complete(&s_cfg)) {
         ESP_LOGW(TAG, "Konfiguration unvollständig (SSID, Server-URL oder Token fehlt)");
@@ -197,7 +200,7 @@ void app_main(void)
        Rollback nach 5 min würde mitten in die Einrichtung platzen. */
     ota_boot(config_complete(&s_cfg) && !want_portal);
     if (want_portal) {
-        portal_run();       /* kehrt nicht zurück */
+        portal_run(rescue);       /* kehrt nicht zurück */
     }
 
     ESP_LOGI(TAG, "Server %s, WLAN '%s', Sync alle %d min", s_cfg.url, s_cfg.ssid, CONFIG_AVX_SYNC_INTERVAL_MIN);

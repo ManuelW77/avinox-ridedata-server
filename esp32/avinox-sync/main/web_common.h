@@ -48,7 +48,7 @@ typedef enum {
     T_DEVICE, T_FIRMWARE, T_IP, T_SIGNAL, T_UPTIME, T_HEAP, T_USB, T_USB_ABSENT, T_USB_READY, T_USB_FAILED,
     T_USB_HOSTFAIL, T_NOT_CONNECTED, T_SETTINGS, T_ACCESS_H, T_ACCESS_NEW, T_ACCESS_NOTE, T_WARN_WIFI,
     T_SETUP_BTN, T_SETUP_NOTE, T_OK_SAVED_WEB, T_OK_SETUP,
-    T_LANG_H, T_LANG_NOTE, T_LANG_SAVE,
+    T_LANG_H, T_LANG_NOTE, T_LANG_SAVE, T_RESCUE,
     T_COUNT
 } web_text_t;
 
@@ -66,6 +66,13 @@ void web_page_head(buf_t *b, const char *path);
 void web_page_tail(buf_t *b);
 /* Meldungsseite; cls = "ok" | "err". */
 esp_err_t web_send_message(httpd_req_t *req, const char *cls, web_text_t text, bool back_link);
+
+/* ---- Notfallmodus */
+
+/* Notfallmodus (Einrichtungs-WLAN offen): Das Speichern verlangt dann ein neues Zugangspasswort. */
+void web_set_rescue(bool on);
+/* Hinweis-Kasten für den Seitenanfang; tut nichts, wenn der Notfallmodus nicht aktiv ist. */
+void web_render_rescue_banner(buf_t *b);
 
 /* ---- Einstellungsformular */
 
