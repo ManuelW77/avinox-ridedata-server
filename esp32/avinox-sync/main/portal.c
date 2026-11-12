@@ -14,6 +14,7 @@
 #include "esp_event.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "lwip/sockets.h"
 
@@ -341,7 +342,17 @@ static const char PAGE_HEAD2[] = "\"><head><meta charset=\"utf-8\">"
 
 static const char PAGE_TAIL[] =
     "<footer>© 2026 Manuel Weiser · Build with <span role=\"img\" aria-label=\"Herz\">❤️</span> and a <span role=\"img\" aria-label=\"Fahrrad\">🚲</span> by Manuel Weiser in Leipzig · "
-    "<a href=\"https://manuelw.de\">manuelw.de</a></footer></main></body></html>";
+    "<a href=\"https://manuelw.de\">manuelw.de</a>";
+static const char PAGE_TAIL_END[] = "</footer></main></body></html>";
+
+/* Seitenende; Firmware-Version (aus PROJECT_VER) im Footer, HTML-escaped. */
+static void page_tail(buf_t *b)
+{
+    buf_append(b, PAGE_TAIL);
+    buf_append(b, " · Firmware v");
+    buf_append_esc(b, esp_app_get_description()->version);
+    buf_append(b, PAGE_TAIL_END);
+}
 
 /* Seitenkopf samt Sprachumschalter; path = aktuelle Seite für die ?lang=-Links. */
 static void page_head(buf_t *b, const char *path)
@@ -425,7 +436,7 @@ static esp_err_t send_message(httpd_req_t *req, const char *cls, int text, bool 
         buf_append(&b, "</a></p>");
     }
     buf_append(&b, "</section>");
-    buf_append(&b, PAGE_TAIL);
+    page_tail(&b);
     return buf_send(req, &b);
 }
 
@@ -518,7 +529,7 @@ static esp_err_t root_get(httpd_req_t *req)
     buf_append(&b, "</button></form><form method=\"post\" action=\"/restart\"><button class=\"sec\" type=\"submit\">");
     buf_append(&b, T(T_RESTART_BTN));
     buf_append(&b, "</button></form></section>");
-    buf_append(&b, PAGE_TAIL);
+    page_tail(&b);
     return buf_send(req, &b);
 }
 
@@ -532,7 +543,7 @@ static esp_err_t status_get(httpd_req_t *req)
     buf_append(&b, "<p><a href=\"/\">");
     buf_append(&b, T(T_TO_SETUP));
     buf_append(&b, "</a></p>");
-    buf_append(&b, PAGE_TAIL);
+    page_tail(&b);
     return buf_send(req, &b);
 }
 
