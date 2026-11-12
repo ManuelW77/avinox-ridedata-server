@@ -278,3 +278,26 @@ def test_mix_moving_seconds_per_mode_and_gear():
     m = dash.mix([a, b])
     assert m["assist"]["moving_seconds_per_mode"] == {"eco": 200, "turbo": 60}
     assert m["gears"]["moving_seconds_per_gear"] == {"1": 50, "2": 30}
+
+
+def test_mix_by_gradient_and_cadence_per_gear():
+    a = _mix_ride({})
+    a["by_gradient"] = {"3–6": {"seconds": 100, "avg_rider_power_w": 200, "avg_motor_power_w": 100, "avg_speed_kmh": 10.0},
+                        "-1–1": {"seconds": 50, "avg_rider_power_w": 100, "avg_motor_power_w": None, "avg_speed_kmh": 20.0}}
+    a["gears"]["per_gear"] = {"1": {"moving_seconds": 100, "cadence_seconds": 100, "avg_cadence_rpm": 60},
+                              "2": {"moving_seconds": 20, "cadence_seconds": 20, "avg_cadence_rpm": 90}}
+    b = _mix_ride({})
+    b["by_gradient"] = {"3–6": {"seconds": 300, "avg_rider_power_w": 100, "avg_motor_power_w": 200, "avg_speed_kmh": 14.0}}
+    b["gears"]["per_gear"] = {"1": {"moving_seconds": 100, "cadence_seconds": 300, "avg_cadence_rpm": 80},
+                              "2": {"moving_seconds": 15, "cadence_seconds": 15, "avg_cadence_rpm": 70}}
+    c = _mix_ride({})  # älteres Format ohne by_gradient
+    m = dash.mix([a, b, c])
+    bg = m["by_gradient"]
+    assert list(bg) == ["-1–1", "3–6"]
+    assert bg["3–6"] == {"seconds": 400, "avg_rider_power_w": 125, "avg_motor_power_w": 175, "avg_speed_kmh": 13.0}
+    assert bg["-1–1"]["avg_motor_power_w"] is None
+    # Gang 1: (60*100 + 80*300) / 400 = 75; Gang 2: nur 35 s, aber >= 30 -> (90*20+70*15)/35 = 81
+    assert m["gears"]["avg_cadence_per_gear"] == {"1": 75, "2": 81}
+    b["gears"]["per_gear"]["2"]["moving_seconds"] = 5
+    a["gears"]["per_gear"]["2"]["moving_seconds"] = 5
+    assert "2" not in dash.mix([a, b])["gears"]["avg_cadence_per_gear"]
