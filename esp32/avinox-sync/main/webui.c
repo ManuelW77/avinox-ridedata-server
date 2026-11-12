@@ -26,6 +26,9 @@ static const char *TAG = "webui";
 #define MAX_APS         20
 #define MAX_FAILS       5
 #define LOCK_US         (30LL * 1000000)
+#define GLOBAL_FAILS    20                  /* mehr als so viele Fehlversuche ... */
+#define GLOBAL_WIN_US   (60LL * 1000000)    /* ... innerhalb dieses Fensters sperren alle ungültigen Anmeldungen */
+#define GLOBAL_LOCK_US  (60LL * 1000000)
 
 static app_config_t s_cfg;
 static wifi_ap_record_t s_aps[MAX_APS];
@@ -41,6 +44,9 @@ typedef struct {
     int64_t last_us;
 } client_t;
 static client_t s_clients[MAX_CLIENTS];
+static int s_glob_fails;
+static int64_t s_glob_start_us;
+static int64_t s_glob_lock_until_us;
 
 /* ------------------------------------------------------------ Zugriffsschutz */
 
@@ -91,7 +97,8 @@ static bool client_ip(httpd_req_t *req, uint8_t ip[16], char *txt, size_t txt_ca
     return true;
 }
 
-/* Eintrag der IP suchen oder anlegen (ersetzt abgelaufene, sonst den ältesten ohne aktive Sperre bzw. ältesten). */
+/* Eintrag der IP suchen oder anlegen. Gesperrte Einträge werden nie verdrängt; sind alle Plätze gesperrt,
+ * gibt es NULL (der neue Client gilt dann als gesperrt). */
 static client_t *client_entry(const uint8_t ip[16], int64_t now)
 {
     client_t *free_slot = NULL, *oldest = NULL;
@@ -100,7 +107,10 @@ static client_t *client_entry(const uint8_t ip[16], int64_t now)
         if (c->used && memcmp(c->ip, ip, 16) == 0) {
             return c;
         }
-        bool idle = !c->used || (c->lock_until_us <= now && c->fails == 0);
+        if (c->used && c->lock_until_us > now) {
+            continue;
+        }
+        bool idle = !c->used || c->fails == 0;
         if (idle && !free_slot) {
             free_slot = c;
         }
@@ -109,10 +119,21 @@ static client_t *client_entry(const uint8_t ip[16], int64_t now)
         }
     }
     client_t *c = free_slot ? free_slot : oldest;
+    if (!c) {
+        return NULL;
+    }
     memset(c, 0, sizeof(*c));
     c->used = true;
     memcpy(c->ip, ip, 16);
     return c;
+}
+
+static void reply_429(httpd_req_t *req, int64_t until_us, int64_t now)
+{
+    char retry[12];
+    snprintf(retry, sizeof(retry), "%d", (int)((until_us - now) / 1000000 + 1));
+    httpd_resp_set_hdr(req, "Retry-After", retry);
+    reply_plain(req, "429 Too Many Requests", "Zu viele Fehlversuche, bitte warten. / Too many failed attempts, please wait.");
 }
 
 /* true = Anfrage darf weiter. Sonst ist die Antwort (429/401/403) schon gesendet.
@@ -124,15 +145,21 @@ static bool access_ok(httpd_req_t *req, bool post)
     uint8_t ip[16];
     char ip_txt[48] = "?";
     client_t *cl = NULL;
+    bool glob_locked = now < s_glob_lock_until_us;
     if (client_ip(req, ip, ip_txt, sizeof(ip_txt))) {
         cl = client_entry(ip, now);
+        if (!cl) {
+            ESP_LOGW(TAG, "Alle Sperr-Plätze belegt: %s gilt als gesperrt", ip_txt);
+            reply_429(req, now + LOCK_US, now);
+            return false;
+        }
         cl->last_us = now;
-    }
-    if (cl && now < cl->lock_until_us) {
-        char retry[12];
-        snprintf(retry, sizeof(retry), "%d", (int)((cl->lock_until_us - now) / 1000000 + 1));
-        httpd_resp_set_hdr(req, "Retry-After", retry);
-        reply_plain(req, "429 Too Many Requests", "Zu viele Fehlversuche, bitte warten. / Too many failed attempts, please wait.");
+        if (now < cl->lock_until_us) {
+            reply_429(req, cl->lock_until_us, now);
+            return false;
+        }
+    } else if (glob_locked) {
+        reply_429(req, s_glob_lock_until_us, now);      /* Adresse unbekannt: während globaler Sperre immer 429 */
         return false;
     }
 
@@ -157,10 +184,26 @@ static bool access_ok(httpd_req_t *req, bool post)
         } else {
             ESP_LOGI(TAG, "Anfrage ohne Authorization-Header (Browser fragt erst an)");
         }
-        if (cl && have && ++cl->fails >= MAX_FAILS) {
-            cl->fails = 0;
-            cl->lock_until_us = now + LOCK_US;
-            ESP_LOGW(TAG, "%d Fehlversuche von %s: Anmeldung dieser Adresse 30 s gesperrt", MAX_FAILS, ip_txt);
+        if (have) {
+            if (now - s_glob_start_us > GLOBAL_WIN_US) {
+                s_glob_start_us = now;
+                s_glob_fails = 0;
+            }
+            if (++s_glob_fails > GLOBAL_FAILS) {
+                s_glob_fails = 0;
+                s_glob_lock_until_us = now + GLOBAL_LOCK_US;
+                glob_locked = true;
+                ESP_LOGW(TAG, "Mehr als %d Fehlversuche in 60 s: ungültige Anmeldungen 60 s gesperrt", GLOBAL_FAILS);
+            }
+            if (cl && ++cl->fails >= MAX_FAILS) {
+                cl->fails = 0;
+                cl->lock_until_us = now + LOCK_US;
+                ESP_LOGW(TAG, "%d Fehlversuche von %s: Anmeldung dieser Adresse 30 s gesperrt", MAX_FAILS, ip_txt);
+            }
+        }
+        if (glob_locked && have) {      /* ohne Header weiter 401, damit der Browser den Login-Dialog zeigt */
+            reply_429(req, s_glob_lock_until_us, now);
+            return false;
         }
         httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Avinox-Sync\", charset=\"UTF-8\"");
         reply_plain(req, "401 Unauthorized", "Anmeldung erforderlich. / Authentication required.");

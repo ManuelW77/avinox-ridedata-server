@@ -205,8 +205,12 @@ static const char *const TXT[T_COUNT][2] = {
     [T_LANG_H] = { "Sprache", "Language" },
     [T_LANG_NOTE] = { "Sprache der Weboberfläche. Wird im Browser gespeichert.", "Language of the web interface. Stored in your browser." },
     [T_LANG_SAVE] = { "Speichern", "Save" },
-    [T_RESCUE] = { "Notfallmodus: Einrichtungs-WLAN ohne Passwort. Bitte ein neues Zugangspasswort vergeben.",
-                   "Emergency mode: setup Wi-Fi without a password. Please set a new access password." },
+    [T_RESCUE] = { "Notfallmodus: Einrichtungs-WLAN ohne Passwort. Bitte ein neues Zugangspasswort vergeben. Bei geänderter Server-URL muss der Token neu eingegeben werden.",
+                   "Emergency mode: setup Wi-Fi without a password. Please set a new access password. If the server URL is changed, the token must be entered again." },
+    [T_E_RESCUE_TOKEN] = { "Notfallmodus: Bei geänderter Server-URL muss der Token neu eingegeben werden.",
+                           "Emergency mode: if the server URL is changed, the token must be entered again." },
+    [T_E_RESCUE_WIFI] = { "Notfallmodus: Bei geändertem WLAN-Namen muss das WLAN-Passwort neu eingegeben werden.",
+                          "Emergency mode: if the Wi-Fi name is changed, the Wi-Fi password must be entered again." },
     [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
     [T_RESTART_BTN] = { "Ohne Änderung neu starten", "Restart without changes" },
     [T_OPEN_SUFFIX] = { ", offen", ", open" },
@@ -550,6 +554,10 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     if (!nc->ssid[0]) {
         return web_send_message(req, "err", T_E_NOSSID, true);
     }
+    /* Notfallmodus: Zugangsdaten dürfen nicht stillschweigend an ein anderes Ziel umgeleitet werden. */
+    if (s_rescue && strcmp(nc->ssid, cur->ssid) != 0 && !open[0] && !pass[0]) {
+        return web_send_message(req, "err", T_E_RESCUE_WIFI, true);
+    }
     if (open[0]) {
         nc->pass[0] = '\0';
     } else if (pass[0]) {
@@ -569,6 +577,9 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     }
     if (!config_normalize_url(url)) {
         return web_send_message(req, "err", T_E_URL, true);
+    }
+    if (s_rescue && strcmp(url, cur->url) != 0 && !token[0]) {
+        return web_send_message(req, "err", T_E_RESCUE_TOKEN, true);
     }
     strlcpy(nc->url, url, sizeof(nc->url));
     if (token[0]) {

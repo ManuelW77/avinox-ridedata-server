@@ -85,7 +85,7 @@ Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgesch�
 - **Adresse:** `http://<IP des Geräts>/`. Die IP steht in der Geräteliste des Routers oder auf der Geräteseite des Servers.
 - **Login:** Benutzer `avinox` (fest), Passwort = Zugangspasswort = Passwort des Einrichtungs-WLANs. Ohne gesetztes
   Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen werden
-  alle Anfragen dieser Client-IP 30 s lang mit 429 abgewiesen (auch mit richtigen Daten, andere Geräte sind nicht betroffen).
+  alle Anfragen dieser Client-IP 30 s lang mit 429 abgewiesen (auch mit richtigen Daten, andere Geräte sind nicht betroffen). Gesperrte Einträge werden nie verdrängt (8 Plätze, alle belegt = neuer Client gesperrt). Mehr als 20 Fehlversuche in 60 s sperren zusätzlich alle ungültigen Anmeldungen 60 s lang; richtige Daten nicht gesperrter Adressen gehen weiter durch.
   Abgewiesene Anmeldungen stehen mit Grund, Benutzername und Passwortlänge (nie dem Passwort) im Log.
 - **CSRF-Schutz:** Änderungen (POST) werden nur angenommen, wenn `Origin` oder ersatzweise `Referer` zum Host passt;
   fehlen beide Header, wird abgelehnt (403).
@@ -98,7 +98,7 @@ Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgesch�
   (Einrichtungsmodus) und neu einrichten.
 - **Passwort vergessen (Notfallmodus):** Wird der Einrichtungsmodus per BOOT-Taste ausgelöst (Taste beim Start halten oder
   im Betrieb ≥ 3 s halten und loslassen), startet das Einrichtungs-WLAN **ohne Passwort**. Die Seite zeigt oben einen
-  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Nach 15 min ohne Speichern
+  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Bei geänderter Server-URL muss der Token, bei geändertem WLAN-Namen (nicht offen) das WLAN-Passwort neu eingegeben werden. Nach 15 min ohne Speichern
   startet das Gerät in den Normalbetrieb neu (nur bei vollständiger Konfiguration). Über die Weboberfläche oder wegen
   unvollständiger Konfiguration gestarteter Einrichtungsmodus bleibt wie gehabt passwortgeschützt.
 
