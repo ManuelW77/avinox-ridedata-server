@@ -93,11 +93,20 @@
 <section class="card">
   <h2>{{ t('set.api') }}</h2>
   <div class="form-row" style="margin-bottom:0.75rem">
-    <label for="server-url">{{ t('set.server_url') }}</label>
-    <div class="actions">
-      <input type="text" id="server-url" value="{{ server_url }}" readonly style="flex:1" autocomplete="off">
-      <button type="button" class="btn ghost" id="server-url-copy">{{ t('set.copy') }}</button>
+    <label>{{ t('set.server_url') }}</label>
+    <p class="muted small" style="margin:0 0 0.5rem">{{ t('set.url_explain') }}</p>
+    {% for key, url, hint in server_urls %}
+    <div style="margin-bottom:0.5rem">
+      <div class="muted small">{{ t(key) }}{% if hint %} – {{ t(hint) }}{% endif %}</div>
+      <div class="actions">
+        <input type="text" class="server-url" value="{{ url }}" readonly style="flex:1" autocomplete="off">
+        <button type="button" class="btn ghost server-url-copy">{{ t('set.copy') }}</button>
+      </div>
     </div>
+    {% endfor %}
+    {% if server_url_docker_hint %}
+    <p class="notice small" style="margin-top:0.5rem">{{ t('set.url_docker_html') }}</p>
+    {% endif %}
     {% if server_url_unreachable %}
     <p class="notice small" style="margin-top:0.5rem">{{ t('set.url_unreachable_html') }}</p>
     {% endif %}
