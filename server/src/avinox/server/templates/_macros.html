@@ -7,9 +7,8 @@
 {%- endmacro %}
 
 {# Balken für {Bereich: Sekunden}; unit='s' zeigt mm:ss, sonst Zahl + unit #}
-{% macro bars(data, cls='', unit='s', digits=0, labels=None, zero_label=None) -%}
-{% set zero = data.get('<1') if zero_label else None %}
-{% set rows = data.items() | rejectattr(0, 'equalto', '<1') | list if zero_label else data.items() | list %}
+{% macro bars(data, cls='', unit='s', digits=0, labels=None, drop_zero=False) -%}
+{% set rows = data.items() | rejectattr(0, 'equalto', '<1') | list if drop_zero else data.items() | list %}
 {% set total = rows | map(attribute=1) | select('number') | sum %}
 {% set peak = rows | map(attribute=1) | select('number') | max if rows else 0 %}
 <div class="bars">
@@ -24,5 +23,4 @@
   {% endfor %}
   {% if not total %}<p class="muted small">{{ t('no_data') }}</p>{% endif %}
 </div>
-{% if zero %}<p class="muted small">{{ zero_label }}: {{ zero | duration }}</p>{% endif %}
 {%- endmacro %}
