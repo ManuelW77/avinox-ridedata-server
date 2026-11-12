@@ -22,7 +22,7 @@
   </div>
 </div>
 
-<section class="card">
+<section class="card" id="sec-overview" data-jump="{{ t('jump.overview') }}">
   <h3 class="group-title g-ride">{{ t('ride.grp.ride') }}</h3>
   <div class="figures">
     {{ figure(s.distance_km, t('ride.f.distance'), 'km', 2) }}
@@ -53,7 +53,7 @@
   </div>
 </section>
 
-<div class="block">
+<div class="block" id="sec-course" data-jump="{{ t('ride.sec.course') }}">
   <h2 class="section-title">{{ t('ride.sec.course') }}</h2>
 <section class="card">
   <div class="toolbar">
@@ -89,7 +89,7 @@
 </section>
 </div>
 
-<div class="block">
+<div class="block" id="sec-drive" data-jump="{{ t('ride.sec.drive') }}">
   <h2 class="section-title">{{ t('ride.sec.drive') }}</h2>
 {% set cad_gear = {} %}{% for g, m in (a.gears.per_gear or {}).items() %}{% if m.avg_cadence_rpm and (m.moving_seconds or 0) >= 30 %}{% set _ = cad_gear.update({g: m.avg_cadence_rpm}) %}{% endif %}{% endfor %}
 <div class="grid cols-drive{{ '' if cad_gear else ' two' }}">
@@ -115,7 +115,7 @@
 </div>
 </div>
 
-<div class="block">
+<div class="block" id="sec-power" data-jump="{{ t('ride.sec.power') }}">
   <h2 class="section-title">{{ t('ride.sec.power') }}</h2>
 <div class="grid cols-3">
   <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider', drop_zero=true) }}</section>
@@ -126,7 +126,7 @@
 </div>
 </div>
 
-<div class="block">
+<div class="block" id="sec-hill" data-jump="{{ t('ride.sec.hill') }}">
   <h2 class="section-title">{{ t('ride.sec.hill') }}</h2>
   <p class="muted small block-desc">{{ t('ride.sec.hill_sub') }}</p>
 <div class="grid cols-3">
@@ -139,7 +139,7 @@
 </div>
 </div>
 
-<div class="block">
+<div class="block" id="sec-stats" data-jump="{{ t('ride.sec.stats') }}">
   <h2 class="section-title">{{ t('ride.sec.stats') }}</h2>
 <div class="grid cols-3">
   <section class="card">
@@ -176,7 +176,7 @@
 </div>
 </div>
 
-<div class="block">
+<div class="block" id="sec-display" data-jump="{{ t('ride.sec.display') }}">
   <h2 class="section-title">{{ t('ride.sec.display') }}</h2>
 <section class="card">
     {% if d %}
@@ -209,6 +209,7 @@
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "tile_url": tile_url, "tile_attribution": tile_attribution, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 <script src="{{ url_for('static', path='vendor/leaflet/leaflet.js').path }}"></script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
