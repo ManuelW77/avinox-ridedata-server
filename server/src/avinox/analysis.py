@@ -181,6 +181,7 @@ def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
             "avg_rider_power_w": round(sum(s.rider_power_w * dt for s, dt in moving) / mt) if mt else None,
             "avg_pedaling_power_w": round(sum(s.rider_power_w * dt for s, dt in ped) / pt) if pt else None,
             "avg_cadence_rpm": round(sum(s.cadence_rpm * dt for s, dt in cad) / ct) if ct else None,
+            "cadence_seconds": ct,
         }
     return out
 

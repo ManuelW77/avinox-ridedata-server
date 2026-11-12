@@ -144,13 +144,24 @@
     return h ? h + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0") : mm + ":" + String(ss).padStart(2, "0");
   }
 
-  function barsHtml(data, cls, dropZero, labels) {
+  // unit: Einheit statt Dauer (Wert per fmt mit digits Nachkommastellen)
+  function barsHtml(data, cls, dropZero, labels, unit, digits) {
     const entries = Object.entries(data || {}).filter(([k, v]) => typeof v === "number" && !(dropZero && k === "<1"));
     const total = entries.reduce((a, [, v]) => a + v, 0);
     const peak = entries.reduce((a, [, v]) => Math.max(a, v), 0);
     const rows = entries.filter(([, v]) => v).map(([k, v]) =>
-      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
-    return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${unit ? fmt(v, digits) + " " + esc(unit) : dur(v)}</span></div>`).join("");
+    return `<div class="bars${unit ? " unit" : ""}">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+  }
+
+  // zwei dünne Balken je Zeile (a/b), gemeinsame Skala – wie Jinja-Makro bars_pair
+  function barsPairHtml(data, keyA, keyB, clsA, clsB, unit, labels) {
+    const entries = Object.entries(data || {});
+    const peak = entries.reduce((a, [, r]) => Math.max(a, r[keyA] || 0, r[keyB] || 0), 0);
+    const w = (v) => (peak ? 100 * (v || 0) / peak : 0);
+    const rows = entries.map(([k, r]) =>
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track-pair"><span class="track"><span class="fill ${clsA}" style="width: ${w(r[keyA])}%"></span></span><span class="track"><span class="fill ${clsB}" style="width: ${w(r[keyB])}%"></span></span></span><span class="val">${fmt(r[keyA], 0)} / ${fmt(r[keyB], 0)} ${esc(unit)}</span></div>`).join("");
+    return `<div class="bars pair">${rows}${peak ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
   }
 
   function renderMix() {
@@ -173,6 +184,15 @@
       card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", true),
       card(tr("mix.d.gradient"), tr("mix.d.grad_hint"), d.gradient_s, "", false, gradLabels),
     ];
+    const bg = m.by_gradient || {};
+    const spdGrad = {};
+    Object.entries(bg).forEach(([k, r]) => { spdGrad[k] = r.avg_speed_kmh; });
+    cards.push(
+      `<section class="card"><h2>${esc(tr("mix.d.power_grad"))} <span class="muted small">${esc(tr("mix.d.power_grad_sub"))}</span></h2>${barsPairHtml(bg, "avg_rider_power_w", "avg_motor_power_w", "rider", "motor", "W", gradLabels)}<p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> ${esc(tr("mix.d.legend_rider"))} &nbsp; <span style="color:var(--motor)">&#9632;</span> ${esc(tr("mix.d.legend_motor"))}</p></section>`,
+      `<section class="card"><h2>${esc(tr("mix.d.speed_grad"))} <span class="muted small">${esc(tr("mix.d.speed_grad_sub"))}</span></h2>${barsHtml(spdGrad, "", false, gradLabels, "km/h", 1)}</section>`);
+    const cadGear = g.avg_cadence_per_gear || {};
+    if (Object.keys(cadGear).length) cards.push(
+      `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>`);
     if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
     box.innerHTML =
       `<div class="grid cols-2" style="margin-bottom:1rem">
