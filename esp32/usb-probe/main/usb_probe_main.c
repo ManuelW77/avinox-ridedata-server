@@ -21,6 +21,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "usb/usb_host.h"
+#include "usb/usb_helpers.h"
 #include "usb/msc_host_vfs.h"
 #include "led_strip.h"
 #include "nvs_flash.h"
@@ -33,6 +34,21 @@ static const char *TAG = "usb-probe";
 #define BLOCK_SIZE      4096
 #define WAIT_HINT_MS    30000
 #define MAX_DEPTH       6
+
+/*
+ * Eigene FIFO-Aufteilung (Einheit: Zeilen à 4 Byte). Der ESP32-S3 (FS-PHY) hat 200 Zeilen
+ * (GHWCFG3, constant_config.fifo_size). Grenzen laut usb_dwc_hal_get_mps_limits():
+ *   IN   = (RX - 2) * 4   (2 Zeilen für Status-Quadlets)
+ *   NPTX = NPTX * 4,  PTX = PTX * 4
+ * Default (balanced): RX 104 / NPTX 64 / PTX 32 -> IN 408, zu wenig für Bulk-IN 512.
+ * Hier: NPTX 16 (64 Byte, reicht für 31-Byte-CBWs und EP0), PTX 0 (MSC hat keine
+ * periodischen Endpunkte), RX = Rest = 184 -> IN 728 (>= 512, Minimum wäre 130).
+ */
+#define FIFO_TOTAL_LINES   200
+#define FIFO_NPTX_LINES    16
+#define FIFO_PTX_LINES     0
+#define FIFO_RX_LINES      (FIFO_TOTAL_LINES - FIFO_NPTX_LINES - FIFO_PTX_LINES)
+_Static_assert((FIFO_RX_LINES - 2) * 4 >= 512, "RX-FIFO zu klein für IN-MPS 512");
 
 /* ---------- Status-LED ---------- */
 
@@ -329,9 +345,24 @@ static void msc_event_cb(const msc_host_event_t *event, void *arg)
 
 static void usb_task(void *arg)
 {
-    const usb_host_config_t host_config = { .intr_flags = ESP_INTR_FLAG_LOWMED };
+    const usb_host_config_t host_config = {
+        .intr_flags = ESP_INTR_FLAG_LOWMED,
+        .fifo_settings_custom = {
+            .rx_fifo_lines = FIFO_RX_LINES,
+            .nptx_fifo_lines = FIFO_NPTX_LINES,
+            .ptx_fifo_lines = FIFO_PTX_LINES,
+        },
+    };
+    ESP_LOGI(TAG, "FIFO custom: RX=%d NPTX=%d PTX=%d Zeilen -> MPS IN=%d NPTX=%d PTX=%d",
+             FIFO_RX_LINES, FIFO_NPTX_LINES, FIFO_PTX_LINES,
+             (FIFO_RX_LINES - 2) * 4, FIFO_NPTX_LINES * 4, FIFO_PTX_LINES * 4);
     esp_err_t err = usb_host_install(&host_config);
     if (err != ESP_OK) {
+        if (err == ESP_ERR_INVALID_SIZE || err == ESP_ERR_INVALID_ARG) {
+            ESP_LOGE(TAG, "usb_host_install lehnt FIFO-Aufteilung ab (RX=%d NPTX=%d PTX=%d, Summe %d > HW?): %s",
+                     FIFO_RX_LINES, FIFO_NPTX_LINES, FIFO_PTX_LINES,
+                     FIFO_RX_LINES + FIFO_NPTX_LINES + FIFO_PTX_LINES, esp_err_to_name(err));
+        }
         ESP_LOGE(TAG, "usb_host_install fehlgeschlagen: %s", esp_err_to_name(err));
         s_led_state = LED_ERROR;
         report_save();
@@ -528,11 +559,73 @@ static bool probe_drive(void)
     return ok;
 }
 
+
+static void dump_client_cb(const usb_host_client_event_msg_t *msg, void *arg)
+{
+    (void)msg;
+    (void)arg;
+}
+
+// Geräte- und Konfigurations-Deskriptor knapp ausgeben (ohne Seriennummer).
+// Eigener, kurzlebiger Host-Client, damit das auch klappt, wenn msc_host_install_device scheitert.
+static void dump_descriptors(uint8_t addr)
+{
+    usb_host_client_handle_t client = NULL;
+    usb_device_handle_t dev = NULL;
+    const usb_host_client_config_t cfg = {
+        .is_synchronous = false,
+        .max_num_event_msg = 3,
+        .async = { .client_event_callback = dump_client_cb, .callback_arg = NULL },
+    };
+    if (usb_host_client_register(&cfg, &client) != ESP_OK) {
+        ESP_LOGW(TAG, "Deskriptor-Dump: Client-Registrierung fehlgeschlagen");
+        return;
+    }
+    if (usb_host_device_open(client, addr, &dev) != ESP_OK) {
+        ESP_LOGW(TAG, "Deskriptor-Dump: Gerät %d nicht zu öffnen", addr);
+        usb_host_client_deregister(client);
+        return;
+    }
+    usb_device_info_t info;
+    const usb_device_desc_t *dd = NULL;
+    const usb_config_desc_t *cd = NULL;
+    if (usb_host_device_info(dev, &info) == ESP_OK) {
+        ESP_LOGI(TAG, "Geschwindigkeit: %s", info.speed == USB_SPEED_HIGH ? "High" : info.speed == USB_SPEED_FULL ? "Full" : "Low");
+    }
+    if (usb_host_get_device_descriptor(dev, &dd) == ESP_OK) {
+        ESP_LOGI(TAG, "bcdUSB=%04x VID=%04x PID=%04x bcdDevice=%04x Klasse=%02x MPS0=%d Konfigs=%d",
+                 dd->bcdUSB, dd->idVendor, dd->idProduct, dd->bcdDevice, dd->bDeviceClass,
+                 dd->bMaxPacketSize0, dd->bNumConfigurations);
+    }
+    if (usb_host_get_active_config_descriptor(dev, &cd) == ESP_OK) {
+        ESP_LOGI(TAG, "Konfig %d: wTotalLength=%d Interfaces=%d", cd->bConfigurationValue, cd->wTotalLength, cd->bNumInterfaces);
+        int offset = 0;
+        const usb_standard_desc_t *d = (const usb_standard_desc_t *)cd;
+        static const char *types[] = {"CTRL", "ISOC", "BULK", "INTR"};
+        while ((d = usb_parse_next_descriptor(d, cd->wTotalLength, &offset)) != NULL) {
+            if (d->bDescriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
+                const usb_intf_desc_t *i = (const usb_intf_desc_t *)d;
+                ESP_LOGI(TAG, " Intf %d alt %d: Klasse=%02x Sub=%02x Prot=%02x EPs=%d", i->bInterfaceNumber,
+                         i->bAlternateSetting, i->bInterfaceClass, i->bInterfaceSubClass, i->bInterfaceProtocol, i->bNumEndpoints);
+            } else if (d->bDescriptorType == USB_B_DESCRIPTOR_TYPE_ENDPOINT) {
+                const usb_ep_desc_t *e = (const usb_ep_desc_t *)d;
+                ESP_LOGI(TAG, "  EP 0x%02x %s %s MPS=%d bInterval=%d", e->bEndpointAddress,
+                         (e->bEndpointAddress & 0x80) ? "IN " : "OUT", types[e->bmAttributes & 0x03],
+                         USB_EP_DESC_GET_MPS(e), e->bInterval);
+            }
+        }
+    }
+    usb_host_device_close(client, dev);
+    usb_host_client_deregister(client);
+}
+
 static void handle_device(uint8_t addr, msc_host_device_handle_t *out_dev)
 {
     msc_host_device_handle_t dev = NULL;
     msc_host_vfs_handle_t vfs = NULL;
     *out_dev = NULL;
+
+    dump_descriptors(addr);
 
     esp_err_t err = msc_host_install_device(addr, &dev);
     if (err != ESP_OK) {

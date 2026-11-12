@@ -109,6 +109,16 @@ Gefundene `event_id`:
 
 Zuordnung zu einzelnen Fahrten: über Zeitstempel bzw. Distanz (`single_ride.distance` = Fahrtdistanz).
 
+## 3b. USB-Verbindung zum ESP32-S3 (getestet 12.11.2026)
+
+- Display meldet sich als `AVINOX EBIKE` / `MCU MASS STORAGE`, VID `0x2CA3`, PID `0x0020`, USB 2.0. Am ESP32-S3 Full Speed.
+- 4 Interfaces: 0 = Massenspeicher (SCSI, Bulk-Only), 1–3 = herstellereigen (Klasse `ff`). Alle Bulk-Endpunkte melden MPS 512 – auch bei Full Speed (normwidrig; Full Speed erlaubt 64).
+- Speicher: 122 159 103 Sektoren à 512 Byte (ca. 59,6 GB), FAT32.
+- Das Display liefert über USB-C Strom (bis 60 W) und versorgt den ESP32 mit. Am ESP32 hängt das Display an der nativen USB-Buchse, die UART-Buchse (CH343) bleibt frei für Log/Flashen.
+- Ohne Anpassung scheitert der ESP-IDF-USB-Host: „EP MPS (512) exceeds supported limit (408)“. Mit MPS 64 für alle Endpunkte: Anmeldung und READ CAPACITY gehen, READ10 bricht mit Overflow ab – das Display schickt auch bei Full Speed echte 512-Byte-Pakete.
+- **Lösung:** eigene FIFO-Aufteilung (RX 184 / NPTX 16 / PTX 0 Zeilen von 200 → IN bis 728 Byte) und MPS 64 nur für Bulk-OUT (dort gehen nur 31-Byte-Befehle). Damit wird das Laufwerk vollständig gelesen, ca. 845 KB/s. Umsetzung: `esp32/usb-probe/` (gepatchte Komponente `components/usb/`, siehe `PATCH.md`).
+- Dateigrößen auf dem Laufwerk stimmen exakt mit der Kopie in `_demo-data` überein → Abgleich über Name + Größe funktioniert.
+
 ## 4. Bestehende Community-Projekte
 
 - `lucad87/avinox-setup-app` (MIT): Parser + Setup-Rechner, gehostet avinox-calculator.lucad.cloud
