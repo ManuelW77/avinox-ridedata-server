@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Sync – Avinox Ride Data{% endblock %}
+{% block main %}
+{% set kinds = {'manifest': 'Abgleich', 'upload_chunk_error': 'Upload-Fehler', 'file_new': 'Datei neu', 'file_known': 'Datei bekannt', 'auth_error': 'Token abgelehnt', 'report': 'Sync-Bericht', 'heartbeat': 'Lebenszeichen'} %}
+{% set bad = ['upload_chunk_error', 'auth_error'] %}
+{% macro ago(m) -%}
+{%- if m is none -%}–{%- elif m < 1 -%}gerade eben{%- elif m < 60 -%}vor {{ m }} min{%- elif m < 2880 -%}vor {{ (m / 60) | round | int }} h{%- else -%}vor {{ (m / 1440) | round | int }} Tagen{%- endif -%}
+{%- endmacro %}
+<div class="lead">
+  <div>
+    <h1>Sync</h1>
+    <p>Wann sich der ESP32 gemeldet hat, was er gesendet hat und ob es geklappt hat.</p>
+  </div>
+</div>
+
+{% if not snap.devices and not snap.events %}
+<section class="card empty">
+  <p>Noch keine Einsendungen. Sobald sich der ESP32 meldet, erscheint er hier.</p>
+  <p><a href="/settings">Einrichtung: Adresse und Upload-Token in den Einstellungen</a></p>
+</section>
+{% else %}
+<div class="grid cols-2" style="margin-bottom:1rem">
+  {% for d in snap.devices %}
+  {% set r = d.last_report or {} %}
+  {% set s = d.last_sync %}
+  <section class="card">
+    <div class="dev-head">
+      <h2>{{ d.device_id }}</h2>
+      {% if d.offline %}<span class="pill">offline seit {{ d.last_seen | localtime('%d.%m. %H:%M') }}</span>{% else %}<span class="pill ok">online</span>{% endif %}
+    </div>
+    <dl class="kv">
+      <dt>Zuletzt gesehen</dt><dd>{{ d.last_seen | localtime('%d.%m.%Y %H:%M') }} ({{ ago(d.age_min) }})</dd>
+      <dt>IP</dt><dd class="mono">{{ d.last_ip or '–' }}</dd>
+      <dt>Firmware</dt><dd class="mono">{{ d.firmware or '–' }}</dd>
+      <dt>WLAN-Signal</dt><dd>{% if r.rssi is defined and r.rssi is not none %}{{ r.rssi | num }} dBm ({{ 'gut' if r.rssi >= -60 else ('mittel' if r.rssi >= -75 else 'schwach') }}){% else %}–{% endif %}</dd>
+      <dt>Laufzeit</dt><dd>{{ (r.uptime_s | duration) if r.uptime_s is defined and r.uptime_s is not none else '–' }}</dd>
+      <dt>Freier Speicher</dt><dd>{% if r.free_heap is defined and r.free_heap is not none %}{{ (r.free_heap / 1024) | num }} KB{% else %}–{% endif %}</dd>
+      <dt>Laufwerk</dt><dd>
+        {% if r.drive == 'present' %}erkannt
+        {% elif r.drive == 'absent' %}<span class="pill warn">nicht erkannt</span> <span class="muted small">Display an? Richtige (native) Buchse?</span>
+        {% elif r.drive == 'error' %}<span class="pill warn">Fehler</span>
+        {% else %}–{% endif %}
+      </dd>
+    </dl>
+    <h3 style="margin:1rem 0 0.4rem">Letzter Sync</h3>
+    {% if s %}
+    <dl class="kv">
+      <dt>Zeit</dt><dd>{{ d.last_sync_at | localtime('%d.%m.%Y %H:%M') }}</dd>
+      <dt>Ergebnis</dt><dd>
+        {% if s.result == 'ok' %}<span class="pill ok">OK</span>
+        {% elif s.result == 'warn' %}<span class="pill warn">Warnung</span>
+        {% elif s.result == 'error' %}<span class="pill warn">Fehler</span>{% else %}–{% endif %}
+      </dd>
+      <dt>Dateien</dt><dd>{{ s.get('new') | num }} neu, {{ s.get('skipped') | num }} übersprungen, {{ s.get('failed') | num }} fehlerhaft{% if s.get('checked') is not none %} (von {{ s.get('checked') | num }}){% endif %}</dd>
+      <dt>Datenmenge</dt><dd>{{ ((s.bytes or 0) / 1048576) | num(2) }} MB</dd>
+      <dt>Dauer</dt><dd>{{ ((s.duration_ms or 0) / 1000) | num(1) }} s</dd>
+    </dl>
+    {% if s.error %}<p class="sync-note warn small">{{ s.error }}</p>{% endif %}
+    {% else %}
+    <p class="muted small">Noch kein Sync gemeldet.</p>
+    {% endif %}
+    {% if d.offline %}
+    <p class="sync-note notice small">Seit {{ ago(d.age_min) | replace('vor ', '') }} kein Lebenszeichen (zuletzt {{ d.last_seen | localtime('%d.%m. %H:%M') }}). Das Bike kann einfach aus sein.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<section class="card">
+  <h2>Letzte Ereignisse</h2>
+  <div style="overflow-x:auto">
+  <table class="plain sync">
+    <thead><tr><th>Zeit</th><th>IP</th><th>Gerät</th><th>Art</th><th>Datei</th><th class="n">Größe</th><th>Status / Detail</th></tr></thead>
+    <tbody>
+    {% for e in snap.events %}
+    <tr class="{{ 'ev-err' if e.kind in bad }}">
+      <td>{{ e.ts | localtime('%d.%m. %H:%M:%S') }}</td>
+      <td class="mono">{{ e.client_ip or '–' }}</td>
+      <td>{{ e.device_id or '–' }}</td>
+      <td>{% if e.kind in bad %}<span class="pill warn">{{ kinds.get(e.kind, e.kind) }}</span>{% else %}{{ kinds.get(e.kind, e.kind) }}{% endif %}</td>
+      <td class="mono">{{ e.path or '' }}</td>
+      <td class="n">{% set n = e.size if e.size is not none else e.bytes %}{% if n is not none %}{% if n >= 1048576 %}{{ (n / 1048576) | num(2) }} MB{% elif n >= 1024 %}{{ (n / 1024) | num(1) }} KB{% else %}{{ n }} B{% endif %}{% endif %}</td>
+      <td>{% if e.status and e.status >= 400 %}<span class="pill warn">{{ e.status }}</span> {% endif %}{{ e.detail or '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

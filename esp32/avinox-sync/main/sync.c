@@ -23,6 +23,7 @@
 #include "nvs.h"
 #include "cJSON.h"
 
+#include "report.h"
 #include "sync_paths.h"
 #include "usb_drive.h"
 #include "wifi_sta.h"
@@ -519,6 +520,7 @@ bool sync_run(const app_config_t *cfg, sync_result_t *out)
         goto done;
     }
     esp_http_client_set_header(ctx.client, "Authorization", auth);
+    esp_http_client_set_header(ctx.client, "X-Avinox-Device", report_device_id());
     memset(auth, 0, sizeof(auth));
 
     if (fetch_manifest(&ctx, cfg->url, &manifest, res.msg, sizeof(res.msg)) != ESP_OK) {
@@ -552,6 +554,9 @@ bool sync_run(const app_config_t *cfg, sync_result_t *out)
         up_result_t r = upload_file(&ctx, cfg->url, c, chunk, &res, res.msg, sizeof(res.msg));
         if (r == UP_FAILED) {
             res.errors++;
+            if (!res.msg[0]) {
+                snprintf(res.msg, sizeof(res.msg), "%.90s: Upload fehlgeschlagen", c->rel);
+            }
         } else if (r == UP_ABORT) {
             res.errors++;
             if (!res.msg[0]) {
@@ -589,6 +594,7 @@ done:
         ESP_LOGW(TAG, "Sync %s", line);
     }
     result_save(&res);
+    report_send(cfg, &res);
     if (out) {
         *out = res;
     }

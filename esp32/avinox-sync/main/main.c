@@ -15,6 +15,7 @@
 #include "config.h"
 #include "led.h"
 #include "portal.h"
+#include "report.h"
 #include "sync.h"
 #include "usb_drive.h"
 #include "wifi_sta.h"
@@ -207,6 +208,7 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "WLAN-Start fehlgeschlagen: %s (weiter, Sync nicht möglich)", esp_err_to_name(err));
     }
+    report_start_heartbeat(&s_cfg);
     err = usb_drive_start();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "USB-Start fehlgeschlagen: %s", esp_err_to_name(err));

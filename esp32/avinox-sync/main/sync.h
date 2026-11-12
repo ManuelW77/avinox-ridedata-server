@@ -17,10 +17,10 @@ typedef struct {
     uint16_t errors;        /* nicht (vollständig) hochgeladen, nächster Sync setzt fort */
     uint64_t bytes;         /* in diesem Sync gesendete Nutzdaten */
     bool ok;                /* Manifest geholt, Laufwerk gelesen, keine Dateifehler */
-    char msg[63];           /* kurze Meldung, z. B. "Manifest: HTTP 401" */
+    char msg[120];          /* wichtigste Meldung, z. B. "Manifest: HTTP 401" */
 } sync_result_t;
 
-#define SYNC_RESULT_VERSION 1
+#define SYNC_RESULT_VERSION 2
 
 /* Startzähler erhöhen (einmal beim Start). */
 void sync_init(void);

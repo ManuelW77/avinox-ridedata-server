@@ -118,6 +118,17 @@ USB-Gerät und kann kein Laufwerk lesen.
 4. Erneuter Sync alle 10 min, solange Laufwerk und WLAN da sind (Fahrten wachsen während der Fahrt; bekannte Dateien
    kosten nur das Manifest), und sofort nach erneutem Anstecken oder neuer WLAN-Verbindung.
 
+## Rückmeldung an den Server
+
+Jede Anfrage trägt den Header `X-Avinox-Device: avinox-sync-XXXX` (XXXX = wie im Namen des Einrichtungs-WLANs). Zusätzlich meldet
+das Gerät per `POST /api/v1/device/report` (Bearer-Token, JSON; Firmware, Laufzeit, RSSI, IP, freier Heap, Laufwerk):
+
+- **Heartbeat** sofort nach jeder WLAN-Verbindung und dann alle 5 min (Kconfig `AVX_HEARTBEAT_S`), auch ohne Laufwerk.
+- **Sync-Bericht** nach jedem Sync-Lauf (auch bei Fehlern/Abbruch) mit Zählern, Bytes, Dauer, Ergebnis `ok`/`warn`/`error`
+  und dem Fehlertext.
+
+Sendefehler werden nur geloggt (Timeout 10 s, keine Wiederholung). Der Server zeigt das auf der Seite `/sync`.
+
 Der Token wird nie geloggt, das WLAN-Passwort auch nicht. Die Seriennummer des Displays wird nicht geloggt.
 
 ## Code

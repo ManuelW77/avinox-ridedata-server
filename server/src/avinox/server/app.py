@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import secrets
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -20,7 +21,8 @@ from fastapi.templating import Jinja2Templates
 from ..analysis import ASSIST_LEVELS
 from .config import Settings, load_settings
 from .dashboard import PERIODS, day_text, emphasize
-from .store import NOT_UPLOADED, PATTERNS, UPLOAD_FILES, Store, UploadError
+from .sync_log import DEVICE_ID, SyncLog
+from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, Store, UploadError
 
 log = logging.getLogger("avinox.server")
 HERE = Path(__file__).parent
@@ -41,6 +43,7 @@ def _fmt_duration(seconds: int | None) -> str:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     store = Store(settings)
+    synclog = SyncLog(store.db)
     redone = store.reprocess(only_outdated=True)
     if redone:
         log.info("%d Fahrten neu berechnet", redone)
@@ -54,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Avinox Ride Data", lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.state.store = store
+    app.state.synclog = synclog
     app.state.settings = settings
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
@@ -75,8 +79,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     bearer = HTTPBearer(auto_error=False)
     basic = HTTPBasic(auto_error=False)
 
-    def upload_auth(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
+    def client_ip(request: Request) -> str | None:
+        fwd = request.headers.get("x-forwarded-for")
+        if fwd and fwd.split(",")[0].strip():
+            return fwd.split(",")[0].strip()
+        return request.client.host if request.client else None
+
+    def device_header(request: Request) -> str | None:
+        value = (request.headers.get("x-avinox-device") or "").strip()
+        return value if DEVICE_ID.match(value) else None
+
+    def upload_auth(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
         if not cred or not secrets.compare_digest(cred.credentials, settings.upload_token):
+            synclog.event("auth_error", client_ip(request), device_header(request), path=request.url.path, status=401, detail="Token fehlt" if not cred else "Token falsch")
             raise HTTPException(401, "Upload-Token fehlt oder ist falsch", headers={"WWW-Authenticate": "Bearer"})
 
     def read_auth(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:
@@ -112,8 +127,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ------------------------------------------------------------ Upload (ESP32)
 
     @app.get("/api/v1/manifest", dependencies=[Depends(upload_auth)], tags=["upload"])
-    def manifest():
+    def manifest(request: Request):
         """Bekannte Dateien (Pfad + Größe) und welche Pfade angenommen werden."""
+        synclog.event("manifest", client_ip(request), device_header(request), status=200)
         return {"files": store.manifest(), "patterns": {k: p.pattern for k, p in PATTERNS.items()}}
 
     @app.get("/api/v1/upload/status", dependencies=[Depends(upload_auth)], tags=["upload"])
@@ -123,14 +139,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.put("/api/v1/upload", dependencies=[Depends(upload_auth)], tags=["upload"])
     async def upload(request: Request, path: str, size: int = Query(ge=0), offset: int = Query(0, ge=0)):
         """Rohe Bytes ab ``offset``. Bei falschem Offset kommt 409 mit dem tatsächlich empfangenen Stand."""
+        ip, dev = client_ip(request), device_header(request)
+
+        def fail(status: int, msg: str):
+            synclog.event("upload_chunk_error", ip, dev, path=path, size=size, status=status, detail=msg)
+            raise HTTPException(status, msg)
+
         limit = min(settings.max_upload_bytes, max(0, size - offset))
-        check_length(request, limit)
-        body = await read_body(request, limit)
+        try:
+            check_length(request, limit)
+            body = await read_body(request, limit)
+        except HTTPException as exc:
+            fail(exc.status_code, str(exc.detail))
         try:
             result = store.upload_chunk(path, size, offset, body)
         except UploadError as exc:
-            raise HTTPException(400, str(exc)) from exc
+            fail(400, str(exc))
+        if result.get("conflict"):
+            synclog.event("upload_chunk_error", ip, dev, path=path, size=size, status=409, detail="Offset korrigiert")
+        elif result.get("complete"):
+            synclog.event("file_new" if result.get("new") else "file_known", ip, dev, path=result["path"], size=size, status=200)
         return JSONResponse(result, status_code=409 if result.get("conflict") else 200)
+
+    @app.post("/api/v1/device/report", dependencies=[Depends(upload_auth)], tags=["upload"])
+    async def device_report(request: Request):
+        """Lebenszeichen/Syncbericht des ESP32 (JSON, höchstens 16 KB)."""
+        check_length(request, 16 * 1024)
+        raw = await read_body(request, 16 * 1024)
+        try:
+            body = json.loads(raw)
+        except ValueError as exc:
+            raise HTTPException(400, "Kein gültiges JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(400, "JSON-Objekt erwartet")
+        did = body.get("device_id")
+        if not isinstance(did, str) or not DEVICE_ID.match(did):
+            raise HTTPException(400, "device_id: höchstens 64 Zeichen aus A-Z a-z 0-9 _ -")
+        if body.get("event") not in ("heartbeat", "sync"):
+            raise HTTPException(400, "event muss 'heartbeat' oder 'sync' sein")
+        for key, kinds in (("firmware", str), ("ip", str), ("drive", str), ("uptime_s", (int, float)), ("rssi", (int, float)), ("free_heap", (int, float))):
+            if body.get(key) is not None and (not isinstance(body[key], kinds) or isinstance(body[key], bool)):
+                raise HTTPException(400, f"{key}: falscher Typ")
+        if body.get("drive") not in (None, "present", "absent", "error"):
+            raise HTTPException(400, "drive: present, absent oder error")
+        sync = body.get("sync")
+        if sync is not None:
+            if not isinstance(sync, dict):
+                raise HTTPException(400, "sync: Objekt erwartet")
+            for key in ("checked", "new", "skipped", "failed", "bytes", "duration_ms"):
+                if sync.get(key) is not None and (not isinstance(sync[key], (int, float)) or isinstance(sync[key], bool)):
+                    raise HTTPException(400, f"sync.{key}: Zahl erwartet")
+            if sync.get("result") not in (None, "ok", "warn", "error"):
+                raise HTTPException(400, "sync.result: ok, warn oder error")
+            if sync.get("error") is not None and not isinstance(sync["error"], str):
+                raise HTTPException(400, "sync.error: Text erwartet")
+        elif body["event"] == "sync":
+            raise HTTPException(400, "sync-Ereignis ohne 'sync'")
+        # Nur bekannte Felder speichern
+        keep = {k: body[k] for k in ("device_id", "event", "firmware", "uptime_s", "rssi", "ip", "free_heap", "drive") if k in body}
+        if isinstance(sync, dict):
+            keep["sync"] = {k: sync[k] for k in ("checked", "new", "skipped", "failed", "bytes", "duration_ms", "result", "error") if k in sync}
+        ts = synclog.report(keep, client_ip(request))
+        return {"ok": True, "server_time": ts}
 
     # ------------------------------------------------------------ Lese-API
 
@@ -165,6 +235,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         data, name = found
         return Response(data, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
+    @app.get("/api/v1/sync/log", dependencies=[Depends(read_auth)], tags=["upload"])
+    def sync_log_api(limit: int = Query(200, ge=1, le=1000)):
+        """ESP32-Geräte und die neuesten Sync-Ereignisse."""
+        return synclog.snapshot(limit)
+
     @app.get("/api/v1/stats", dependencies=[Depends(read_auth)], tags=["statistik"])
     def stats():
         return store.stats()
@@ -196,7 +271,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         Höchstens ``MAX_FILES_PER_REQUEST`` Dateien und ``max_upload_bytes`` (+ 1 MB Formular-Overhead) je Anfrage.
         """
-        check_length(request, settings.max_upload_bytes + 1024 * 1024)
+        ip = client_ip(request)
+        try:
+            check_length(request, settings.max_upload_bytes + 1024 * 1024)
+        except HTTPException as exc:
+            synclog.event("upload_chunk_error", ip, None, status=exc.status_code, detail=str(exc.detail))
+            raise
         form = await request.form(max_files=MAX_FILES_PER_REQUEST, max_fields=10)
         files = [v for v in form.getlist("files") if isinstance(v, UploadFile)]
         if not files:
@@ -207,7 +287,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 r = store.add_file(f.filename or "", data)
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
+                synclog.event("file_new" if r["new"] else "file_known", ip, None, path=normalize_path(f.filename or ""), size=len(data), status=200, detail="Browser")
             except UploadError as exc:
+                synclog.event("upload_chunk_error", ip, None, path=f.filename, size=len(data), status=400, detail=str(exc))
                 results.append({"path": f.filename, "ok": False, "error": str(exc)})
         return {"results": results}
 
@@ -246,6 +328,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/device", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def device_page(request: Request):
         return page(request, "device.html", d=store.device())
+
+    @app.get("/sync", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
+    def sync_page(request: Request):
+        snap = synclog.snapshot(200)
+        now = datetime.now(UTC)
+        for d in snap["devices"]:
+            seen = datetime.fromisoformat(d["last_seen"]) if d["last_seen"] else None
+            d["age_min"] = int((now - seen).total_seconds() // 60) if seen else None
+            d["offline"] = d["age_min"] is None or d["age_min"] > 15
+        return page(request, "sync.html", snap=snap)
 
     @app.get("/settings", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def settings_page(request: Request):

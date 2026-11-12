@@ -18,6 +18,11 @@ menu "Avinox-Sync"
         range 1 1440
         default 10
 
+    config AVX_HEARTBEAT_S
+        int "Abstand der Heartbeat-Meldungen an den Server (Sekunden)"
+        range 30 86400
+        default 300
+
     config AVX_NO_DRIVE_HINT_S
         int "Sekunden ohne Laufwerk bis zum Hinweis (orange blinkend)"
         range 5 3600

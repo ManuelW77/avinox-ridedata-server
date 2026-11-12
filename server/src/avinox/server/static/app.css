@@ -276,3 +276,14 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
   .stepper span { min-width: 0; flex: 1; }
   .best-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Sync-Protokoll */
+.dev-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.dev-head h2 { margin: 0; }
+.pill.ok { color: var(--up); }
+.sync-note { margin-top: 0.75rem; }
+.sync-note.warn { color: var(--warn); }
+.ev-err td { background: color-mix(in srgb, var(--warn) 7%, transparent); }
+table.sync td, table.sync th { padding-right: 0.9rem; vertical-align: top; }
+table.sync td:first-child { white-space: nowrap; }
+table.sync td.n { white-space: nowrap; }
