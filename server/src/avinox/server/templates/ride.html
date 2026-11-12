@@ -97,10 +97,10 @@
 </div>
 
 <div class="grid cols-3" style="margin-bottom:1rem">
-  <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider') }}</section>
-  <section class="card"><h2>{{ t('ride.d.motor') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.motor_power_s, 'motor') }}</section>
-  <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.f.cadence_unit') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider') }}</section>
-  <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">km/h</span></h2>{{ bars(a.distributions.speed_s) }}</section>
+  <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider', zero_label=t('ride.zero.rider')) }}</section>
+  <section class="card"><h2>{{ t('ride.d.motor') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.motor_power_s, 'motor', zero_label=t('ride.zero.motor')) }}</section>
+  <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.cadence_moving') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider', zero_label=t('ride.zero.cadence')) }}</section>
+  <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">{{ t('ride.speed_moving') }}</span></h2>{{ bars(a.distributions.speed_s, zero_label=t('ride.zero.speed')) }}</section>
   <section class="card"><h2>{{ t('ride.d.gradient') }} <span class="muted small">%</span></h2>{{ bars(a.distributions.gradient_s) }}</section>
   {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'rider') }}</section>{% endif %}
 </div>
