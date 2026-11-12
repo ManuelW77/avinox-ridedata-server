@@ -225,3 +225,42 @@ def test_cli_import(tmp_path, capsys):
     assert cli.main(["import", str(drive), "--data-dir", str(data_dir)]) == 0
     assert "neu: 0, bekannt: 3, übersprungen: 1" in capsys.readouterr().out
     assert "upload_token" not in out
+
+
+def test_upload_limits_and_token_visibility(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from avinox.server.app import create_app
+    from avinox.server.config import load_settings
+
+    monkeypatch.setenv("AVINOX_MAX_UPLOAD_MB", "1")
+    settings = load_settings(tmp_path)
+    client = TestClient(create_app(settings))
+    auth = {"Authorization": f"Bearer {settings.upload_token}"}
+    path = "ride_rec/4242/ride_rec_1000.proto"
+    # Stück größer als angekündigte Restgröße -> 413, bevor gelesen wird
+    r = client.put(f"/api/v1/upload?path={path}&size=10&offset=0", content=b"x" * 11, headers=auth)
+    assert r.status_code == 413
+    # Gesamtgröße über dem Limit -> 413
+    big = 2 * 1024 * 1024
+    r = client.put(f"/api/v1/upload?path={path}&size={big}&offset=0", content=b"x" * (1024 * 1024 + 1), headers=auth)
+    assert r.status_code == 413
+    # Browser-Upload über dem Limit -> 413
+    r = client.post("/api/v1/files", files={"files": (path, b"x" * (3 * 1024 * 1024))})
+    assert r.status_code == 413
+    # ohne Web-Passwort kein Token auf der Seite
+    page = client.get("/settings").text
+    assert settings.upload_token not in page and "upload_token" in page
+
+
+def test_token_shown_with_web_login(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from avinox.server.app import create_app
+    from avinox.server.config import load_settings
+
+    monkeypatch.setenv("AVINOX_WEB_USER", "u")
+    monkeypatch.setenv("AVINOX_WEB_PASSWORD", "p")
+    settings = load_settings(tmp_path)
+    client = TestClient(create_app(settings))
+    assert settings.upload_token in client.get("/settings", auth=("u", "p")).text

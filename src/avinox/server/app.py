@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from starlette.datastructures import UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBasic, HTTPBasicCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,7 @@ from .store import PATTERNS, Store, UploadError
 
 log = logging.getLogger("avinox.server")
 HERE = Path(__file__).parent
+MAX_FILES_PER_REQUEST = 50
 
 
 WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
@@ -80,6 +83,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not ok:
             raise HTTPException(401, "Anmeldung erforderlich", headers={"WWW-Authenticate": 'Basic realm="Avinox"'})
 
+    def check_length(request: Request, limit: int) -> None:
+        """Größe vor dem Lesen prüfen: ohne Content-Length 411, zu groß 413."""
+        raw = request.headers.get("content-length")
+        if raw is None or not raw.isdigit():
+            raise HTTPException(411, "Content-Length fehlt")
+        if int(raw) > limit:
+            raise HTTPException(413, "Anfrage zu groß")
+
+    async def read_body(request: Request, limit: int) -> bytes:
+        """Liest höchstens ``limit`` Byte und bricht darüber ab (falls Content-Length lügt)."""
+        buf = bytearray()
+        async for chunk in request.stream():
+            buf += chunk
+            if len(buf) > limit:
+                raise HTTPException(413, "Anfrage zu groß")
+        return bytes(buf)
+
     def ride_or_404(ride_pk: int) -> dict:
         ride = store.get_ride(ride_pk)
         if not ride:
@@ -100,7 +120,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.put("/api/v1/upload", dependencies=[Depends(upload_auth)], tags=["upload"])
     async def upload(request: Request, path: str, size: int = Query(ge=0), offset: int = Query(0, ge=0)):
         """Rohe Bytes ab ``offset``. Bei falschem Offset kommt 409 mit dem tatsächlich empfangenen Stand."""
-        body = await request.body()
+        limit = min(settings.max_upload_bytes, max(0, size - offset))
+        check_length(request, limit)
+        body = await read_body(request, limit)
         try:
             result = store.upload_chunk(path, size, offset, body)
         except UploadError as exc:
@@ -161,11 +183,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"names": store.mode_names()}
 
     @app.post("/api/v1/files", dependencies=[Depends(read_auth)], tags=["upload"])
-    async def upload_files(files: list[UploadFile] = File(...)):
-        """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl)."""
+    async def upload_files(request: Request):
+        """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl).
+
+        Höchstens ``MAX_FILES_PER_REQUEST`` Dateien und ``max_upload_bytes`` (+ 1 MB Formular-Overhead) je Anfrage.
+        """
+        check_length(request, settings.max_upload_bytes + 1024 * 1024)
+        form = await request.form(max_files=MAX_FILES_PER_REQUEST, max_fields=10)
+        files = [v for v in form.getlist("files") if isinstance(v, UploadFile)]
+        if not files:
+            raise HTTPException(400, "Keine Dateien im Feld 'files'")
         results = []
         for f in files:
-            data = await f.read()
+            data = await f.read(settings.max_upload_bytes + 1)
             try:
                 r = store.add_file(f.filename or "", data)
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
@@ -203,7 +233,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "settings.html",
             levels=store.custom_levels_seen(),
             names=store.mode_names(),
-            token=settings.upload_token,
+            # Token nur zeigen, wenn die Seite selbst geschützt ist – sonst sähe es jeder im LAN.
+            token=settings.upload_token if settings.web_user else None,
+            token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),
             patterns=[p.pattern for p in PATTERNS.values()],
         )
 

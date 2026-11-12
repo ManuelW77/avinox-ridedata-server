@@ -35,6 +35,7 @@
 
 <section class="card">
   <h2>ESP32 / Upload-API</h2>
+  {% if token %}
   <div class="form-row" style="margin-bottom:0.75rem">
     <label for="token">Upload-Token</label>
     <div class="actions">
@@ -43,6 +44,9 @@
       <button type="button" class="btn ghost" id="token-copy">kopieren</button>
     </div>
   </div>
+  {% else %}
+  <p class="notice" style="margin-bottom:0.75rem">Das Upload-Token wird hier nur angezeigt, wenn die Seite mit Passwort geschützt ist (<code>AVINOX_WEB_USER</code> / <code>AVINOX_WEB_PASSWORD</code>). Sonst steht es in <code>{{ token_hint }}</code>.</p>
+  {% endif %}
   <p class="muted small">Alle Aufrufe mit Header <code>Authorization: Bearer &lt;Token&gt;</code>.</p>
   <dl class="kv">
     <dt><code>GET /api/v1/manifest</code></dt><dd>Liste der bekannten Dateien (Pfad + Größe) – daran erkennt der ESP32, was neu ist.</dd>

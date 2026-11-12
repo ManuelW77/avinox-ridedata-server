@@ -41,7 +41,7 @@ Danach läuft die Webseite unter `http://<host>:8000/`, die API-Doku unter `http
 docker compose exec avinox cat /data/upload_token
 ```
 
-Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen.
+Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen. Auf der Seite „Einstellungen“ wird das Token nur angezeigt, wenn ein Web-Passwort gesetzt ist. Uploads sind auf `AVINOX_MAX_UPLOAD_MB` je Datei bzw. Anfrage begrenzt.
 
 **Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
 
