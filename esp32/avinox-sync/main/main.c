@@ -19,6 +19,7 @@
 #include "report.h"
 #include "sync.h"
 #include "usb_drive.h"
+#include "webui.h"
 #include "wifi_sta.h"
 
 static const char *TAG = "main";
@@ -215,6 +216,7 @@ void app_main(void)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "WLAN-Start fehlgeschlagen: %s (weiter, Sync nicht möglich)", esp_err_to_name(err));
     }
+    webui_start(&s_cfg);
     report_start_heartbeat(&s_cfg);
     ota_start(&s_cfg);
     err = usb_drive_start();
