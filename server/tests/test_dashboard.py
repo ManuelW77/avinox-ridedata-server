@@ -195,3 +195,14 @@ def test_api_and_pages(client):
     rides = client.get("/rides")
     assert rides.status_code == 200 and "/rides/" in rides.text
     assert client.get("/static/dashboard.js").status_code == 200
+
+
+def test_page_defaults_to_month_of_last_ride(client):
+    store = client.app.state.store
+    add(store, 1, ride_at(datetime(2020, 1, 15, 10), km=10, ride_id=1))
+    page = client.get("/")
+    assert '<span id="period-range">Januar 2020</span>' in page.text
+    assert 'aria-pressed="true">Monat' in page.text
+    # explizite Parameter haben Vorrang
+    assert '<span id="period-range">Januar 2020</span>' not in client.get("/", params={"period": "month", "offset": 0}).text
+    assert 'aria-pressed="true">Woche' in client.get("/", params={"period": "week"}).text

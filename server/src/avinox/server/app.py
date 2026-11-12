@@ -221,10 +221,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(request, name, {"tile_url": settings.tile_url, "tile_attribution": settings.tile_attribution, **ctx})
 
     @app.get("/", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
-    def dashboard_page(request: Request, period: str = "week", offset: int = 0):
+    def dashboard_page(request: Request, period: str | None = None, offset: int | None = None):
         if period not in PERIODS:
-            period = "week"
-        dash = store.dashboard(period, max(0, min(offset, 10000)))
+            period = "month" if period is None else "week"
+        if offset is None and request.query_params.get("period") is None:
+            # Ohne Vorgaben: der Zeitraum der letzten Fahrt (sonst ist die Seite bei älteren Fahrten leer)
+            dash = store.dashboard(period, 0)
+            if dash["last_offset"]:
+                dash = store.dashboard(period, dash["last_offset"])
+        else:
+            dash = store.dashboard(period, max(0, min(offset or 0, 10000)))
         return page(request, "dashboard.html", dash=dash)
 
     @app.get("/rides", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)

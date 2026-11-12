@@ -10,7 +10,10 @@
 
 static const char *TAG = "led";
 
-static volatile led_state_t s_state = LED_OFF;
+static led_state_t s_state = LED_OFF;       /* normaler Zustand */
+static led_state_t s_override = LED_OFF;
+static bool s_override_active;
+static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static led_strip_handle_t s_strip;
 static TaskHandle_t s_task;
 
@@ -23,12 +26,28 @@ static void led_rgb(uint8_t r, uint8_t g, uint8_t b)
     led_strip_refresh(s_strip);
 }
 
+static led_state_t led_effective(void)
+{
+    portENTER_CRITICAL(&s_lock);
+    led_state_t s = s_override_active ? s_override : s_state;
+    portEXIT_CRITICAL(&s_lock);
+    return s;
+}
+
+static void led_wake(void)
+{
+    if (s_task) {
+        xTaskNotifyGive(s_task);   /* nur der LED-Task spricht mit dem RMT-Treiber */
+    }
+}
+
 static void led_task(void *arg)
 {
     bool on = false;
     while (true) {
         on = !on;
-        switch (s_state) {
+        led_state_t cur = led_effective();
+        switch (cur) {
         case LED_OFF:   led_rgb(0, 0, 0); break;
         case LED_START: led_rgb(24, 24, 24); break;
         case LED_SETUP: if (on) led_rgb(24, 0, 32); else led_rgb(0, 0, 0); break;
@@ -36,12 +55,13 @@ static void led_task(void *arg)
         case LED_SYNC:  led_rgb(0, 24, 24); break;
         case LED_OK:    led_rgb(0, 32, 0); break;
         case LED_WARN:  led_rgb(32, 20, 0); break;
+        case LED_NO_DRIVE: if (on) led_rgb(32, 10, 0); else led_rgb(0, 0, 0); break;
         case LED_ERROR: led_rgb(32, 0, 0); break;
         case LED_HOLD:  led_rgb(24, 0, 32); break;
         case LED_FACTORY: if (on) led_rgb(32, 0, 0); else led_rgb(0, 0, 0); break;
         }
         /* 500 ms Blinktakt; led_set_state() weckt früher auf */
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(s_state == LED_FACTORY ? 120 : 500));
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(cur == LED_FACTORY ? 120 : cur == LED_NO_DRIVE ? 1000 : 500));
     }
 }
 
@@ -75,16 +95,40 @@ void led_init(void)
 
 void led_set_state(led_state_t state)
 {
-    if (s_state == state) {
-        return;
-    }
+    portENTER_CRITICAL(&s_lock);
+    bool changed = s_state != state;
     s_state = state;
-    if (s_task) {
-        xTaskNotifyGive(s_task);   /* nur der LED-Task spricht mit dem RMT-Treiber */
+    bool visible = !s_override_active;
+    portEXIT_CRITICAL(&s_lock);
+    if (changed && visible) {
+        led_wake();
+    }
+}
+
+void led_set_override(led_state_t state)
+{
+    portENTER_CRITICAL(&s_lock);
+    bool changed = !s_override_active || s_override != state;
+    s_override = state;
+    s_override_active = true;
+    portEXIT_CRITICAL(&s_lock);
+    if (changed) {
+        led_wake();
+    }
+}
+
+void led_clear_override(void)
+{
+    portENTER_CRITICAL(&s_lock);
+    bool changed = s_override_active;
+    s_override_active = false;
+    portEXIT_CRITICAL(&s_lock);
+    if (changed) {
+        led_wake();
     }
 }
 
 led_state_t led_get_state(void)
 {
-    return s_state;
+    return led_effective();
 }
