@@ -1,6 +1,6 @@
 [project]
 name = "avinox-ridedata-server"
-version = "0.5.2"
+version = "0.5.3"
 description = "Fahrdaten vom DJI-Avinox-Display auslesen, auswerten und bereitstellen"
 readme = "README.md"
 license = "GPL-3.0-or-later"
