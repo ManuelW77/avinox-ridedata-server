@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import figure, figure_text, bars with context %}
+{% from "_macros.html" import figure, figure_text, bars, bars_pair with context %}
 {% block title %}{{ ride.start_utc | localtime }} – Avinox Ride Data{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css').path }}">
@@ -106,6 +106,13 @@
   <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.cadence_moving') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">{{ t('ride.speed_moving') }}</span></h2>{{ bars(a.distributions.speed_s, drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.gradient') }} <span class="muted small">%</span></h2>{{ bars(a.distributions.gradient_s) }}</section>
+  <section class="card"><h2>{{ t('ride.d.share') }} <span class="muted small">{{ t('ride.d.share_sub') }}</span></h2>{{ bars(a.distributions.motor_share_s, 'motor', 's', 0, {'<1': t('ride.d.share_rider'), '≥99': t('ride.d.share_motor')}) }}</section>
+  <section class="card"><h2>{{ t('ride.d.power_grad') }} <span class="muted small">{{ t('ride.d.power_grad_sub') }}</span></h2>{{ bars_pair(a.by_gradient or {}, 'avg_rider_power_w', 'avg_motor_power_w', 'rider', 'motor', 'W') }}
+    <p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> {{ t('ride.d.legend_rider') }} &nbsp; <span style="color:var(--motor)">&#9632;</span> {{ t('ride.d.legend_motor') }}</p></section>
+  {% set spd_grad = {} %}{% for k, r in (a.by_gradient or {}).items() %}{% set _ = spd_grad.update({k: r.avg_speed_kmh}) %}{% endfor %}
+  <section class="card"><h2>{{ t('ride.d.speed_grad') }} <span class="muted small">{{ t('ride.d.speed_grad_sub') }}</span></h2>{{ bars(spd_grad, '', 'km/h', 1) }}</section>
+  {% set cad_gear = {} %}{% for g, m in (a.gears.per_gear or {}).items() %}{% if m.avg_cadence_rpm and (m.moving_seconds or 0) >= 30 %}{% set _ = cad_gear.update({g: m.avg_cadence_rpm}) %}{% endif %}{% endfor %}
+  {% if cad_gear %}<section class="card"><h2>{{ t('ride.d.cad_gear') }} <span class="muted small">{{ t('ride.d.cad_gear_sub') }}</span></h2>{{ bars(cad_gear, 'rider', t('ride.d.rpm'), 0, {}) }}</section>{% endif %}
   {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'rider') }}</section>{% endif %}
 </div>
 
