@@ -235,7 +235,7 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 .chart-head h2 { margin: 0; }
 .dchart { width: 100%; min-width: 0; min-height: 170px; }
 .chart-empty { display: grid; place-items: center; height: 170px; color: var(--ink-3); font-size: 0.9rem; }
-.chart-hint { margin: 0 0 2rem; }
+.chart-hint { margin: 0.4rem 0 0; }
 
 .section-title { font-size: 1.3rem; margin: 0 0 0.25rem; }
 .group-title { margin: 1.25rem 0 0.6rem; display: flex; align-items: center; gap: 0.45rem; }
@@ -252,7 +252,7 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 .best.g-motor strong { color: var(--motor); }
 .best-link { font-size: 0.85rem; color: var(--ink-2); text-decoration: none; margin-top: 0.2rem; }
 .best-link:hover { color: var(--ink); text-decoration: underline; }
-.bests { margin-bottom: 2rem; }
+.bests { margin-bottom: 0; }
 .bests > p { margin: 1rem 0 0; }
 
 .recent { list-style: none; margin: 0; padding: 0; }
@@ -302,3 +302,18 @@ table.sync td.n { white-space: nowrap; }
 @media (max-width: 600px) { .site-footer { padding-bottom: 2rem; } }
 .site-footer .ico { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
 .site-footer .ico-heart { color: var(--rider); }
+
+/* ------------------------------------------------------------ Abschnitte */
+.block { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.block-first { margin-top: 0; padding-top: 0; border-top: 0; }
+.block > .section-title { margin: 0 0 1rem; }
+.block > .section-title:has(+ .block-desc) { margin-bottom: 0.25rem; }
+.block > .block-desc { margin: 0 0 1rem; }
+.block > :is(.card, .grid) + :is(.card, .grid) { margin-top: 1rem; }
+.card > .group-title:first-child { margin-top: 0; }
+.block > .group-title:first-child { margin-top: 0; }
+.cols-drive { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.cols-drive.two { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .cols-drive, .cols-drive.two { grid-template-columns: minmax(0, 1fr); }
+}

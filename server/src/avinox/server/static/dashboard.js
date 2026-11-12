@@ -177,32 +177,36 @@
       `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero, labels)}</section>`;
     // Steigungsbereiche lesbar: ↓ bergab, ↑ bergauf
     const gradLabels = { "<-10": "↓ >10 %", "-10–-6": "↓ 6–10 %", "-6–-3": "↓ 3–6 %", "-3–-1": "↓ 1–3 %", "-1–1": tr("mix.d.flat"), "1–3": "↑ 1–3 %", "3–6": "↑ 3–6 %", "6–10": "↑ 6–10 %", "≥10": "↑ >10 %" };
-    const cards = [
+    const powerCards = [
       card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider", true),
       card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor", true),
       card(tr("mix.d.cadence"), tr("mix.cadence_moving"), d.cadence_s, "rider", true),
       card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", true),
-      card(tr("mix.d.gradient"), tr("mix.d.grad_hint"), d.gradient_s, "", false, gradLabels),
     ];
+    if (d.heart_rate_s) powerCards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
     const bg = m.by_gradient || {};
     const spdGrad = {};
     Object.entries(bg).forEach(([k, r]) => { spdGrad[k] = r.avg_speed_kmh; });
-    cards.push(
+    const hillCards = [
+      card(tr("mix.d.gradient"), tr("mix.d.grad_hint"), d.gradient_s, "", false, gradLabels),
       `<section class="card"><h2>${esc(tr("mix.d.power_grad"))} <span class="muted small">${esc(tr("mix.d.power_grad_sub"))}</span></h2>${barsPairHtml(bg, "avg_rider_power_w", "avg_motor_power_w", "rider", "motor", "W", gradLabels)}<p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> ${esc(tr("mix.d.legend_rider"))} &nbsp; <span style="color:var(--motor)">&#9632;</span> ${esc(tr("mix.d.legend_motor"))}</p></section>`,
-      `<section class="card"><h2>${esc(tr("mix.d.speed_grad"))} <span class="muted small">${esc(tr("mix.d.speed_grad_sub"))}</span></h2>${barsHtml(spdGrad, "", false, gradLabels, "km/h", 1)}</section>`);
+      `<section class="card"><h2>${esc(tr("mix.d.speed_grad"))} <span class="muted small">${esc(tr("mix.d.speed_grad_sub"))}</span></h2>${barsHtml(spdGrad, "", false, gradLabels, "km/h", 1)}</section>`,
+    ];
     const cadGear = g.avg_cadence_per_gear || {};
-    if (Object.keys(cadGear).length) cards.push(
-      `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>`);
-    if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
+    const cadGearCard = Object.keys(cadGear).length ? `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>` : "";
+    const hasCad = Object.keys(cadGear).length > 0;
+    const grp = (cls, key, inner) => `<h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}`;
     box.innerHTML =
-      `<div class="grid cols-2" style="margin-bottom:1rem">
+      grp("g-motor", "mix.sec.drive", `<div class="grid cols-drive${hasCad ? "" : " two"}">
         <section class="card"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
           <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table>
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</p></section>
         <section class="card"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
-      </div>
-      <div class="grid cols-3" style="margin-bottom:1rem">${cards.join("")}</div>`;
+        ${cadGearCard}
+      </div>`) +
+      grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`) +
+      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}</div>`);
   }
 
   /* --------------------------------------------------------- Diagramme */

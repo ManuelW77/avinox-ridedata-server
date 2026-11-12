@@ -24,6 +24,7 @@
 {% else %}
 
 {# ------------------------------------------------------------ Zeitraum #}
+<div class="block block-first">
 <section class="card period" id="period" aria-live="polite">
   <div class="toolbar">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
@@ -79,9 +80,10 @@
   </section>
 </div>
 <p class="muted small chart-hint">{{ t('dash.hint') }}</p>
+</div>
 
 {# ------------------------------------------------------------ Verteilung (per JS) #}
-<section class="mix-section" id="mix-section" hidden>
+<section class="block mix-section" id="mix-section" hidden>
   <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
   <div id="mix"></div>
 </section>
@@ -89,7 +91,7 @@
 {# ------------------------------------------------------------ Bestwerte #}
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
-<section class="bests">
+<section class="block bests">
   <h2 class="section-title">{{ t('bests.title') }}</h2>
   {% for gkey, gname in groups %}
   {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
@@ -115,6 +117,8 @@
 {% endif %}
 
 {# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
+<div class="block">
+<h2 class="section-title">{{ t('dash.sec.recent') }}</h2>
 <div class="grid cols-2 bottom">
   <section class="card">
     <div class="chart-head"><h2>{{ t('recent.title') }}</h2><a class="small" href="/rides">{{ t('recent.all') }}</a></div>
@@ -147,6 +151,7 @@
     </div>
     {% if tot.undated_rides %}<p class="muted small" style="margin-bottom:0">{{ t('dash.undated_one' if tot.undated_rides == 1 else 'dash.undated_many', n=tot.undated_rides) }}</p>{% endif %}
   </section>
+</div>
 </div>
 {% endif %}
 {% endblock %}
