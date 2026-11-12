@@ -49,6 +49,8 @@ typedef enum {
     T_USB_HOSTFAIL, T_NOT_CONNECTED, T_SETTINGS, T_ACCESS_H, T_ACCESS_NEW, T_ACCESS_NOTE, T_WARN_WIFI,
     T_SETUP_BTN, T_SETUP_NOTE, T_OK_SAVED_WEB, T_OK_SETUP,
     T_LANG_H, T_LANG_NOTE, T_LANG_SAVE, T_RESCUE, T_E_RESCUE_TOKEN, T_E_RESCUE_WIFI,
+    T_CHECK_BTN, T_CHECK_NOTE, T_CK_RUNNING, T_CK_LOST, T_CK_BUSY, T_CK_OK, T_CK_SERVER, T_CK_TOKEN, T_CK_HTTP,
+    T_CK_WIFI, T_CK_WIFI_NOTFOUND, T_CK_WIFI_AUTH, T_CK_WIFI_TIMEOUT, T_CK_RESCUE_PASS, T_CK_MEM,
     T_COUNT
 } web_text_t;
 
@@ -82,3 +84,22 @@ void web_render_form(buf_t *b, const app_config_t *cfg, const wifi_ap_record_t *
 esp_err_t web_handle_save(httpd_req_t *req, app_config_t *cur, bool portal);
 /* WLAN-Suche (blockierend). Liefert die Anzahl Netze oder -1 bei Fehler. */
 int web_scan(wifi_ap_record_t *aps, uint16_t max);
+
+/* ---- Verbindung prüfen (POST /check) */
+
+typedef enum {
+    WIFI_PROBE_OK, WIFI_PROBE_NOT_FOUND, WIFI_PROBE_AUTH, WIFI_PROBE_TIMEOUT, WIFI_PROBE_FAIL,
+} web_wifi_result_t;
+
+/* Nur im Einrichtungsportal: Die Station ist dort nicht verbunden und wird für die Prüfung kurz verbunden.
+ * connect() blockiert bis zu 15 s; reason = WLAN-Grund-Code bei WIFI_PROBE_FAIL. release() trennt wieder
+ * und wird nach jeder Prüfung aufgerufen, auch nach einem Fehlschlag von connect(). */
+typedef struct {
+    web_wifi_result_t (*connect)(const char *ssid, const char *pass, int *reason);
+    void (*release)(void);
+} web_wifi_probe_t;
+
+/* POST /check (Formularfelder url, token und im Portal ssid, ssid_sel, pass, open): prüft, ohne zu speichern,
+ * ob Server und Token funktionieren. Antwort JSON {"ok","step","msg"}. wifi == NULL: Betrieb (WLAN steht schon),
+ * sonst Portal. Die Anfrage läuft in einem eigenen Task mit großem Stack (TLS). */
+esp_err_t web_handle_check(httpd_req_t *req, const app_config_t *cur, const web_wifi_probe_t *wifi);

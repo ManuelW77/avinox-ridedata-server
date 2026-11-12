@@ -149,8 +149,13 @@ static bool access_ok(httpd_req_t *req, bool post)
     if (client_ip(req, ip, ip_txt, sizeof(ip_txt))) {
         cl = client_entry(ip, now);
         if (!cl) {
-            /* Alle Plätze gesperrt: trotzdem prüfen (Besitzer nicht aussperren), Fehlversuche zählen nur global. */
+            /* Alle Plätze gesperrt: ohne eigene Sperre nur global gezählt. Während der globalen Sperre wird
+               gar nicht geprüft, sonst wäre die Antwort (200 vs. 429) ein Orakel zum Raten mit vielen IPs. */
             ESP_LOGW(TAG, "Alle Sperr-Plätze belegt: %s wird nur global gezählt", ip_txt);
+            if (glob_locked) {
+                reply_429(req, s_glob_lock_until_us, now);
+                return false;
+            }
         } else {
             cl->last_us = now;
         }
@@ -343,6 +348,14 @@ static esp_err_t save_post(httpd_req_t *req)
     return web_handle_save(req, &s_cfg, false);
 }
 
+static esp_err_t check_post(httpd_req_t *req)
+{
+    if (!access_ok(req, true)) {
+        return ESP_OK;
+    }
+    return web_handle_check(req, &s_cfg, NULL);
+}
+
 static esp_err_t restart_post(httpd_req_t *req)
 {
     if (!access_ok(req, true)) {
@@ -388,7 +401,7 @@ void webui_start(const app_config_t *cfg)
     s_cfg = *cfg;
 
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 8;
+    c.max_uri_handlers = 10;
     c.max_open_sockets = 4;
     c.lru_purge_enable = true;
     c.stack_size = 6144;
@@ -404,6 +417,7 @@ void webui_start(const app_config_t *cfg)
         { .uri = "/scan", .method = HTTP_GET, .handler = scan_get },
         { .uri = "/save", .method = HTTP_POST, .handler = save_post },
         { .uri = "/restart", .method = HTTP_POST, .handler = restart_post },
+        { .uri = "/check", .method = HTTP_POST, .handler = check_post },
         { .uri = "/setup", .method = HTTP_POST, .handler = setup_post },
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {

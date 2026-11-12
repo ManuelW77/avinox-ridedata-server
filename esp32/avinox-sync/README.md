@@ -76,6 +76,12 @@ Einrichtungs-WLANs wird gelöscht, Neustart, offenes Einrichtungs-WLAN. Zum Neus
 Nicht schon beim Einschalten drücken, sonst startet der ESP32 im Download-Modus (BOOT = GPIO 0 ist ein Strapping-Pin).
 „Ohne Änderung neu starten“ verlässt den Einrichtungsmodus wieder.
 
+**Verbindung prüfen:** Der Knopf im Formular (benötigt JavaScript) ruft `POST /check` auf und prüft, ohne zu speichern,
+`GET <Server>/api/v1/manifest` mit Token und Geräte-Header. Ergebnis: Server nicht erreichbar, Token falsch (401/403) oder in Ordnung.
+Im Einrichtungsportal verbindet sich der ESP32 dafür kurz mit dem eingetragenen WLAN (bis 15 s, Fehler: Netz nicht gefunden,
+Passwort falsch) und trennt danach wieder; die Verbindung zum Portal kann dabei abreißen. Ein leeres Token-Feld nutzt den gespeicherten
+Token, im Notfallmodus ist die Eingabe Pflicht. Im Betrieb liegt `/check` hinter Login und CSRF-Schutz. Es läuft nur eine Prüfung gleichzeitig.
+
 Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`, `token`, `ap_pass`.
 
 ## Weboberfläche im Betrieb

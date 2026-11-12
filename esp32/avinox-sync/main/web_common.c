@@ -10,6 +10,12 @@
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_app_desc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "cJSON.h"
+
+#include "report.h"
 
 static const char *TAG = "web";
 
@@ -211,6 +217,25 @@ static const char *const TXT[T_COUNT][2] = {
                            "Emergency mode: please enter the upload token again." },
     [T_E_RESCUE_WIFI] = { "Notfallmodus: Bei geändertem WLAN-Namen muss das WLAN-Passwort neu eingegeben werden.",
                           "Emergency mode: if the Wi-Fi name is changed, the Wi-Fi password must be entered again." },
+    [T_CHECK_BTN] = { "Verbindung prüfen", "Check connection" },
+    [T_CHECK_NOTE] = { "Während der Prüfung kann die Verbindung zu diesem WLAN kurz abreißen.",
+                       "During the check the connection to this Wi-Fi may drop briefly." },
+    [T_CK_RUNNING] = { "Prüfe …", "Checking …" },
+    [T_CK_LOST] = { "Verbindung zum Gerät unterbrochen – bitte neu verbinden und erneut prüfen.",
+                    "Connection to the device lost – please reconnect and check again." },
+    [T_CK_BUSY] = { "Prüfung läuft bereits.", "A check is already running." },
+    [T_CK_OK] = { "Server und Token in Ordnung.", "Server and token are OK." },
+    [T_CK_SERVER] = { "Server nicht erreichbar.", "Server not reachable." },
+    [T_CK_TOKEN] = { "Token falsch.", "Token wrong." },
+    [T_CK_HTTP] = { "Server antwortet mit HTTP %d.", "Server answered with HTTP %d." },
+    [T_CK_WIFI] = { "WLAN-Verbindung fehlgeschlagen (Grund %d).", "Wi-Fi connection failed (reason %d)." },
+    [T_CK_WIFI_NOTFOUND] = { "WLAN-Verbindung fehlgeschlagen: Netz nicht gefunden.", "Wi-Fi connection failed: network not found." },
+    [T_CK_WIFI_AUTH] = { "WLAN-Verbindung fehlgeschlagen: Passwort falsch.", "Wi-Fi connection failed: wrong password." },
+    [T_CK_WIFI_TIMEOUT] = { "WLAN-Verbindung fehlgeschlagen: keine Antwort (Zeitüberschreitung).",
+                            "Wi-Fi connection failed: no response (timeout)." },
+    [T_CK_RESCUE_PASS] = { "Notfallmodus: Zum Prüfen bitte das WLAN-Passwort eingeben.",
+                           "Emergency mode: please enter the Wi-Fi password to check." },
+    [T_CK_MEM] = { "Zu wenig Speicher für die Prüfung.", "Not enough memory for the check." },
     [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
     [T_RESTART_BTN] = { "Ohne Änderung neu starten", "Restart without changes" },
     [T_OPEN_SUFFIX] = { ", offen", ", open" },
@@ -354,6 +379,7 @@ static const char PAGE_HEAD2[] = "\"><head><meta charset=\"utf-8\">"
     ".err{background:#fee2e2;color:#7f1d1d}.ok{background:#dcfce7;color:#14532d}"
     "a{color:#0a66c2}"
     "footer{font-size:.75rem;color:#777;text-align:center;margin:1.2rem 0 .5rem}footer a{color:#777}"
+    "#ckres{margin-top:.6rem;padding:.5rem .7rem;border-radius:6px}#ckres:empty{display:none}"
     ".lang{text-align:right;font-size:.85rem;margin:0}"
     "</style></head><body><main>";
 
@@ -422,6 +448,21 @@ void web_render_rescue_banner(buf_t *b)
         buf_append(b, "</b></p></section>");
     }
 }
+
+/* Knopf "Verbindung prüfen": ohne JavaScript bleibt er verborgen, das Formular geht normal weiter. */
+static const char CHECK_JS[] =
+    "<script>(function(){var b=document.getElementById('ckbtn'),r=document.getElementById('ckres');"
+    "if(!b||!r||!window.fetch||!window.URLSearchParams||!window.AbortController)return;"
+    "var f=b.form,n=['url','token','ssid','ssid_sel','pass','open'];b.hidden=false;"
+    "b.onclick=function(){var d=new URLSearchParams(),i,e;"
+    "for(i=0;i<n.length;i++){e=f.elements[n[i]];if(e&&!(e.type=='checkbox'&&!e.checked))d.append(n[i],e.value)}"
+    "r.className='hint';r.textContent=r.getAttribute('data-run');b.disabled=true;"
+    "var c=new AbortController(),t=setTimeout(function(){c.abort()},+r.getAttribute('data-to'));"
+    "fetch('/check',{method:'POST',body:d,signal:c.signal,cache:'no-store'})"
+    ".then(function(x){return x.json()})"
+    ".then(function(j){r.className=j.ok?'ok':'err';r.textContent=j.msg})"
+    ".catch(function(){r.className='err';r.textContent=r.getAttribute('data-lost')})"
+    ".then(function(){clearTimeout(t);b.disabled=false})}})();</script>";
 
 void web_render_form(buf_t *b, const app_config_t *cfg, const wifi_ap_record_t *aps, uint16_t ap_count, bool portal)
 {
@@ -503,7 +544,20 @@ void web_render_form(buf_t *b, const app_config_t *cfg, const wifi_ap_record_t *
     buf_append(b, "</label>"
         "<input id=\"token\" name=\"token\" type=\"password\" maxlength=\"128\" autocomplete=\"off\" placeholder=\"");
     buf_append(b, cfg->token[0] ? T(T_PH_SET_KEEP) : T(T_PH_TOKEN));
-    buf_append(b, "\"><h2 style=\"margin-top:1.2rem\">");
+    buf_append(b, "\"><button type=\"button\" class=\"sec\" id=\"ckbtn\" hidden>");
+    buf_append(b, T(T_CHECK_BTN));
+    buf_append(b, "</button><div id=\"ckres\" role=\"status\" aria-live=\"polite\" data-run=\"");
+    buf_append_esc(b, T(T_CK_RUNNING));
+    buf_append(b, "\" data-lost=\"");
+    buf_append_esc(b, T(T_CK_LOST));
+    buf_append(b, portal ? "\" data-to=\"30000\"></div>" : "\" data-to=\"20000\"></div>");
+    if (portal) {
+        buf_append(b, "<small>");
+        buf_append_esc(b, T(T_CHECK_NOTE));
+        buf_append(b, "</small>");
+    }
+    buf_append(b, CHECK_JS);
+    buf_append(b, "<h2 style=\"margin-top:1.2rem\">");
     buf_append(b, portal ? T(T_AP_H) : T(T_ACCESS_H));
     buf_append(b, "</h2><label for=\"appass\">");
     buf_append(b, portal ? T(T_AP_NEW) : T(T_ACCESS_NEW));
@@ -597,25 +651,36 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     return err;
 }
 
+/* Formularkörper in s_body lesen (httpd arbeitet Anfragen nacheinander ab). Aufrufer nullt s_body nach Gebrauch. */
+static char s_body[FORM_MAX];
+
+static bool form_recv(httpd_req_t *req)
+{
+    int got = 0;
+    while (got < (int)req->content_len) {
+        int r = httpd_req_recv(req, s_body + got, req->content_len - got);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue;
+        }
+        if (r <= 0) {
+            memset(s_body, 0, sizeof(s_body));
+            return false;
+        }
+        got += r;
+    }
+    s_body[got] = '\0';
+    return true;
+}
+
 esp_err_t web_handle_save(httpd_req_t *req, app_config_t *cur, bool portal)
 {
     if (req->content_len <= 0 || req->content_len >= FORM_MAX) {
         return web_send_message(req, "err", T_E_FORM, true);
     }
-    static char body[FORM_MAX];
-    int got = 0;
-    while (got < (int)req->content_len) {
-        int r = httpd_req_recv(req, body + got, req->content_len - got);
-        if (r == HTTPD_SOCK_ERR_TIMEOUT) {
-            continue;
-        }
-        if (r <= 0) {
-            memset(body, 0, sizeof(body));
-            return ESP_FAIL;
-        }
-        got += r;
+    char *body = s_body;
+    if (!form_recv(req)) {
+        return ESP_FAIL;
     }
-    body[got] = '\0';
 
     app_config_t nc = *cur;
     char ssid[CFG_SSID_MAX + 1], ssid_sel[CFG_SSID_MAX + 1], pass[CFG_PASS_MAX + 1];
@@ -629,12 +694,190 @@ esp_err_t web_handle_save(httpd_req_t *req, app_config_t *cur, bool portal)
                web_form_get(body, "open", open, sizeof(open)) &&
                web_form_get(body, "ap_pass", ap_pass, sizeof(ap_pass)) &&
                web_form_get(body, "ap_pass2", ap_pass2, sizeof(ap_pass2));
-    memset(body, 0, sizeof(body));      /* Passwort/Token nicht im RAM liegen lassen */
+    memset(body, 0, FORM_MAX);          /* Passwort/Token nicht im RAM liegen lassen */
     esp_err_t res = save_apply(req, cur, &nc, portal, fit, ssid, ssid_sel, pass, url, token, open, ap_pass, ap_pass2);
     memset(pass, 0, sizeof(pass));
     memset(token, 0, sizeof(token));
     memset(ap_pass, 0, sizeof(ap_pass));
     memset(ap_pass2, 0, sizeof(ap_pass2));
     memset(&nc, 0, sizeof(nc));
+    return res;
+}
+
+/* ------------------------------------------------------------ Verbindung prüfen */
+
+#define CHECK_HTTP_TIMEOUT_MS   8000
+#define CHECK_TASK_STACK        10240   /* TLS-Handshake bei https-URL */
+
+typedef struct {
+    char url[CFG_URL_MAX + 1];
+    char token[CFG_TOKEN_MAX + 1];
+    char ssid[CFG_SSID_MAX + 1];
+    char pass[CFG_PASS_MAX + 1];
+    const web_wifi_probe_t *wifi;
+    bool ok;
+    const char *step;       /* "wifi" | "server" | "token" | "ok" */
+    web_text_t msg;
+    int arg;                /* Zahl für Texte mit %d */
+} check_job_t;
+
+static check_job_t s_job;
+static SemaphoreHandle_t s_check_done;
+static volatile int s_check_busy;
+
+static esp_err_t check_reply(httpd_req_t *req, bool ok, const char *step, web_text_t msg, int arg)
+{
+    char text[160];
+    snprintf(text, sizeof(text), T(msg), arg);      /* Texte ohne %d ignorieren arg */
+    cJSON *o = cJSON_CreateObject();
+    char *json = NULL;
+    if (o) {
+        cJSON_AddBoolToObject(o, "ok", ok);
+        cJSON_AddStringToObject(o, "step", step);
+        cJSON_AddStringToObject(o, "msg", text);
+        json = cJSON_PrintUnformatted(o);
+        cJSON_Delete(o);
+    }
+    if (!json) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+    }
+    httpd_resp_set_type(req, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    esp_err_t err = httpd_resp_sendstr(req, json);
+    cJSON_free(json);
+    return err;
+}
+
+static void check_task(void *arg)
+{
+    check_job_t *j = &s_job;
+    int st;
+    j->ok = false;
+    j->step = "server";
+    j->msg = T_CK_SERVER;
+    j->arg = 0;
+    if (j->wifi) {
+        int reason = 0;
+        web_wifi_result_t r = j->wifi->connect(j->ssid, j->pass, &reason);
+        memset(j->pass, 0, sizeof(j->pass));
+        if (r != WIFI_PROBE_OK) {
+            j->step = "wifi";
+            j->msg = r == WIFI_PROBE_NOT_FOUND ? T_CK_WIFI_NOTFOUND
+                   : r == WIFI_PROBE_AUTH ? T_CK_WIFI_AUTH
+                   : r == WIFI_PROBE_TIMEOUT ? T_CK_WIFI_TIMEOUT : T_CK_WIFI;
+            j->arg = reason;
+            goto out;
+        }
+    }
+    st = report_probe_manifest(j->url, j->token, CHECK_HTTP_TIMEOUT_MS);
+    ESP_LOGI(TAG, "Verbindung prüfen: HTTP %d", st);
+    if (st == 200) {
+        j->ok = true;
+        j->step = "ok";
+        j->msg = T_CK_OK;
+    } else if (st == 401 || st == 403) {
+        j->step = "token";
+        j->msg = T_CK_TOKEN;
+    } else if (st > 0) {
+        j->msg = T_CK_HTTP;
+        j->arg = st;
+    }
+out:
+    if (j->wifi) {
+        j->wifi->release();
+    }
+    memset(j->token, 0, sizeof(j->token));
+    memset(j->pass, 0, sizeof(j->pass));
+    xSemaphoreGive(s_check_done);
+    vTaskDelete(NULL);
+}
+
+static esp_err_t check_apply(httpd_req_t *req, const app_config_t *cur, const web_wifi_probe_t *wifi, bool fit,
+                             const char *ssid, const char *ssid_sel, const char *pass, char *url, char *token,
+                             const char *open)
+{
+    if (!fit) {
+        return check_reply(req, false, "server", T_E_LONG, 0);
+    }
+    web_trim(token);
+    if (!config_normalize_url(url)) {
+        return check_reply(req, false, "server", T_E_URL, 0);
+    }
+    if (!token[0]) {
+        /* Notfallmodus: gespeicherten Token nie an eine (evtl. fremde) URL schicken. */
+        if (s_rescue) {
+            return check_reply(req, false, "token", T_E_RESCUE_TOKEN, 0);
+        }
+        if (!cur->token[0]) {
+            return check_reply(req, false, "token", T_E_TOKEN, 0);
+        }
+    }
+    const char *use_ssid = ssid[0] ? ssid : ssid_sel;
+    const char *use_pass = "";
+    if (wifi) {
+        if (!use_ssid[0]) {
+            return check_reply(req, false, "wifi", T_E_NOSSID, 0);
+        }
+        if (open[0]) {
+            use_pass = "";
+        } else if (pass[0]) {
+            if (strlen(pass) < 8) {
+                return check_reply(req, false, "wifi", T_E_PASSLEN, 0);
+            }
+            use_pass = pass;
+        } else if (s_rescue) {
+            return check_reply(req, false, "wifi", T_CK_RESCUE_PASS, 0);
+        } else if (strcmp(use_ssid, cur->ssid) == 0) {
+            use_pass = cur->pass;
+        }
+    }
+    if (!s_check_done) {
+        s_check_done = xSemaphoreCreateBinary();
+        if (!s_check_done) {
+            return check_reply(req, false, "server", T_CK_MEM, 0);
+        }
+    }
+    if (__sync_lock_test_and_set(&s_check_busy, 1)) {
+        return check_reply(req, false, "server", T_CK_BUSY, 0);
+    }
+    memset(&s_job, 0, sizeof(s_job));
+    strlcpy(s_job.url, url, sizeof(s_job.url));
+    strlcpy(s_job.token, token[0] ? token : cur->token, sizeof(s_job.token));
+    strlcpy(s_job.ssid, use_ssid, sizeof(s_job.ssid));
+    strlcpy(s_job.pass, use_pass, sizeof(s_job.pass));
+    s_job.wifi = wifi;
+    if (xTaskCreate(check_task, "check", CHECK_TASK_STACK, NULL, 4, NULL) != pdPASS) {
+        memset(&s_job, 0, sizeof(s_job));
+        __sync_lock_release(&s_check_busy);
+        return check_reply(req, false, "server", T_CK_MEM, 0);
+    }
+    xSemaphoreTake(s_check_done, portMAX_DELAY);    /* Task endet nach Server-Timeout bzw. spätestens ~25 s */
+    esp_err_t err = check_reply(req, s_job.ok, s_job.step, s_job.msg, s_job.arg);
+    memset(&s_job, 0, sizeof(s_job));
+    __sync_lock_release(&s_check_busy);
+    return err;
+}
+
+esp_err_t web_handle_check(httpd_req_t *req, const app_config_t *cur, const web_wifi_probe_t *wifi)
+{
+    web_detect_lang(req);
+    if (req->content_len <= 0 || req->content_len >= FORM_MAX) {
+        return check_reply(req, false, "server", T_E_FORM, 0);
+    }
+    if (!form_recv(req)) {
+        return ESP_FAIL;
+    }
+    char ssid[CFG_SSID_MAX + 1], ssid_sel[CFG_SSID_MAX + 1], pass[CFG_PASS_MAX + 1];
+    char url[CFG_URL_MAX + 1], token[CFG_TOKEN_MAX + 1], open[4];
+    bool fit = web_form_get(s_body, "ssid", ssid, sizeof(ssid)) &&
+               web_form_get(s_body, "ssid_sel", ssid_sel, sizeof(ssid_sel)) &&
+               web_form_get(s_body, "pass", pass, sizeof(pass)) &&
+               web_form_get(s_body, "url", url, sizeof(url)) &&
+               web_form_get(s_body, "token", token, sizeof(token)) &&
+               web_form_get(s_body, "open", open, sizeof(open));
+    memset(s_body, 0, sizeof(s_body));
+    esp_err_t res = check_apply(req, cur, wifi, fit, ssid, ssid_sel, pass, url, token, open);
+    memset(pass, 0, sizeof(pass));
+    memset(token, 0, sizeof(token));
     return res;
 }

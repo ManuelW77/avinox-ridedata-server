@@ -140,13 +140,43 @@ bool report_send_ota(const app_config_t *cfg, const char *from, const char *to, 
     return ok;
 }
 
+void report_set_headers(esp_http_client_handle_t c, const char *token)
+{
+    char auth[CFG_TOKEN_MAX + 16];
+    snprintf(auth, sizeof(auth), "Bearer %s", token);
+    esp_http_client_set_header(c, "Authorization", auth);
+    esp_http_client_set_header(c, "X-Avinox-Device", report_device_id());
+    memset(auth, 0, sizeof(auth));
+}
+
+int report_probe_manifest(const char *base_url, const char *token, int timeout_ms)
+{
+    char url[CFG_URL_MAX + 40];
+    snprintf(url, sizeof(url), "%s/api/v1/manifest", base_url);
+    esp_http_client_config_t hc = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = timeout_ms,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .disable_auto_redirect = true,
+    };
+    int st = -1;
+    esp_http_client_handle_t c = esp_http_client_init(&hc);
+    if (c) {
+        report_set_headers(c, token);
+        if (esp_http_client_perform(c) == ESP_OK) {
+            st = esp_http_client_get_status_code(c);
+        }
+        esp_http_client_cleanup(c);
+    }
+    return st;
+}
+
 /* Sendet body, liefert HTTP-Status oder -1 bei Netzfehler. Aufrufer hält s_lock. */
 static int post_report(const app_config_t *cfg, const char *body)
 {
     char url[CFG_URL_MAX + 40];
     snprintf(url, sizeof(url), "%s/api/v1/device/report", cfg->url);
-    char auth[CFG_TOKEN_MAX + 16];
-    snprintf(auth, sizeof(auth), "Bearer %s", cfg->token);
     esp_http_client_config_t hc = {
         .url = url,
         .method = HTTP_METHOD_POST,
@@ -157,8 +187,7 @@ static int post_report(const app_config_t *cfg, const char *body)
     int st = -1;
     esp_http_client_handle_t c = esp_http_client_init(&hc);
     if (c) {
-        esp_http_client_set_header(c, "Authorization", auth);
-        esp_http_client_set_header(c, "X-Avinox-Device", report_device_id());
+        report_set_headers(c, cfg->token);
         esp_http_client_set_header(c, "Content-Type", "application/json");
         esp_http_client_set_post_field(c, body, strlen(body));
         if (esp_http_client_perform(c) == ESP_OK) {
@@ -166,7 +195,6 @@ static int post_report(const app_config_t *cfg, const char *body)
         }
         esp_http_client_cleanup(c);
     }
-    memset(auth, 0, sizeof(auth));
     return st;
 }
 
