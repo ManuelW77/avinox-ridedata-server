@@ -41,11 +41,21 @@ class Summary:
     max_gradient_pct: float
     avg_speed_kmh: float
     max_speed_kmh: float
-    avg_rider_power_w: float
+    avg_rider_power_w: float | None
+    """Zeitgewichtet über Samples in Bewegung, Rollen (0 W) zählt mit; None ohne Bewegungszeit."""
+    avg_pedaling_power_w: float | None
+    """Zeitgewichtet über Samples in Bewegung mit Fahrerleistung > 0."""
+    header_avg_rider_power_w: float
+    """Ø-Fahrerleistung laut Display-Header (zählt Standzeit mit), nur zum Vergleich."""
     max_rider_power_w: float
     avg_rider_torque_nm: float
     max_rider_torque_nm: float
-    avg_motor_power_w: float
+    avg_motor_power_w: float | None
+    """Zeitgewichtet über Samples in Bewegung, Rollen (0 W) zählt mit; None ohne Bewegungszeit."""
+    avg_motor_assist_power_w: float | None
+    """Zeitgewichtet über Samples in Bewegung mit Motorleistung > 0."""
+    header_avg_motor_power_w: float
+    """Ø-Motorleistung laut Display-Header, nur zum Vergleich."""
     max_motor_power_w: float
     avg_motor_torque_nm: float
     max_motor_torque_nm: float
@@ -133,6 +143,14 @@ def summarize(ride: Ride) -> Summary:
     dts = _intervals(s)
     moving = [(x, dt) for x, dt in zip(s, dts) if x.speed_kmh >= MOVING_MIN_KMH and dt > 0]
     moving_time = sum(dt for _, dt in moving)
+    pedaling = [(x, dt) for x, dt in moving if x.rider_power_w > 0]
+    pedaling_time = sum(dt for _, dt in pedaling)
+    assisting = [(x, dt) for x, dt in moving if x.motor_power_w > 0]
+    assist_time = sum(dt for _, dt in assisting)
+    avg_motor = round(sum(x.motor_power_w * dt for x, dt in moving) / moving_time) if moving_time else None
+    avg_assist = round(sum(x.motor_power_w * dt for x, dt in assisting) / assist_time) if assist_time else None
+    avg_rider = round(sum(x.rider_power_w * dt for x, dt in moving) / moving_time) if moving_time else None
+    avg_pedaling = round(sum(x.rider_power_w * dt for x, dt in pedaling) / pedaling_time) if pedaling_time else None
 
     altitudes = [x.altitude_m for x in s if x.altitude_m is not None]
     up, down = climb(altitudes) if altitudes else (None, None)
@@ -157,11 +175,15 @@ def summarize(ride: Ride) -> Summary:
         max_gradient_pct=st.max_gradient_pct,
         avg_speed_kmh=st.avg_speed_kmh,
         max_speed_kmh=st.max_speed_kmh,
-        avg_rider_power_w=st.avg_rider_power_w,
+        avg_rider_power_w=avg_rider,
+        avg_pedaling_power_w=avg_pedaling,
+        header_avg_rider_power_w=st.avg_rider_power_w,
         max_rider_power_w=st.max_rider_power_w,
         avg_rider_torque_nm=st.avg_rider_torque_nm,
         max_rider_torque_nm=st.max_rider_torque_nm,
-        avg_motor_power_w=st.avg_motor_power_w,
+        avg_motor_power_w=avg_motor,
+        avg_motor_assist_power_w=avg_assist,
+        header_avg_motor_power_w=st.avg_motor_power_w,
         max_motor_power_w=st.max_motor_power_w,
         avg_motor_torque_nm=st.avg_motor_torque_nm,
         max_motor_torque_nm=st.max_motor_torque_nm,

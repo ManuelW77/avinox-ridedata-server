@@ -142,13 +142,19 @@ def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
         secs = sum(dt for _, dt in items)
         moving = [(s, dt) for s, dt in items if s.speed_kmh >= MOVING_MIN_KMH]
         mt = sum(dt for _, dt in moving)
+        ped = [(s, dt) for s, dt in moving if s.rider_power_w > 0]
+        pt = sum(dt for _, dt in ped)
+        ast = [(s, dt) for s, dt in moving if s.motor_power_w > 0]
+        at = sum(dt for _, dt in ast)
         out[str(k)] = {
             "seconds": secs,
             "moving_seconds": mt,
             "distance_m": round(sum(s.speed_kmh / 3.6 * dt for s, dt in items)),
             "avg_moving_speed_kmh": round(sum(s.speed_kmh * dt for s, dt in moving) / mt, 1) if mt else None,
-            "avg_motor_power_w": round(sum(s.motor_power_w * dt for s, dt in items) / secs) if secs else None,
-            "avg_rider_power_w": round(sum(s.rider_power_w * dt for s, dt in items) / secs) if secs else None,
+            "avg_motor_power_w": round(sum(s.motor_power_w * dt for s, dt in moving) / mt) if mt else None,
+            "avg_motor_assist_power_w": round(sum(s.motor_power_w * dt for s, dt in ast) / at) if at else None,
+            "avg_rider_power_w": round(sum(s.rider_power_w * dt for s, dt in moving) / mt) if mt else None,
+            "avg_pedaling_power_w": round(sum(s.rider_power_w * dt for s, dt in ped) / pt) if pt else None,
         }
     return out
 

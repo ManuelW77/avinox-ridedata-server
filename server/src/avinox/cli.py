@@ -70,8 +70,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
         battery = f"{_num(s.battery_start_pct)}→{_num(s.battery_end_pct)}"
         print(
             f"{str(path)[-34:]:<34} {start:<16} {_fmt_duration(s.duration_s):>8} {_fmt_duration(s.moving_time_s):>8} "
-            f"{s.distance_km:>6.2f} {s.ascent_m:>5.0f} {s.avg_speed_kmh:>6.1f} {s.avg_rider_power_w:>10.0f} "
-            f"{s.avg_motor_power_w:>9.0f} {s.avg_cadence_rpm:>7.0f} {battery:>7} {s.calories_kcal:>5.0f}"
+            f"{s.distance_km:>6.2f} {s.ascent_m:>5.0f} {s.avg_speed_kmh:>6.1f} {(s.avg_rider_power_w or 0):>10.0f} "
+            f"{(s.avg_motor_power_w or 0):>9.0f} {s.avg_cadence_rpm:>7.0f} {battery:>7} {s.calories_kcal:>5.0f}"
         )
     return 1 if failed else 0
 

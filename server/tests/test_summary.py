@@ -26,8 +26,8 @@ def test_app_values_come_from_header():
     assert s.distance_km == 18.363
     assert (s.ascent_m, s.descent_m) == (73, 13)
     assert s.avg_speed_kmh == pytest.approx(6.3) and s.max_speed_kmh == pytest.approx(50.6)
-    assert s.avg_rider_power_w == 29 and s.avg_rider_torque_nm == 8 and s.max_rider_torque_nm == 155
-    assert s.avg_motor_power_w == 46 and s.avg_total_power_w == 75
+    assert s.header_avg_rider_power_w == 29 and s.avg_rider_torque_nm == 8 and s.max_rider_torque_nm == 155
+    assert s.header_avg_motor_power_w == 46 and s.avg_total_power_w == 75
     assert s.avg_cadence_rpm == pytest.approx(13.7) and s.max_cadence_rpm == pytest.approx(156.9)
     assert s.calories_kcal == pytest.approx(305.244)
 
@@ -64,3 +64,13 @@ def test_climb_counts_full_descent_first():
 def test_empty_ride():
     s = summarize(parse_ride(ride([])))
     assert s.duration_s == 0 and s.samples_ascent_m is None and s.samples_avg_moving_speed_kmh is None
+
+
+def test_avg_power_counts_only_moving_time():
+    samples = [sample(0), sample(1), sample(2, speed=20, motor=100), sample(3, speed=20, rider=200, motor=300), sample(4, speed=20, rider=200, motor=300), sample(5, speed=20)]
+    s = summarize(parse_ride(ride(samples, stats=STATS, start=T0, end=T0 + 6)))
+    assert s.moving_time_s == 4
+    assert s.avg_rider_power_w == 100 and s.avg_pedaling_power_w == 200
+    assert s.header_avg_rider_power_w == 29
+    assert s.avg_motor_power_w == 175 and s.avg_motor_assist_power_w == 233
+    assert s.header_avg_motor_power_w == 46
