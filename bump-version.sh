@@ -50,7 +50,7 @@ echo "🔄 Hole Stand von GitHub ..."
 git fetch -q origin --tags
 git switch -q devel
 git merge -q --ff-only origin/devel || { echo "❌ devel weicht von origin/devel ab – erst abgleichen." >&2; exit 1; }
-if [[ -n "$(git log --oneline devel..origin/main)" ]]; then
+if [[ -n "$(git log --oneline --no-merges devel..origin/main)" ]]; then
   echo "❌ origin/main hat Commits, die devel fehlen – erst nach devel mergen." >&2; exit 1
 fi
 
