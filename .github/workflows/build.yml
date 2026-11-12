@@ -59,15 +59,27 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Release Notes
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          {
+            echo "## Änderungen / Changes"
+            echo
+            git tag -l --format='%(contents)' "$TAG" | sed -e '1,2d' -e '/^-----BEGIN PGP SIGNATURE-----/,$d'
+            echo
+            echo "Server-Release / server release."
+            echo
+            echo "- Docker-Image: \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/avinox-ridedata-server:${VERSION}\`"
+            echo "- Die Firmware hat eigene Releases (\`fw-v*\`) / the firmware has its own releases (\`fw-v*\`)."
+          } > "$RUNNER_TEMP/notes.md"
       - name: Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           make_latest: false
-          body: |
-            Server-Release / server release.
-
-            - Docker-Image: `ghcr.io/${{ github.repository_owner }}/avinox-ridedata-server:${{ steps.meta.outputs.version }}`
-            - Die Firmware hat eigene Releases (`fw-v*`) / the firmware has its own releases (`fw-v*`).
+          body_path: ${{ runner.temp }}/notes.md
 
   esp32:
     # Nur bei einem Firmware-Release-Tag (bump-version.sh)
@@ -100,6 +112,22 @@ jobs:
             esp32/avinox-sync/build/avinox-sync-full.bin
             esp32/avinox-sync/build/flasher_args.json
           if-no-files-found: error
+      - name: Release Notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          {
+            echo "## Änderungen / Changes"
+            echo
+            git tag -l --format='%(contents)' "$TAG" | sed -e '1,2d' -e '/^-----BEGIN PGP SIGNATURE-----/,$d'
+            echo
+            echo "Firmware für ESP32-S3 / firmware for ESP32-S3."
+            echo
+            echo '- `avinox-sync-full.bin`: Erst-Flash / first flash: `esptool.py --chip esp32s3 write_flash 0x0 avinox-sync-full.bin`'
+            echo '- `avinox-sync.bin`: Update per WLAN (OTA) über Server-Einstellungen / OTA update via server settings'
+          } > "$RUNNER_TEMP/notes.md"
       - name: Release
         if: startsWith(github.ref, 'refs/tags/fw-v')
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
@@ -109,8 +137,4 @@ jobs:
             esp32/avinox-sync/build/avinox-sync.bin
             esp32/avinox-sync/build/avinox-sync-full.bin
             esp32/avinox-sync/build/flasher_args.json
-          body: |
-            Firmware für ESP32-S3 / firmware for ESP32-S3.
-
-            - `avinox-sync-full.bin`: Erst-Flash / first flash: `esptool.py --chip esp32s3 write_flash 0x0 avinox-sync-full.bin`
-            - `avinox-sync.bin`: Update per WLAN (OTA) über Server-Einstellungen / OTA update via server settings
+          body_path: ${{ runner.temp }}/notes.md
