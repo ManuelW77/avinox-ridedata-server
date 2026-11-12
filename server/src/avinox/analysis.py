@@ -29,6 +29,7 @@ POWER_BINS = [1, 50, 100, 150, 200, 300, 400, 600, 800, 1000]
 CADENCE_BINS = [1, 40, 60, 70, 80, 90, 100, 120]
 SPEED_BINS = [1, 5, 10, 15, 20, 25, 30, 40]
 GRADIENT_BINS = [-10, -6, -3, -1, 1, 3, 6, 10]
+SHARE_BINS = [1, 25, 50, 75, 99]
 HEART_RATE_BINS = [1, 100, 120, 140, 160, 180]
 BEST_EFFORT_S = [5, 10, 30, 60, 300, 600, 1200, 3600]
 STOP_MIN_S = 30
@@ -133,6 +134,29 @@ def _series(samples: list[Sample], dts: list[int], max_points: int) -> dict:
     return {"bucket_s": size, "fields": fields, "rows": rows}
 
 
+def _by_gradient(samples: list[Sample], moving_w: list[int]) -> dict:
+    """Leistung und Tempo je Steigungsbereich (nur in Bewegung, Bereiche ohne Zeit entfallen)."""
+    groups: dict[str, list[tuple[Sample, int]]] = {}
+    for x, w in zip(samples, moving_w):
+        if w <= 0 or x.gradient_pct is None:
+            continue
+        i = sum(1 for b in GRADIENT_BINS if x.gradient_pct >= b)
+        groups.setdefault(_label(GRADIENT_BINS, i), []).append((x, w))
+    out = {}
+    for i in range(len(GRADIENT_BINS) + 1):
+        items = groups.get(_label(GRADIENT_BINS, i))
+        if not items:
+            continue
+        sec = sum(w for _, w in items)
+        out[_label(GRADIENT_BINS, i)] = {
+            "seconds": sec,
+            "avg_rider_power_w": round(sum(x.rider_power_w * w for x, w in items) / sec),
+            "avg_motor_power_w": round(sum(x.motor_power_w * w for x, w in items) / sec),
+            "avg_speed_kmh": round(sum(x.speed_kmh * w for x, w in items) / sec, 1),
+        }
+    return out
+
+
 def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
     groups: dict[object, list[tuple[Sample, int]]] = {}
     for s, dt in zip(samples, dts):
@@ -145,6 +169,8 @@ def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
         ped = [(s, dt) for s, dt in moving if s.rider_power_w > 0]
         pt = sum(dt for _, dt in ped)
         ast = [(s, dt) for s, dt in moving if s.motor_power_w > 0]
+        cad = [(s, dt) for s, dt in moving if s.cadence_rpm > 0]
+        ct = sum(dt for _, dt in cad)
         at = sum(dt for _, dt in ast)
         out[str(k)] = {
             "seconds": secs,
@@ -155,6 +181,7 @@ def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
             "avg_motor_assist_power_w": round(sum(s.motor_power_w * dt for s, dt in ast) / at) if at else None,
             "avg_rider_power_w": round(sum(s.rider_power_w * dt for s, dt in moving) / mt) if mt else None,
             "avg_pedaling_power_w": round(sum(s.rider_power_w * dt for s, dt in ped) / pt) if pt else None,
+            "avg_cadence_rpm": round(sum(s.cadence_rpm * dt for s, dt in cad) / ct) if ct else None,
         }
     return out
 
@@ -232,8 +259,12 @@ def analyze(
             "cadence_s": histogram([x.cadence_rpm for x in s], moving_w, CADENCE_BINS),
             "speed_s": histogram([x.speed_kmh for x in s], dts, SPEED_BINS),
             "gradient_s": histogram([x.gradient_pct for x in s], moving_w, GRADIENT_BINS),
+            "motor_share_s": histogram(
+                [100 * x.motor_power_w / (x.motor_power_w + x.rider_power_w) if x.motor_power_w + x.rider_power_w > 0 else None for x in s],
+                moving_w, SHARE_BINS),
             "heart_rate_s": histogram([x.heart_rate_bpm for x in s], dts, HEART_RATE_BINS) if hr else None,
         },
+        "by_gradient": _by_gradient(s, moving_w),
         "best_efforts": {
             "rider_power_w": best_efforts([x.rider_power_w for x in s]),
             "motor_power_w": best_efforts([x.motor_power_w for x in s]),

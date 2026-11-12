@@ -133,6 +133,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 .bar .fill { display: block; height: 100%; min-width: 2px; border-radius: 999px; background: var(--ink-3); }
 .bar .fill.rider { background: var(--rider); }
 .bar .fill.motor { background: var(--motor); }
+.bar .track-pair { display: grid; gap: 3px; }
+.bar .track-pair .track { height: 6px; }
 .bar .label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar .val { text-align: right; }
 
@@ -168,6 +170,8 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 .dropzone.over { border-color: var(--motor); color: var(--ink); }
 
 /* Breite Beschriftung für Datums-/Monatsbalken */
+.bars.unit .bar { grid-template-columns: 4.8rem 1fr 5.4rem; }
+.bars.pair .bar { grid-template-columns: 4.8rem 1fr 6.2rem; }
 .bars.wide .bar { grid-template-columns: 8.5rem 1fr 5rem; }
 
 /* Schmale Bildschirme: nichts darf breiter als der Bildschirm werden */
