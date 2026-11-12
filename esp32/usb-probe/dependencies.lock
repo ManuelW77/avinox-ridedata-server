@@ -10,14 +10,12 @@ dependencies:
       type: service
     version: 3.1.1
   espressif/usb:
-    component_hash: 99eee72ea224d9117d4c342442717a1f20bf8112e2ab5d7d7038b827874f4c92
     dependencies:
     - name: idf
-      require: private
       version: '>=5.5.3'
     source:
-      registry_url: https://components.espressif.com
-      type: service
+      path: components/usb
+      type: local
     targets:
     - esp32s2
     - esp32s3
@@ -56,8 +54,9 @@ dependencies:
     version: 6.0.2
 direct_dependencies:
 - espressif/led_strip
+- espressif/usb
 - espressif/usb_host_msc
 - idf
-manifest_hash: bde79cbbbf7e853ac3dd1a31b4f28c3410baf67e8ee54e25fba0a9593bc3fceb
+manifest_hash: 032ccc9124d9190a8fd98f3cf876e1c49d85f7fad9fea5ca7af13a4588b84790
 target: esp32s3
 version: 3.0.0

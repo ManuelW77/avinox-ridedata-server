@@ -120,3 +120,28 @@ Kommt kein Gerät:
 ```
 W (30420) usb-probe: Seit 30 s kein Gerät. VBUS (5 V am Display?), OTG-Adapter und Kabel prüfen.
 ```
+
+## Bekanntes Problem: MPS 512
+
+Das Display meldet bei Full Speed Bulk-Endpunkte mit wMaxPacketSize 512 (normwidrig, FS-Bulk max. 64). Der FIFO des
+ESP32-S3 reicht dafür nicht, das Interface lässt sich nicht belegen:
+
+```
+I usb-probe: MSC-Gerät angesteckt (usb_addr=1)
+E HCD DWC: EP MPS (512) exceeds supported limit (408)
+E USBH: EP Alloc error: ESP_ERR_NOT_SUPPORTED
+E USB HOST: Claiming interface error: ESP_ERR_NOT_SUPPORTED
+```
+
+Experiment (Branch `experiment/probe-mps64`): `espressif/usb` 1.6.0 liegt gepatcht unter `components/usb/`
+(Details in `components/usb/PATCH.md`). Mit `CONFIG_USB_HOST_CLAMP_FS_BULK_MPS=y` wird die MPS für FS-Bulk-Endpunkte
+auf 64 begrenzt – in der Hoffnung, dass das Gerät bei FS tatsächlich nur 64-Byte-Pakete sendet. Zusätzlich gibt die
+Firmware nach dem Anstecken Geschwindigkeit, bcdUSB, VID/PID und alle Endpunkte (Adresse/Typ/MPS) aus.
+
+Ergebnis Clamp IN+OUT auf 64: Enumeration und READ CAPACITY klappen, READ10 scheitert mit `Transfer failed: Status 5`
+(OVERFLOW) – das Gerät sendet bei Full Speed tatsächlich 512-Byte-Pakete auf Bulk IN.
+
+Neuer Versuch: Clamp nur noch für Bulk OUT (dort gehen nur 31-Byte-CBWs raus), Bulk IN behält MPS 512. Damit das
+passt, setzt die Firmware eine eigene FIFO-Aufteilung (`fifo_settings_custom`, 200 Zeilen gesamt): RX 184 / NPTX 16 /
+PTX 0 → MPS-Grenzen IN 728, NPTX 64, PTX 0 (Default war RX 104 / NPTX 64 / PTX 32 → IN 408). Die Grenzen stehen beim
+Start im Log (`HCD DWC: FIFO lines: ...`). Noch nicht am Gerät getestet.
