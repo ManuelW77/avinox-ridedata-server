@@ -453,6 +453,7 @@
         if (mapState.track) drawTrack(pressedKey(document.getElementById("color-by"), "speed"));
       };
       if (mq.addEventListener) mq.addEventListener("change", redo);
+      document.addEventListener("themechange", redo);
     }
   }
 
