@@ -253,7 +253,7 @@ def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
 
 
 def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
-    """Tag/Woche/Monat mit der meisten Eigenleistung und der längsten Strecke.
+    """Tag/Woche/Monat mit der meisten eigenen Energie und der längsten Strecke.
 
     Ein Zeitraum erscheint nur, wenn er mehr bringt als die nächstkleinere Stufe
     (sonst stünde dieselbe Zahl zweimal da, z. B. ein Tag mit nur einer Fahrt).
