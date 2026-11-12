@@ -68,7 +68,7 @@ sed -i.bak -E "s/^version = \"[^\"]+\"/version = \"$NEW\"/" "$PY" && rm "$PY.bak
 (cd server && uv lock -q)
 
 echo "🧪 Tests ..."
-if ! (cd server && uv run pytest -q >/dev/null); then
+if ! (cd server && uv run -q pytest -q >/dev/null 2>&1); then
   echo "❌ Tests rot – Version wird zurückgesetzt." >&2
   git checkout -- "$FW" "$PY" server/uv.lock
   exit 1
