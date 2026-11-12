@@ -61,7 +61,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 |---|---|---|
 | 6 | laufender Zähler | roh |
 | 7 | Geschwindigkeit km/h | ÷100 |
-| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s). 21 = weiterer Unterstützungsmodus ohne Namen in den Dateien (Motor/Fahrer ≈ 1,6 wie Auto, wird in `assist_mode_usage` nicht gezählt, vermutlich eigener Modus aus der App). 20 nur einmal (3 min im Stand, ohne Motor). |
+| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s). **Ab 20 = in der App angelegte eigene Modi** (bestätigt: es gibt mehrere). Namen stehen nicht auf dem Laufwerk; werden in `assist_mode_usage` nicht gezählt. In den Testdaten 20 (3 min im Stand, ohne Motor) und 21 (Motor/Fahrer ≈ 1,6). |
 | 9 | Trittfrequenz U/min | ÷100 |
 | 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt Nm | ÷100 |
 | 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt W | ÷100 |

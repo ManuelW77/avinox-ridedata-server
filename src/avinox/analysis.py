@@ -18,7 +18,12 @@ from .summary import MOVING_MIN_KMH, _intervals, summarize
 from .track import bounds, track_length_m, track_points
 
 ASSIST_LEVELS = {0: "aus", 1: "eco", 2: "trail", 3: "turbo", 4: "auto", 5: "boost"}
-"""Zuordnung Feld 8 -> Modus, abgeglichen mit ``assist_mode_usage`` (3 = turbo vermutet)."""
+"""Zuordnung Feld 8 -> Modus, abgeglichen mit ``assist_mode_usage`` (3 = turbo vermutet).
+
+Ab 20 folgen die in der App selbst angelegten Modi. Ihre Namen stehen nicht auf
+dem Laufwerk; sie heißen ``eigen_<nummer>``, solange ``custom_names`` sie nicht benennt.
+"""
+CUSTOM_MODE_MIN = 20
 
 POWER_BINS = [1, 50, 100, 150, 200, 300, 400, 600, 800, 1000]
 CADENCE_BINS = [1, 40, 60, 70, 80, 90, 100, 120]
@@ -31,8 +36,12 @@ STOP_MIN_S = 30
 SERIES_MAX_POINTS = 1000
 
 
-def assist_name(level: int) -> str:
-    return ASSIST_LEVELS.get(level, f"stufe_{level}")
+def assist_name(level: int, custom_names: dict[int, str] | None = None) -> str:
+    if custom_names and level in custom_names:
+        return custom_names[level]
+    if level in ASSIST_LEVELS:
+        return ASSIST_LEVELS[level]
+    return f"eigen_{level}" if level >= CUSTOM_MODE_MIN else f"stufe_{level}"
 
 
 def _label(bins: list[float], i: int) -> str:
@@ -170,7 +179,13 @@ def _ride_stats_dict(stats: RideStats) -> dict:
     return d
 
 
-def analyze(ride: Ride, sessions: list[Session] | None = None, series_points: int = SERIES_MAX_POINTS) -> dict:
+def analyze(
+    ride: Ride,
+    sessions: list[Session] | None = None,
+    series_points: int = SERIES_MAX_POINTS,
+    custom_names: dict[int, str] | None = None,
+) -> dict:
+    """``custom_names``: Namen für eigene Modi, z. B. ``{21: "Tour"}``."""
     s = ride.samples
     dts = _intervals(s)
     summary = summarize(ride)
@@ -188,7 +203,7 @@ def analyze(ride: Ride, sessions: list[Session] | None = None, series_points: in
 
     points = track_points(ride)
     box = bounds(points)
-    per_mode = {assist_name(int(k)): v for k, v in _per_level(s, dts, lambda x: x.assist_level).items()}
+    per_mode = {assist_name(int(k), custom_names): v for k, v in _per_level(s, dts, lambda x: x.assist_level).items()}
     per_gear = {k: v for k, v in _per_level(s, dts, lambda x: x.gear).items() if k != "0"}
 
     result = {
