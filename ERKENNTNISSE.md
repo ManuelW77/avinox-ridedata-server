@@ -22,7 +22,7 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 | `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
 | `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Kennung `DGS_EB100` / `DJI_LOG_V3`. Inhalt **verschlüsselt** (Entropie 7,5–7,8 Bit/Byte, sich wiederholende 8-Byte-Blöcke). Ohne DJI-Schlüssel nicht lesbar, wird nicht verfolgt. |
 | `buried_rec/buried_file_cur.json` | **Nutzungsstatistik** („buried point“ = Analytics), JSON-Zeilen mit `event_id`, ca. 1000 Zeilen, siehe unten. Lesbar. |
-| `hms_rec/hms_current_storage.proto` | 48 Byte, Magic `0xA5A5A5A5`, Seriennummer, ein Frame Typ `0x01EB` mit Protobuf. Vermutlich Fehler-/Gesundheitsmeldungen (DJI „HMS“). Noch nicht dekodiert. |
+| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947, Zeitpunkt des Anschlusses an den Rechner). Codes unbekannt. Parser: `src/avinox/hms.py`. |
 | `System/ebike_log_index.dat` | 12 Byte, uint32 = Anzahl der `ebike_log`-Dateien (2482). |
 | `System/map/tracks/<hash>/` | Nur eine leere `thumbnail.jpg.tmp`. |
 
@@ -61,7 +61,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 |---|---|---|
 | 6 | laufender Zähler | roh |
 | 7 | Geschwindigkeit km/h | ÷100 |
-| 8 | Unterstützungsstufe | roh (Werte 0–5, 20, 21) |
+| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s); 20, 21 unbekannt (21: fährt mit Motor, Ø 147 W) |
 | 9 | Trittfrequenz U/min | ÷100 |
 | 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt Nm | ÷100 |
 | 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt W | ÷100 |
@@ -77,24 +77,33 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 71 | Akku % | roh |
 | 72 | Zeitstempel | wie Header-Start |
 | 73 | Kilometerstand in m | roh |
-| 75 | Ereignis | roh (bisher 0 und 2) |
+| 75 | Ereignis | 2 = letztes Sample der Fahrt, sonst 0 |
 
-Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`.
+Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`, Auswertung: `src/avinox/analysis.py`, GPS: `src/avinox/track.py`, Nutzungsstatistik: `src/avinox/buried.py`.
+
+**GPS:** Feld 31/32 nicht in jeder Sekunde neu (Position wiederholt sich), Fahrten ohne Fix haben keine Koordinaten. Für die Karte: Ausreißer > 150 km/h entfernen, Douglas-Peucker mit 3 m → ca. 350 statt 4600 Punkte für 18 km.
 
 ## 3a. Nutzungsstatistik `buried_rec/buried_file_cur.json`
 
-JSON pro Zeile, Zeitstempel `time_now` als `J-M-T-h:m:s` (vor Uhrzeit-Sync 1970). Werte als Strings. Mehrere Blöcke pro Fahrt bzw. Einschaltvorgang (`boot_times`). Gefundene `event_id` (Auswahl):
+JSON pro Zeile. `{"general_msg":{"boot_times":n}}` beginnt einen Einschaltvorgang (Session, kann mehrere Fahrten enthalten). Ein Ereignis ist oft auf mehrere Zeilen mit gleicher `event_id` + `time_now` verteilt. Werte als Strings.
+
+**Zeit:** `time_now` = `J-M-T-h:m:s` in **UTC+8 ohne Tageswechsel** (Stunde bis über 24, z. B. `2026-10-30-30:45:52` = 22:45:52 UTC). Vor Uhrzeit-Sync Jahr 1970. Fahrt-Ereignisse tragen exakt die Endzeit der Fahrt aus dem `ride_rec`-Header → Zuordnung über Endzeit, sonst Dauer + Distanz (11 von 12 Testfahrten zugeordnet, die zwölfte fehlt in der Datei).
+
+Gefundene `event_id`:
 
 | event_id | Inhalt |
 |---|---|
 | `Firmware_version` | Versionen Paket, Display, Motor, BLE, Akku |
 | `single_ride` / `single_power` | Distanz, Akku, Starthöhe / Distanz, Dauer |
 | `rider_cadence`, `rider_torque`, `rider_heart_rate` | Ø / max (= Header-Werte der Fahrt) |
-| `ride_power`, `motor_torque` | Histogramme: Sekunden je Leistungs- bzw. Drehmomentstufe (`power_700`, `torque_110` …) |
-| `gear_shift` | Schaltvorgänge je Gang |
+| `ride_power`, `motor_torque` | Sekunden je Leistungs- (W, `power_less_500` … `power_900`) bzw. Motor-Drehmomentbereich (Nm, `torque_less_50` … `torque_110`); `motor_torque` summiert sich auf die Fahrtdauer |
+| `gear_shift` | **Sekunden je Gang** (`gear_shift_1` … `_12`, Summe = Fahrtdauer), keine Schaltvorgänge |
 | `assist_mode_usage`, `assist_mode_order`, `boost_mode`, `ass_mode_para` | Dauer je Unterstützungsmodus, Wechsel, Boost, Modus-Parameter |
-| `battery_usage`, `battery_temperture`, `battery_circle` | max. Zellspannungsdifferenz, min. Gesamtspannung, Temperaturgrenzen, Ladezyklen |
-| `mos_ntc_temperture`, `bike_pitch_attitude`, `bike_horizontal_attitude` | Temperaturbegrenzung Motor-Elektronik, Zeit mit > 40° Neigung / Schräglage |
+| `battery_usage`, `battery_circle` | Akku Start/Ende %, Temperaturen, max. Strom (mA, negativ = Entladen), min./max. Zellspannung und max. Differenz (mV), min. Gesamtspannung; Ladezyklen |
+| `mos_ntc_temperture`, `battery_temperture` | Sekunden je Temperaturbereich Motor-Elektronik / Akku, `limit` = Drosselung |
+| `bike_pitch_attitude`, `bike_horizontal_attitude` | **km je Längsneigung** (Grad, Summe = Distanz) bzw. Seitenneigung (Einheit unsicher) |
+| `ass_mode_para` | Parameter beim Moduswechsel: Modus, max. Leistung W, max. Drehmoment Nm, Unterstützungskoeffizienten |
+| `single_power` | Distanz und Einschaltdauer der Session |
 | `wireless_controller_usage` / `_customize` | Tastendrücke an der Fernbedienung, Belegung |
 
 Zuordnung zu einzelnen Fahrten: über Zeitstempel bzw. Distanz (`single_ride.distance` = Fahrtdistanz).
