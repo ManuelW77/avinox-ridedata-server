@@ -32,7 +32,7 @@ def test_sample_scaling():
     assert (s.latitude, s.longitude) == (47.5, 11.25)
     assert s.altitude_m == 523.45 and s.gradient_pct == -3.5
     assert s.temperature_c == 18.5 and s.pressure_kpa == 101.49
-    assert s.heart_rate_bpm == 142 and s.rider_energy_kj == 12.345
+    assert s.heart_rate_bpm == 142 and s.calories_kcal == 12.345
     assert s.battery_pct == 88 and s.odometer_m == 99000 and s.event == 2
     assert s.extra == {99: 1}
 
@@ -80,3 +80,12 @@ def test_owner_and_preview():
     assert h.owner_id == "424242"
     assert h.preview == [(47.1234567, 11.7654321), (47.2, 11.8)]
     assert parse_ride(ride([])).header.preview == []
+
+
+def test_header_stats_order():
+    stats = parse_ride(ride([], stats=[float(i) for i in range(1, 19)] + [305244.0])).header.stats
+    assert (stats.avg_gradient_pct, stats.max_gradient_pct, stats.avg_speed_kmh, stats.max_speed_kmh) == (1, 2, 3, 4)
+    assert (stats.avg_total_power_w, stats.max_total_power_w, stats.avg_total_torque_nm, stats.max_total_torque_nm) == (5, 6, 7, 8)
+    assert (stats.avg_motor_power_w, stats.max_motor_power_w, stats.avg_motor_torque_nm, stats.max_motor_torque_nm) == (9, 10, 11, 12)
+    assert (stats.avg_rider_power_w, stats.max_rider_power_w, stats.avg_rider_torque_nm, stats.max_rider_torque_nm) == (13, 14, 15, 16)
+    assert (stats.avg_cadence_rpm, stats.max_cadence_rpm, stats.calories_kcal) == (17, 18, 305.244)

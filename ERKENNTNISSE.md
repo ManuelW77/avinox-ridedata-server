@@ -34,12 +34,15 @@ Quelle der Feldzuordnung: Community-Reverse-Engineering, v. a. `lucad87/avinox-s
 - Offset 6: rideId (uint32). **IDs wiederholen sich zwischen Hauptordner und Konto-Ordner**, eindeutig ist nur der Pfad.
 - Offset 10 / 14: Start / Ende (uint32), Unix-Zeit oder Sekunden seit Geräte-Start (siehe oben)
 - Offset 18: Distanz in m (uint32), = letzter Wert von Feld 23
-- Offset 22 / 26: Anstieg / Abstieg (float32). Deutlich kleiner als aus den Höhen-Samples (Fahrt mit ca. 120–165 Hm: Header 73 / 13). Bedeutung offen, gegen App prüfen.
+- Offset 22 / 26: Höhengewinn / Höhenabnahme (float32), **= App-Werte** (geprüft). Deutlich kleiner als aus den Höhen-Samples (dort ca. 165 / 161 statt 73 / 13).
 - Offset 30–109: 10 Vorschaupunkte (int32 Breite, int32 Länge, je × 1e7), liegen exakt auf der GPS-Spur; 0 ohne GPS
 - Offset 110–127: Seriennummer (ASCII, nullterminiert) – privat
 - Offset 128: Konto-ID mit Längenbyte (ASCII), leer im Hauptordner – privat
-- Offset 160–244: float32-Werte, Bedeutung offen
-- Offset 245: Anzahl Samples (uint32). Manchmal ein Frame mehr in der Datei.
+- Offset 161–236: **Kennzahlen, die die App anzeigt** (19 × float32, geprüft an Fahrt vom 05.11.2026 gegen App; Gesamt = Fahrer + Motor geht in allen 12 Fahrten exakt auf):
+  Ø / max Steigung % · Ø / max Tempo km/h · Gesamt Ø / max Leistung W · Gesamt Ø / max Drehmoment Nm · Motor Ø / max Leistung · Motor Ø / max Drehmoment · Fahrer Ø / max Leistung · Fahrer Ø / max Drehmoment · Ø / max Trittfrequenz · Kalorien × 1000
+  Die Durchschnitte rechnet das Display selbst; sie lassen sich aus den Samples nicht nachbilden (Ø Tempo 6,3 km/h, Distanz/Dauer ergäbe 8,6). Die App schneidet Nachkommastellen ab (13,77 → 13 U/min), Steigung zeigt sie in Grad.
+- Offset 237–244: 0
+- Offset 245: Anzahl Samples (uint32) = **Dauer in der App** (Sekunden). Manchmal ein Frame mehr in der Datei.
 - Offset 249–250: vermutlich Prüfsumme
 
 **Frames ab Offset 251**
@@ -67,7 +70,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 41 | Temperatur °C | signed ÷100, -99900 → unbekannt |
 | 42 | Luftdruck **kPa** | ÷100 (z. B. 101,49) |
 | 51 | Puls | roh |
-| 52 | Fahrerenergie kJ | ÷1000, wirkt kumulativ über Fahrten hinweg; nicht verlässlich |
+| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter |
 | 71 | Akku % | roh |
 | 72 | Zeitstempel | wie Header-Start |
 | 73 | Kilometerstand in m | roh |

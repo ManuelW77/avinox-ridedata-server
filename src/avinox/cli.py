@@ -46,7 +46,10 @@ def cmd_summary(args: argparse.Namespace) -> int:
         print(json.dumps([{"file": str(p), **s.to_dict()} for p, s in rows], indent=2, ensure_ascii=False))
         return 1 if failed else 0
 
-    head = f"{'Datei':<34} {'Start (UTC)':<16} {'Dauer':>8} {'Fahrt':>8} {'km':>6} {'Hm':>5} {'Ø km/h':>6} {'Ø Fahrer W':>10} {'Ø Motor W':>9} {'Ø U/min':>7} {'Akku %':>7} {'Motor Wh':>8}"
+    head = (
+        f"{'Datei':<34} {'Start (UTC)':<16} {'Dauer':>8} {'Fahrt':>8} {'km':>6} {'Hm':>5} {'Ø km/h':>6} "
+        f"{'Ø Fahrer W':>10} {'Ø Motor W':>9} {'Ø U/min':>7} {'Akku %':>7} {'kcal':>5}"
+    )
     print(head)
     print("-" * len(head))
     for path, s in rows:
@@ -54,8 +57,8 @@ def cmd_summary(args: argparse.Namespace) -> int:
         battery = f"{_num(s.battery_start_pct)}→{_num(s.battery_end_pct)}"
         print(
             f"{str(path)[-34:]:<34} {start:<16} {_fmt_duration(s.duration_s):>8} {_fmt_duration(s.moving_time_s):>8} "
-            f"{s.distance_km:>6.2f} {_num(s.ascent_m):>5} {_num(s.avg_speed_kmh, 1):>6} {_num(s.avg_rider_power_w):>10} "
-            f"{_num(s.avg_motor_power_w):>9} {_num(s.avg_cadence_rpm):>7} {battery:>7} {s.motor_energy_wh:>8.0f}"
+            f"{s.distance_km:>6.2f} {s.ascent_m:>5.0f} {s.avg_speed_kmh:>6.1f} {s.avg_rider_power_w:>10.0f} "
+            f"{s.avg_motor_power_w:>9.0f} {s.avg_cadence_rpm:>7.0f} {battery:>7} {s.calories_kcal:>5.0f}"
         )
     return 1 if failed else 0
 
