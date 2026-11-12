@@ -48,8 +48,13 @@
   // Prozentpunkte statt Prozent bei Anteilen
   const POINTS = { motor_share_pct: true };
 
-  function deltaHtml(key, c, judge) {
+  // Vergleichsbasis mit weniger Fahrten ist zu klein für ein farbiges Delta
+  const MIN_COMPARE_RIDES = 3;
+  const prevTiny = () => ((dash.comparison.rides || {}).previous || 0) < MIN_COMPARE_RIDES;
+
+  function deltaHtml(key, c, judge, fmtPrev) {
     if (!c || c.current == null || c.previous == null) return '<span class="d none">' + tr("no_compare") + '</span>';
+    if (c.previous && prevTiny() && fmtPrev) return '<span class="d none">' + tr("prev_value", { v: fmtPrev(c.previous) }) + '</span>';
     if (POINTS[key]) {
       const d = c.current - c.previous;
       if (Math.abs(d) < 0.5) return '<span class="d same">' + tr("same") + '</span>';
@@ -85,6 +90,8 @@
     let delta = "";
     if (d.previous && !cur.rides) {
       delta = tr("hero_prev", { versus: dash.versus.replace(tr("versus_prefix"), ""), km: fmt(d.previous, 1) });
+    } else if (d.previous && prevTiny()) {
+      delta = `<span class="d none">${tr("prev_value", { v: fmt(d.previous, 1) + " km" })}</span>`;
     } else if (d.previous) {
       const p = d.delta_pct || 0;
       const cls = p > 0 ? "up" : p < 0 ? "down" : "same";
@@ -122,11 +129,11 @@
     $("kpis").hidden = !cur.rides;
     $("kpis").innerHTML = KPIS.map(([key, label, f, cls, judge]) => {
       const v = cur[key];
-      return `<div class="kpi ${cls}"><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge)}</div>`;
+      return `<div class="kpi ${cls}"><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge, (pv) => f(pv))}</div>`;
     }).join("");
 
     const sum = (k) => dash.series.reduce((a, s) => a + (s[k] || 0), 0);
-    const span = tr("span." + dash.period);
+    const span = tr("span." + dash.period, { n: dash.series.length });
     $("sum-distance").textContent = tr("sum_in", { v: fmt(sum("distance_km"), 0), unit: "km", span });
     $("sum-ascent").textContent = tr("sum_in", { v: fmt(sum("ascent_m"), 0), unit: "m", span });
     renderMix();
@@ -144,13 +151,24 @@
     return h ? h + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0") : mm + ":" + String(ss).padStart(2, "0");
   }
 
-  function barsHtml(data, cls, dropZero) {
+  // unit: Einheit statt Dauer (Wert per fmt mit digits Nachkommastellen)
+  function barsHtml(data, cls, dropZero, labels, unit, digits) {
     const entries = Object.entries(data || {}).filter(([k, v]) => typeof v === "number" && !(dropZero && k === "<1"));
     const total = entries.reduce((a, [, v]) => a + v, 0);
     const peak = entries.reduce((a, [, v]) => Math.max(a, v), 0);
     const rows = entries.filter(([, v]) => v).map(([k, v]) =>
-      `<div class="bar"><span class="label" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
-    return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${unit ? fmt(v, digits) + " " + esc(unit) : dur(v)}</span></div>`).join("");
+    return `<div class="bars${unit ? " unit" : ""}">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+  }
+
+  // zwei dünne Balken je Zeile (a/b), gemeinsame Skala – wie Jinja-Makro bars_pair
+  function barsPairHtml(data, keyA, keyB, clsA, clsB, unit, labels) {
+    const entries = Object.entries(data || {});
+    const peak = entries.reduce((a, [, r]) => Math.max(a, r[keyA] || 0, r[keyB] || 0), 0);
+    const w = (v) => (peak ? 100 * (v || 0) / peak : 0);
+    const rows = entries.map(([k, r]) =>
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track-pair"><span class="track"><span class="fill ${clsA}" style="width: ${w(r[keyA])}%"></span></span><span class="track"><span class="fill ${clsB}" style="width: ${w(r[keyB])}%"></span></span></span><span class="val">${fmt(r[keyA], 0)} / ${fmt(r[keyB], 0)} ${esc(unit)}</span></div>`).join("");
+    return `<div class="bars pair">${rows}${peak ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
   }
 
   function renderMix() {
@@ -161,26 +179,41 @@
     section.hidden = false;
     const a = m.assist || {}, g = m.gears || {}, d = m.distributions || {};
     const modeRows = Object.entries(a.per_mode || {}).map(([name, x]) =>
-      `<tr><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
-    const card = (title, sub, data, cls, dropZero) =>
-      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero)}</section>`;
-    const cards = [
+      `<tr${(x.distance_m || 0) < 500 ? ' class="muted"' : ""}><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
+    const card = (title, sub, data, cls, dropZero, labels) =>
+      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero, labels)}</section>`;
+    // Steigungsbereiche lesbar: ↓ bergab, ↑ bergauf
+    const gradLabels = { "<-10": "↓ >10 %", "-10–-6": "↓ 6–10 %", "-6–-3": "↓ 3–6 %", "-3–-1": "↓ 1–3 %", "-1–1": tr("mix.d.flat"), "1–3": "↑ 1–3 %", "3–6": "↑ 3–6 %", "6–10": "↑ 6–10 %", "≥10": "↑ >10 %" };
+    const powerCards = [
       card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider", true),
       card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor", true),
       card(tr("mix.d.cadence"), tr("mix.cadence_moving"), d.cadence_s, "rider", true),
       card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", true),
-      card(tr("mix.d.gradient"), "%", d.gradient_s, ""),
     ];
-    if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
+    if (d.heart_rate_s) powerCards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
+    const bg = m.by_gradient || {};
+    const spdGrad = {};
+    Object.entries(bg).forEach(([k, r]) => { spdGrad[k] = r.avg_speed_kmh; });
+    const hillCards = [
+      card(tr("mix.d.gradient"), tr("mix.d.grad_hint"), d.gradient_s, "", false, gradLabels),
+      `<section class="card"><h2>${esc(tr("mix.d.power_grad"))} <span class="muted small">${esc(tr("mix.d.power_grad_sub"))}</span></h2>${barsPairHtml(bg, "avg_rider_power_w", "avg_motor_power_w", "rider", "motor", "W", gradLabels)}<p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> ${esc(tr("mix.d.legend_rider"))} &nbsp; <span style="color:var(--motor)">&#9632;</span> ${esc(tr("mix.d.legend_motor"))}</p></section>`,
+      `<section class="card"><h2>${esc(tr("mix.d.speed_grad"))} <span class="muted small">${esc(tr("mix.d.speed_grad_sub"))}</span></h2>${barsHtml(spdGrad, "", false, gradLabels, "km/h", 1)}</section>`,
+    ];
+    const cadGear = g.avg_cadence_per_gear || {};
+    const cadGearCard = Object.keys(cadGear).length ? `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>` : "";
+    const hasCad = Object.keys(cadGear).length > 0;
+    const grp = (cls, key, inner, t) => `<div class="${t}"><h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}</div>`;
     box.innerHTML =
-      `<div class="grid cols-2" style="margin-bottom:1rem">
+      grp("g-motor", "mix.sec.drive", `<div class="grid cols-drive${hasCad ? "" : " two"}">
         <section class="card"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
           <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table>
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</p></section>
         <section class="card"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
-      </div>
-      <div class="grid cols-3" style="margin-bottom:1rem">${cards.join("")}</div>`;
+        ${cadGearCard}
+      </div>`, "t-motor") +
+      grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`, "t-rider") +
+      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}</div>`, "t-hill");
   }
 
   /* --------------------------------------------------------- Diagramme */

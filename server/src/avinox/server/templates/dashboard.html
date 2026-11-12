@@ -24,6 +24,7 @@
 {% else %}
 
 {# ------------------------------------------------------------ Zeitraum #}
+<div class="block block-first t-ride" id="sec-overview" data-jump="{{ t('jump.overview') }}">
 <section class="card period" id="period" aria-live="polite">
   <div class="toolbar">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
@@ -79,9 +80,10 @@
   </section>
 </div>
 <p class="muted small chart-hint">{{ t('dash.hint') }}</p>
+</div>
 
 {# ------------------------------------------------------------ Verteilung (per JS) #}
-<section class="mix-section" id="mix-section" hidden>
+<section class="block mix-section t-neutral" id="mix-section" data-jump="{{ t('dash.mix.title') }}" hidden>
   <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
   <div id="mix"></div>
 </section>
@@ -89,17 +91,19 @@
 {# ------------------------------------------------------------ Bestwerte #}
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
-<section class="bests">
+<section class="block bests t-neutral" id="sec-bests" data-jump="{{ t('bests.title') }}">
   <h2 class="section-title">{{ t('bests.title') }}</h2>
   {% for gkey, gname in groups %}
   {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
   {% if items %}
+  <div class="t-{{ {'rider':'rider','motor':'motor','ride':'ride'}.get(gkey,'neutral') }}">
   <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
   <div class="best-grid">
     {% for h in items %}
-    <article class="best g-{{ gkey }}">
+    <article class="best g-{{ gkey }}" title="{{ h.sentence }}">
       <div class="best-k">{{ h.title }}</div>
-      <p class="best-s">{{ h.sentence | emph(h.value_text) }}</p>
+      <div class="best-v">{{ h.value_text }}</div>
+      <p class="best-w">{{ h.when_text }}</p>
       {% if h.ride %}
       <a class="best-link" href="/rides/{{ h.ride }}">{{ t('best.to_ride') }} <span aria-hidden="true">→</span></a>
       {% else %}
@@ -108,6 +112,7 @@
     </article>
     {% endfor %}
   </div>
+  </div>
   {% endif %}
   {% endfor %}
   <p class="muted small">{{ t('bests.note') }}</p>
@@ -115,6 +120,8 @@
 {% endif %}
 
 {# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
+<div class="block t-ride" id="sec-recent" data-jump="{{ t('dash.sec.recent') }}">
+<h2 class="section-title">{{ t('dash.sec.recent') }}</h2>
 <div class="grid cols-2 bottom">
   <section class="card">
     <div class="chart-head"><h2>{{ t('recent.title') }}</h2><a class="small" href="/rides">{{ t('recent.all') }}</a></div>
@@ -148,9 +155,11 @@
     {% if tot.undated_rides %}<p class="muted small" style="margin-bottom:0">{{ t('dash.undated_one' if tot.undated_rides == 1 else 'dash.undated_many', n=tot.undated_rides) }}</p>{% endif %}
   </section>
 </div>
+</div>
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% if dash.total.rides %}
 <script type="application/json" id="dash-data">{{ dash | tojson }}</script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>

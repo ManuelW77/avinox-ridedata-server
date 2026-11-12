@@ -11,7 +11,7 @@
 {% set rows = data.items() | rejectattr(0, 'equalto', '<1') | list if drop_zero else data.items() | list %}
 {% set total = rows | map(attribute=1) | select('number') | sum %}
 {% set peak = rows | map(attribute=1) | select('number') | max if rows else 0 %}
-<div class="bars">
+<div class="bars{% if unit != 's' %} unit{% endif %}">
   {% for key, val in rows %}
   {% if val %}
   <div class="bar">
@@ -22,5 +22,24 @@
   {% endif %}
   {% endfor %}
   {% if not total %}<p class="muted small">{{ t('no_data') }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Zwei dünne Balken je Zeile (a/b), gemeinsame Skala; Werte {Bereich: {key: Zahl}} #}
+{% macro bars_pair(rows, key_a, key_b, cls_a, cls_b, unit='W', labels=None) -%}
+{% set vals = [] %}{% for k, r in rows.items() %}{% set _ = vals.append(r[key_a] or 0) %}{% set _ = vals.append(r[key_b] or 0) %}{% endfor %}
+{% set peak = vals | max if vals else 0 %}
+<div class="bars pair">
+  {% for key, r in rows.items() %}
+  <div class="bar">
+    <span class="label" title="{{ key }}">{{ labels[key] if labels and key in labels else key }}</span>
+    <span class="track-pair">
+      <span class="track"><span class="fill {{ cls_a }}" style="width: {{ (100 * (r[key_a] or 0) / peak) if peak else 0 }}%"></span></span>
+      <span class="track"><span class="fill {{ cls_b }}" style="width: {{ (100 * (r[key_b] or 0) / peak) if peak else 0 }}%"></span></span>
+    </span>
+    <span class="val">{{ r[key_a] | num(0) }} / {{ r[key_b] | num(0) }} {{ unit }}</span>
+  </div>
+  {% endfor %}
+  {% if not peak %}<p class="muted small">{{ t('no_data') }}</p>{% endif %}
 </div>
 {%- endmacro %}

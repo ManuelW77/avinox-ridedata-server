@@ -63,3 +63,20 @@ def test_custom_mode_names():
     samples = [s(t, assist=21) for t in range(10)] + [s(10 + t, assist=20) for t in range(5)]
     a = analyze(parse_ride(ride(samples)), custom_names={21: "Tour"})
     assert a["assist"]["seconds_per_mode"] == {"eigen_20": 5, "Tour": 10}
+
+
+def test_share_gradient_cadence():
+    def g(t, grad, rider, motor, cad=0, gear=5, speed=18.0):
+        d = s(t, speed=speed, rider=rider, motor=motor, gear=gear)
+        d[40] = int(grad * 100) & 0xFFFF if grad >= 0 else (int(grad * 100) + 65536)
+        d[9] = int(cad * 100)
+        return d
+    samples = [g(t, 0, 0, 200) for t in range(10)]            # nur Motor
+    samples += [g(10 + t, 0, 100, 100, cad=80) for t in range(20)]  # 50 %
+    samples += [g(30 + t, 5, 150, 50, cad=60) for t in range(10)]   # 25 %, Steigung 3-6
+    a = analyze(parse_ride(ride(samples, start=T0, end=T0 + 40)))
+    bg = a["by_gradient"]
+    assert bg["-1–1"]["seconds"] == 30 and bg["-1–1"]["avg_rider_power_w"] == 67
+    assert bg["3–6"] == {"seconds": 10, "avg_rider_power_w": 150, "avg_motor_power_w": 50, "avg_speed_kmh": 18.0}
+    assert a["gears"]["per_gear"]["5"]["avg_cadence_rpm"] == 73
+    json.dumps(a)

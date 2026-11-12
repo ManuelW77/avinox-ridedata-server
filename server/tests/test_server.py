@@ -172,6 +172,9 @@ def test_pages(client, settings):
         r = client.get(url)
         assert r.status_code == 200, url
         assert "text/html" in r.headers["content-type"]
+    page = client.get(f"/rides/{pk}").text
+    assert "Leistung nach Steigung" in page and "Tempo nach Steigung" in page
+
     assert client.get("/rides/9999").status_code == 404
 
 

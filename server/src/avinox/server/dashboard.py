@@ -12,11 +12,13 @@ from zoneinfo import ZoneInfo
 
 from markupsafe import Markup, escape
 
-from ..analysis import ASSIST_LEVELS
+from ..analysis import ASSIST_LEVELS, GRADIENT_BINS, _label
 from . import i18n
 from .i18n import t
 
 PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5}
+# Mindestanzahl Balken in den Diagrammen, damit eine einzelne Fahrt nicht die ganze Breite füllt
+MIN_BUCKETS: dict[str, int] = {"day": 6, "week": 6, "month": 6, "year": 2}
 """Zeitraum -> Anzahl der Balken in der Zeitreihe."""
 
 MIN_KM_BEST = 1.0
@@ -45,6 +47,7 @@ SELECT id, ride_id, start_utc, distance_m, duration_s, moving_time_s, ascent_m, 
        json_extract(analysis_json, '$.best_efforts.rider_power_w."1200s"') AS best_20min_w,
        json_extract(analysis_json, '$.assist') AS assist_json,
        json_extract(analysis_json, '$.gears') AS gears_json,
+       json_extract(analysis_json, '$.by_gradient') AS by_gradient_json,
        json_extract(analysis_json, '$.distributions') AS dist_json
 FROM rides
 ORDER BY start_utc IS NULL, start_utc DESC, path DESC
@@ -246,14 +249,14 @@ def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
         out.append({
             "key": key, "group": group, "title": t(f"best.{key}.title", lang), "ride": best["id"],
             "date": best["_local"].isoformat() if best["_local"] else None,
-            "value": best[field], "unit": unit, "value_text": vt,
+            "value": best[field], "unit": unit, "value_text": vt, "when_text": _when(best, lang),
             "sentence": t(f"best.{key}.s", lang, when=_when(best, lang), v=vt),
         })
     return out
 
 
 def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
-    """Tag/Woche/Monat mit der meisten Eigenleistung und der längsten Strecke.
+    """Tag/Woche/Monat mit der meisten eigenen Energie und der längsten Strecke.
 
     Ein Zeitraum erscheint nur, wenn er mehr bringt als die nächstkleinere Stufe
     (sonst stünde dieselbe Zahl zweimal da, z. B. ein Tag mit nur einer Fahrt).
@@ -282,7 +285,9 @@ def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
             when = {"day": t("when.on", lang, d=day_text(start, lang)),
                     "week": t("when.week", lang, w=start.isocalendar()[1], y=start.isocalendar()[0]),
                     "month": t("when.month", lang, m=i18n.MONTHS[i18n.norm(lang)][start.month - 1], y=start.year)}[period]
+            when_text = when if period == "day" else when + " · " + t("bestp.rides", lang, n=s["rides"])
             out.append({
+                "when_text": when_text,
                 "key": f"{period}_{field}", "group": "period", "period": period,
                 "title": t(f"bestp.title.{field}", lang, t=t(f"bestp.title.{period}", lang)),
                 "offset": steps_between(period_start(today, period), start, period),
@@ -300,7 +305,7 @@ def load_rows(db, tz: ZoneInfo) -> list[dict]:
     for row in db.query(RIDE_SQL):
         r = dict(row)
         r["distance_km"] = (r["distance_m"] or 0) / 1000
-        for key in ("assist", "gears", "dist"):
+        for key in ("assist", "gears", "dist", "by_gradient"):
             raw = r.pop(f"{key}_json", None)
             try:
                 parsed = json.loads(raw) if raw else None
@@ -346,6 +351,8 @@ def mix(rows: list[dict]) -> dict:
     moving_modes: dict[str, float] = {}
     moving_gears: dict[str, float] = {}
     dists: dict[str, dict[str, float] | None] = {k: None for k in DIST_KEYS}
+    cad: dict[str, dict] = {}
+    grad: dict[str, dict] = {}
     for r in rows:
         assist = r.get("assist") or {}
         for name, secs in (assist.get("seconds_per_mode") or {}).items():
@@ -367,6 +374,21 @@ def mix(rows: list[dict]) -> dict:
             gears[gear] = gears.get(gear, 0) + (secs or 0)
         for gear, m in (g.get("per_gear") or {}).items():
             moving_gears[gear] = moving_gears.get(gear, 0) + (m.get("moving_seconds", m.get("seconds")) or 0)
+        for gear, m in (g.get("per_gear") or {}).items():
+            c = cad.setdefault(gear, {"mv": 0, "rpm": 0.0, "rpm_t": 0})
+            c["mv"] += m.get("moving_seconds", m.get("seconds")) or 0
+            w = m.get("cadence_seconds", m.get("moving_seconds"))
+            if m.get("avg_cadence_rpm") is not None and w:
+                c["rpm"] += m["avg_cadence_rpm"] * w
+                c["rpm_t"] += w
+        for label, x in (r.get("by_gradient") or {}).items():
+            b = grad.setdefault(label, {"seconds": 0, "rid": [0.0, 0], "mot": [0.0, 0], "spd": [0.0, 0]})
+            secs = x.get("seconds") or 0
+            b["seconds"] += secs
+            for f, k in (("rid", "avg_rider_power_w"), ("mot", "avg_motor_power_w"), ("spd", "avg_speed_kmh")):
+                if x.get(k) is not None and secs:
+                    b[f][0] += x[k] * secs
+                    b[f][1] += secs
         gear_changes += g.get("changes") or 0
         d = r.get("dist") or {}
         for key in DIST_KEYS:
@@ -382,13 +404,27 @@ def mix(rows: list[dict]) -> dict:
             "avg_motor_power_w": round(a["mot"] / a["mot_t"]) if a["mot_t"] else None,
             "avg_rider_power_w": round(a["rid"] / a["rid_t"]) if a["rid_t"] else None,
         }
+    by_gradient = {}
+    for i in range(len(GRADIENT_BINS) + 1):
+        b = grad.get(_label(GRADIENT_BINS, i))
+        if b:
+            by_gradient[_label(GRADIENT_BINS, i)] = {
+                "seconds": b["seconds"],
+                "avg_rider_power_w": round(b["rid"][0] / b["rid"][1]) if b["rid"][1] else None,
+                "avg_motor_power_w": round(b["mot"][0] / b["mot"][1]) if b["mot"][1] else None,
+                "avg_speed_kmh": round(b["spd"][0] / b["spd"][1], 1) if b["spd"][1] else None,
+            }
+    cad_per_gear = {k: round(c["rpm"] / c["rpm_t"]) for k, c in sorted(cad.items(), key=lambda kv: _gear_order(kv[0]))
+                    if c["mv"] >= 30 and c["rpm_t"]}
     return {
         "rides": len(rows),
+        "by_gradient": by_gradient,
         "assist": {"seconds_per_mode": dict(sorted(seconds_per_mode.items(), key=lambda kv: _mode_order(kv[0]))),
                    "per_mode": dict(sorted(per_mode.items(), key=lambda kv: _mode_order(kv[0]))), "changes": changes,
                    "moving_seconds_per_mode": dict(sorted(moving_modes.items(), key=lambda kv: _mode_order(kv[0])))},
         "gears": {"seconds_per_gear": dict(sorted(gears.items(), key=lambda kv: _gear_order(kv[0]))), "changes": gear_changes,
-                  "moving_seconds_per_gear": dict(sorted(moving_gears.items(), key=lambda kv: _gear_order(kv[0])))},
+                  "moving_seconds_per_gear": dict(sorted(moving_gears.items(), key=lambda kv: _gear_order(kv[0]))),
+                  "avg_cadence_per_gear": cad_per_gear},
         "distributions": dists,
     }
 
@@ -402,6 +438,9 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
     offset = min(max(0, int(offset)), oldest)
     n = PERIODS[period]
     current = shift(period_start(today, period), period, -offset)
+    # Diagramm beginnt im Zeitraum der ersten Fahrt (höchstens n, mindestens MIN_BUCKETS Zeiträume)
+    back = steps_between(current, period_start(min(dated), period), period) if dated else 0
+    n = min(n, max(back + 1, MIN_BUCKETS[period]))
     starts = [shift(current, period, i - n + 1) for i in range(n)]
     index = {s: i for i, s in enumerate(starts)}
     accs = [_empty() for _ in starts]
