@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from ..analysis import ASSIST_LEVELS
 from .config import Settings, load_settings
 from .dashboard import PERIODS, day_text, emphasize
-from .store import PATTERNS, Store, UploadError
+from .store import NOT_UPLOADED, PATTERNS, UPLOAD_FILES, Store, UploadError
 
 log = logging.getLogger("avinox.server")
 HERE = Path(__file__).parent
@@ -258,6 +258,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             token=settings.upload_token if settings.web_user else None,
             token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),
             patterns=[p.pattern for p in PATTERNS.values()],
+            upload_files=UPLOAD_FILES,
+            not_uploaded=NOT_UPLOADED,
         )
 
     return app

@@ -40,6 +40,21 @@ PATTERNS: dict[str, re.Pattern] = {
 }
 """Welche Dateien vom Laufwerk angenommen werden. ``ebike_log_*.dat`` ist verschlüsselt und bleibt draußen."""
 
+UPLOAD_FILES: list[dict[str, str]] = [
+    {"kind": "ride", "paths": "ride_rec/ride_rec_<Nr>.proto, ride_rec/<Ordner>/ride_rec_<Nr>.proto", "label": "Fahrtaufzeichnungen"},
+    {"kind": "index", "paths": "ride_rec/ride_rec_index.dat, ride_rec/<Ordner>/ride_rec_index.dat", "label": "Fahrten-Index"},
+    {"kind": "buried", "paths": "buried_rec/buried_file_cur.json", "label": "Nutzungsstatistik (Akku, Gänge, Modi, Firmware)"},
+    {"kind": "hms", "paths": "hms_rec/hms_current_storage.proto", "label": "Meldungen des Antriebs"},
+]
+"""Anzeige auf der Einstellungsseite; ``kind`` verweist auf ``PATTERNS``."""
+
+NOT_UPLOADED: list[dict[str, str]] = [
+    {"paths": "ebike_log_*.dat", "label": "verschlüsselte Systemlogs, zusammen ca. 3 GB"},
+    {"paths": "System/", "label": "Index und leere Kartenvorschau"},
+    {"paths": "alles andere", "label": "alle übrigen Dateien und Ordner"},
+]
+"""Anzeige auf der Einstellungsseite: wird nicht hochgeladen."""
+
 
 class UploadError(ValueError):
     pass
