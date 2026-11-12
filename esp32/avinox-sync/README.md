@@ -150,7 +150,9 @@ Danach:
    `GET /api/v1/firmware/latest?project=avinox-sync` ab. Andere Version → Bericht `ota`/`started`, Download in die
    freie OTA-Partition, Prüfung von Größe, SHA-256 und Projektname, Umschalten, Bericht `ok`, Neustart. Fehler →
    Bericht `failed` mit Text, die laufende Firmware bleibt; dieselbe Version wird erst beim nächsten periodischen
-   Prüfzeitpunkt erneut versucht.
+   Prüfzeitpunkt erneut versucht. Die Download-Adresse muss ein relativer Pfad unter `/api/v1/firmware/` sein
+   (wird an die Server-URL gehängt, Weiterleitungen werden nicht verfolgt), sonst Abbruch mit `failed` – so gelangt das
+   Token nie zu einem fremden Host.
 4. **Automatische Rückkehr:** Die neue Firmware gilt erst als gültig, wenn WLAN verbunden ist und der Server einmal
    erfolgreich geantwortet hat (Heartbeat/Bericht 2xx oder Manifest 200). Klappt das nicht binnen 5 min
    (`AVX_OTA_VALIDATE_S`), startet der ESP neu und der Bootloader kehrt zur vorherigen Version zurück; die meldet dann
