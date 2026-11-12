@@ -17,7 +17,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
       - run: uv run pytest -q
 
@@ -28,7 +28,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Image-Name in Kleinbuchstaben
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/avinox-ridedata-server" >> "$GITHUB_ENV"
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
@@ -69,7 +69,7 @@ jobs:
         shell: bash
         working-directory: esp32/avinox-sync
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Bauen
         run: |
           . "$IDF_PATH/export.sh"
