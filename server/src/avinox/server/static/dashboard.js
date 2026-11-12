@@ -144,12 +144,12 @@
     return h ? h + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0") : mm + ":" + String(ss).padStart(2, "0");
   }
 
-  function barsHtml(data, cls, dropZero) {
+  function barsHtml(data, cls, dropZero, labels) {
     const entries = Object.entries(data || {}).filter(([k, v]) => typeof v === "number" && !(dropZero && k === "<1"));
     const total = entries.reduce((a, [, v]) => a + v, 0);
     const peak = entries.reduce((a, [, v]) => Math.max(a, v), 0);
     const rows = entries.filter(([, v]) => v).map(([k, v]) =>
-      `<div class="bar"><span class="label" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc((labels && labels[k]) || k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
     return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
   }
 
@@ -162,14 +162,16 @@
     const a = m.assist || {}, g = m.gears || {}, d = m.distributions || {};
     const modeRows = Object.entries(a.per_mode || {}).map(([name, x]) =>
       `<tr><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
-    const card = (title, sub, data, cls, dropZero) =>
-      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero)}</section>`;
+    const card = (title, sub, data, cls, dropZero, labels) =>
+      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero, labels)}</section>`;
+    // Steigungsbereiche lesbar: ↓ bergab, ↑ bergauf
+    const gradLabels = { "<-10": "↓ >10 %", "-10–-6": "↓ 6–10 %", "-6–-3": "↓ 3–6 %", "-3–-1": "↓ 1–3 %", "-1–1": tr("mix.d.flat"), "1–3": "↑ 1–3 %", "3–6": "↑ 3–6 %", "6–10": "↑ 6–10 %", "≥10": "↑ >10 %" };
     const cards = [
       card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider", true),
       card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor", true),
       card(tr("mix.d.cadence"), tr("mix.cadence_moving"), d.cadence_s, "rider", true),
       card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", true),
-      card(tr("mix.d.gradient"), "%", d.gradient_s, ""),
+      card(tr("mix.d.gradient"), tr("mix.d.grad_hint"), d.gradient_s, "", false, gradLabels),
     ];
     if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
     box.innerHTML =
