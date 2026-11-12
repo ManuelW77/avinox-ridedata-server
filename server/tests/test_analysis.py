@@ -75,8 +75,6 @@ def test_share_gradient_cadence():
     samples += [g(10 + t, 0, 100, 100, cad=80) for t in range(20)]  # 50 %
     samples += [g(30 + t, 5, 150, 50, cad=60) for t in range(10)]   # 25 %, Steigung 3-6
     a = analyze(parse_ride(ride(samples, start=T0, end=T0 + 40)))
-    sh = a["distributions"]["motor_share_s"]
-    assert sh["≥99"] == 10 and sh["50–75"] == 20 and sh["25–50"] == 10
     bg = a["by_gradient"]
     assert bg["-1–1"]["seconds"] == 30 and bg["-1–1"]["avg_rider_power_w"] == 67
     assert bg["3–6"] == {"seconds": 10, "avg_rider_power_w": 150, "avg_motor_power_w": 50, "avg_speed_kmh": 18.0}

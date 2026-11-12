@@ -29,7 +29,6 @@ POWER_BINS = [1, 50, 100, 150, 200, 300, 400, 600, 800, 1000]
 CADENCE_BINS = [1, 40, 60, 70, 80, 90, 100, 120]
 SPEED_BINS = [1, 5, 10, 15, 20, 25, 30, 40]
 GRADIENT_BINS = [-10, -6, -3, -1, 1, 3, 6, 10]
-SHARE_BINS = [1, 25, 50, 75, 99]
 HEART_RATE_BINS = [1, 100, 120, 140, 160, 180]
 BEST_EFFORT_S = [5, 10, 30, 60, 300, 600, 1200, 3600]
 STOP_MIN_S = 30
@@ -259,9 +258,6 @@ def analyze(
             "cadence_s": histogram([x.cadence_rpm for x in s], moving_w, CADENCE_BINS),
             "speed_s": histogram([x.speed_kmh for x in s], dts, SPEED_BINS),
             "gradient_s": histogram([x.gradient_pct for x in s], moving_w, GRADIENT_BINS),
-            "motor_share_s": histogram(
-                [100 * x.motor_power_w / (x.motor_power_w + x.rider_power_w) if x.motor_power_w + x.rider_power_w > 0 else None for x in s],
-                moving_w, SHARE_BINS),
             "heart_rate_s": histogram([x.heart_rate_bpm for x in s], dts, HEART_RATE_BINS) if hr else None,
         },
         "by_gradient": _by_gradient(s, moving_w),
