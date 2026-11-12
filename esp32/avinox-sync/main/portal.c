@@ -114,7 +114,7 @@ static esp_err_t buf_send(httpd_req_t *req, buf_t *b)
 {
     esp_err_t err;
     if (b->oom) {
-        err = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Zu wenig Speicher");
+        err = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
     } else {
         httpd_resp_set_type(req, "text/html; charset=utf-8");
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -191,10 +191,136 @@ static void schedule_restart(void)
     esp_restart();
 }
 
+/* ------------------------------------------------------------ Sprache (DE/EN) */
+
+enum {
+    T_STATUS, T_WIFI, T_WIFI_PASS, T_SERVER, T_TOKEN, T_LAST_SYNC, T_NOT_SET, T_SET, T_NONE_OPEN, T_MISSING,
+    T_NONE_YET, T_SETUP, T_WIFI_LIST, T_PICK, T_RESCAN, T_RESCAN_NOTE, T_PASS_LBL, T_PH_SET_KEEP, T_OPEN_NET,
+    T_SSID_LBL, T_SSID_NOTE, T_URL_LBL, T_TOKEN_LBL, T_PH_TOKEN, T_AP_H, T_AP_NEW, T_PH_REQUIRED, T_AP_REPEAT,
+    T_AP_NOTE, T_SAVE_BTN, T_RESTART_BTN, T_OPEN_SUFFIX, T_BACK_FORM, T_TO_SETUP, T_CAPTIVE,
+    T_E_LONG, T_E_NOSSID, T_E_PASSLEN, T_E_APPASS, T_E_APMATCH, T_E_URL, T_E_TOKEN, T_E_FLASH, T_E_FORM,
+    T_OK_SAVED, T_OK_RESTART, T_E_MEM
+};
+
+static const char *const TXT[][2] = {
+    [T_STATUS] = { "Status", "Status" },
+    [T_WIFI] = { "WLAN", "Wi-Fi" },
+    [T_WIFI_PASS] = { "WLAN-Passwort", "Wi-Fi password" },
+    [T_SERVER] = { "Server", "Server" },
+    [T_TOKEN] = { "Token", "Token" },
+    [T_LAST_SYNC] = { "Letzter Sync", "Last sync" },
+    [T_NOT_SET] = { "nicht eingerichtet", "not configured" },
+    [T_SET] = { "gesetzt", "set" },
+    [T_NONE_OPEN] = { "keins (offenes WLAN)", "none (open network)" },
+    [T_MISSING] = { "fehlt", "missing" },
+    [T_NONE_YET] = { "noch keiner", "none yet" },
+    [T_SETUP] = { "Einrichtung", "Setup" },
+    [T_WIFI_LIST] = { "WLAN aus der Liste", "Wi-Fi from the list" },
+    [T_PICK] = { "– auswählen –", "– select –" },
+    [T_RESCAN] = { "Netze neu suchen", "Rescan networks" },
+    [T_RESCAN_NOTE] = { " (die Verbindung zum Handy kann kurz abreißen)", " (the connection to your phone may drop briefly)" },
+    [T_PASS_LBL] = { "WLAN-Passwort", "Wi-Fi password" },
+    [T_PH_SET_KEEP] = { "gesetzt – leer lassen = unverändert", "set – leave empty to keep" },
+    [T_OPEN_NET] = { "Offenes WLAN (kein Passwort)", "Open network (no password)" },
+    [T_SSID_LBL] = { "WLAN-Name (SSID)", "Wi-Fi name (SSID)" },
+    [T_SSID_NOTE] = { "Freitext hat Vorrang vor der Auswahl.", "Typed text takes precedence over the selection." },
+    [T_URL_LBL] = { "Server-URL", "Server URL" },
+    [T_TOKEN_LBL] = { "Upload-Token", "Upload token" },
+    [T_PH_TOKEN] = { "vom Server, siehe README", "from the server, see README" },
+    [T_AP_H] = { "Passwort für dieses Einrichtungs-WLAN", "Password for this setup Wi-Fi" },
+    [T_AP_NEW] = { "Neues Passwort (mindestens 8 Zeichen)", "New password (at least 8 characters)" },
+    [T_PH_REQUIRED] = { "Pflicht", "required" },
+    [T_AP_REPEAT] = { "Passwort wiederholen", "Repeat password" },
+    [T_AP_NOTE] = { "Gilt ab dem nächsten Einrichtungsmodus (BOOT 3 s).", "Applies from the next setup mode (hold BOOT 3 s)." },
+    [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
+    [T_RESTART_BTN] = { "Ohne Änderung neu starten", "Restart without changes" },
+    [T_OPEN_SUFFIX] = { ", offen", ", open" },
+    [T_BACK_FORM] = { "Zurück zum Formular", "Back to the form" },
+    [T_TO_SETUP] = { "Zur Einrichtung", "To setup" },
+    [T_CAPTIVE] = { "Einrichtung öffnen", "Open setup" },
+    [T_E_LONG] = { "Ein Feld ist zu lang.", "A field is too long." },
+    [T_E_NOSSID] = { "Bitte ein WLAN auswählen oder den Namen eintragen.", "Please select a network or enter its name." },
+    [T_E_PASSLEN] = { "Das WLAN-Passwort muss mindestens 8 Zeichen haben.", "The Wi-Fi password must have at least 8 characters." },
+    [T_E_APPASS] = { "Bitte ein Passwort für das Einrichtungs-WLAN vergeben (mindestens 8 Zeichen).",
+                     "Please set a password for the setup Wi-Fi (at least 8 characters)." },
+    [T_E_APMATCH] = { "Die beiden Passwörter für das Einrichtungs-WLAN stimmen nicht überein.",
+                      "The two passwords for the setup Wi-Fi do not match." },
+    [T_E_URL] = { "Die Server-URL muss mit http:// oder https:// beginnen.", "The server URL must start with http:// or https://." },
+    [T_E_TOKEN] = { "Bitte den Upload-Token eintragen.", "Please enter the upload token." },
+    [T_E_FLASH] = { "Speichern im Flash fehlgeschlagen.", "Saving to flash failed." },
+    [T_E_FORM] = { "Formular leer oder zu groß.", "Form empty or too large." },
+    [T_OK_SAVED] = { "Gespeichert. Das Gerät startet neu und verbindet sich mit dem WLAN. Dieses Einrichtungs-WLAN verschwindet danach.",
+                     "Saved. The device restarts and connects to the Wi-Fi. This setup Wi-Fi disappears afterwards." },
+    [T_OK_RESTART] = { "Neustart ohne Änderung.", "Restarting without changes." },
+    [T_E_MEM] = { "Zu wenig Speicher", "Out of memory" },
+};
+
+static int s_lang;      /* 0 = de, 1 = en; je Anfrage gesetzt (httpd arbeitet Anfragen nacheinander ab) */
+#define T(id) TXT[id][s_lang]
+
+static const char COOKIE_DE[] = "lang=de; Max-Age=31536000; Path=/; SameSite=Lax";
+static const char COOKIE_EN[] = "lang=en; Max-Age=31536000; Path=/; SameSite=Lax";
+
+static int lang_from_code(const char *v)
+{
+    if (strncmp(v, "en", 2) == 0) {
+        return 1;
+    }
+    if (strncmp(v, "de", 2) == 0) {
+        return 0;
+    }
+    return -1;
+}
+
+/* Sprache der Anfrage bestimmen: ?lang= (setzt Cookie) > Cookie > Accept-Language > de. */
+static void detect_lang(httpd_req_t *req)
+{
+    char val[192];
+    s_lang = 0;
+    if (httpd_req_get_url_query_str(req, val, sizeof(val)) == ESP_OK) {
+        char q[8];
+        if (httpd_query_key_value(val, "lang", q, sizeof(q)) == ESP_OK) {
+            int l = lang_from_code(q);
+            if (l >= 0 && q[2] == '\0') {
+                s_lang = l;
+                httpd_resp_set_hdr(req, "Set-Cookie", l ? COOKIE_EN : COOKIE_DE);
+                return;
+            }
+        }
+    }
+    if (httpd_req_get_hdr_value_str(req, "Cookie", val, sizeof(val)) == ESP_OK) {
+        for (const char *c = val; c; ) {
+            while (*c == ' ') {
+                c++;
+            }
+            if (strncmp(c, "lang=", 5) == 0) {
+                int l = lang_from_code(c + 5);
+                if (l >= 0) {
+                    s_lang = l;
+                    return;
+                }
+            }
+            c = strchr(c, ';');
+            if (c) {
+                c++;
+            }
+        }
+    }
+    char al[64];
+    esp_err_t e = httpd_req_get_hdr_value_str(req, "Accept-Language", al, sizeof(al));
+    if (e == ESP_OK || e == ESP_ERR_HTTPD_RESULT_TRUNC) {
+        const char *a = al;
+        while (*a == ' ') {
+            a++;
+        }
+        s_lang = (strncasecmp(a, "en", 2) == 0);
+    }
+}
+
 /* ------------------------------------------------------------ Seiten */
 
-static const char PAGE_HEAD[] =
-    "<!DOCTYPE html><html lang=\"de\"><head><meta charset=\"utf-8\">"
+static const char PAGE_HEAD1[] = "<!DOCTYPE html><html lang=\"";
+static const char PAGE_HEAD2[] = "\"><head><meta charset=\"utf-8\">"
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
     "<title>Avinox-Sync</title><style>"
     "body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f3f4f6;color:#111}"
@@ -209,52 +335,94 @@ static const char PAGE_HEAD[] =
     "dl{display:grid;grid-template-columns:max-content 1fr;gap:.3rem .8rem;margin:0}dt{color:#555}dd{margin:0;word-break:break-all}"
     ".err{background:#fee2e2;color:#7f1d1d}.ok{background:#dcfce7;color:#14532d}"
     "a{color:#0a66c2}"
-    "</style></head><body><main><h1>Avinox-Sync</h1>";
+    "footer{font-size:.75rem;color:#777;text-align:center;margin:1.2rem 0 .5rem}footer a{color:#777}"
+    ".lang{text-align:right;font-size:.85rem;margin:0}"
+    "</style></head><body><main>";
 
-static const char PAGE_TAIL[] = "</main></body></html>";
+static const char PAGE_TAIL[] =
+    "<footer>© 2026 Manuel Weiser · Build with \"Herz\" and a \"Bike\" by Manuel Weiser in Leipzig · "
+    "<a href=\"https://manuelw.de\">manuelw.de</a></footer></main></body></html>";
+
+/* Seitenkopf samt Sprachumschalter; path = aktuelle Seite für die ?lang=-Links. */
+static void page_head(buf_t *b, const char *path)
+{
+    buf_append(b, PAGE_HEAD1);
+    buf_append(b, s_lang ? "en" : "de");
+    buf_append(b, PAGE_HEAD2);
+    buf_append(b, "<p class=\"lang\"><a href=\"");
+    buf_append(b, path);
+    buf_append(b, "?lang=de\">DE</a> | <a href=\"");
+    buf_append(b, path);
+    buf_append(b, "?lang=en\">EN</a></p><h1>Avinox-Sync</h1>");
+}
 
 static void status_block(buf_t *b)
 {
-    buf_append(b, "<section><h2>Status</h2><dl><dt>WLAN</dt><dd>");
+    buf_append(b, "<section><h2>");
+    buf_append(b, T(T_STATUS));
+    buf_append(b, "</h2><dl><dt>");
+    buf_append(b, T(T_WIFI));
+    buf_append(b, "</dt><dd>");
     if (s_cfg.ssid[0]) {
         buf_append_esc(b, s_cfg.ssid);
     } else {
-        buf_append(b, "<i>nicht eingerichtet</i>");
+        buf_append(b, "<i>");
+        buf_append(b, T(T_NOT_SET));
+        buf_append(b, "</i>");
     }
-    buf_append(b, "</dd><dt>WLAN-Passwort</dt><dd>");
-    buf_append(b, s_cfg.pass[0] ? "gesetzt" : "keins (offenes WLAN)");
-    buf_append(b, "</dd><dt>Server</dt><dd>");
+    buf_append(b, "</dd><dt>");
+    buf_append(b, T(T_WIFI_PASS));
+    buf_append(b, "</dt><dd>");
+    buf_append(b, s_cfg.pass[0] ? T(T_SET) : T(T_NONE_OPEN));
+    buf_append(b, "</dd><dt>");
+    buf_append(b, T(T_SERVER));
+    buf_append(b, "</dt><dd>");
     if (s_cfg.url[0]) {
         buf_append_esc(b, s_cfg.url);
     } else {
-        buf_append(b, "<i>fehlt</i>");
+        buf_append(b, "<i>");
+        buf_append(b, T(T_MISSING));
+        buf_append(b, "</i>");
     }
-    buf_append(b, "</dd><dt>Token</dt><dd>");
-    buf_append(b, s_cfg.token[0] ? "gesetzt" : "<i>fehlt</i>");
-    buf_append(b, "</dd><dt>Letzter Sync</dt><dd>");
+    buf_append(b, "</dd><dt>");
+    buf_append(b, T(T_TOKEN));
+    buf_append(b, "</dt><dd>");
+    if (s_cfg.token[0]) {
+        buf_append(b, T(T_SET));
+    } else {
+        buf_append(b, "<i>");
+        buf_append(b, T(T_MISSING));
+        buf_append(b, "</i>");
+    }
+    buf_append(b, "</dd><dt>");
+    buf_append(b, T(T_LAST_SYNC));
+    buf_append(b, "</dt><dd>");
     sync_result_t r;
     if (sync_result_load(&r)) {
         char line[256];
         sync_result_format(&r, line, sizeof(line));
         buf_append_esc(b, line);
     } else {
-        buf_append(b, "noch keiner");
+        buf_append(b, T(T_NONE_YET));
     }
     buf_append(b, "</dd></dl></section>");
 }
 
-static esp_err_t send_message(httpd_req_t *req, const char *cls, const char *text, bool back_link)
+static esp_err_t send_message(httpd_req_t *req, const char *cls, int text, bool back_link)
 {
+    detect_lang(req);
     buf_t b;
     buf_init(&b);
-    buf_append(&b, PAGE_HEAD);
+    page_head(&b, "/");
     buf_append(&b, "<section class=\"");
     buf_append(&b, cls);
     buf_append(&b, "\"><p>");
-    buf_append_esc(&b, text);
+    buf_append_esc(&b, T(text));
     buf_append(&b, "</p>");
     if (back_link) {
-        buf_append(&b, "<p><a href=\"/\">Zurück zum Formular</a></p>");
+        buf_append(&b, "<p><a href=\"/\">");
+        buf_append(&b, T(T_BACK_FORM));
+        buf_append(&b, "</a></p>");
     }
     buf_append(&b, "</section>");
     buf_append(&b, PAGE_TAIL);
@@ -263,16 +431,22 @@ static esp_err_t send_message(httpd_req_t *req, const char *cls, const char *tex
 
 static esp_err_t root_get(httpd_req_t *req)
 {
+    detect_lang(req);
     buf_t b;
     buf_init(&b);
-    buf_append(&b, PAGE_HEAD);
+    page_head(&b, "/");
     status_block(&b);
 
+    buf_append(&b, "<section><h2>");
+    buf_append(&b, T(T_SETUP));
+    buf_append(&b, "</h2><form method=\"post\" action=\"/save\"><label for=\"sel\">");
+    buf_append(&b, T(T_WIFI_LIST));
     buf_append(&b,
-        "<section><h2>Einrichtung</h2><form method=\"post\" action=\"/save\">"
-        "<label for=\"sel\">WLAN aus der Liste</label><select id=\"sel\" name=\"ssid_sel\" "
+        "</label><select id=\"sel\" name=\"ssid_sel\" "
         "onchange=\"if(this.value)document.getElementById('ssid').value=this.value\">"
-        "<option value=\"\">– auswählen –</option>");
+        "<option value=\"\">");
+    buf_append(&b, T(T_PICK));
+    buf_append(&b, "</option>");
     for (int i = 0; i < s_ap_count; i++) {
         const char *ssid = (const char *)s_aps[i].ssid;
         if (!ssid[0]) {
@@ -289,7 +463,7 @@ static esp_err_t root_get(httpd_req_t *req)
             continue;
         }
         char info[48];
-        snprintf(info, sizeof(info), " (%d dBm%s)", s_aps[i].rssi, s_aps[i].authmode == WIFI_AUTH_OPEN ? ", offen" : "");
+        snprintf(info, sizeof(info), " (%d dBm%s)", s_aps[i].rssi, s_aps[i].authmode == WIFI_AUTH_OPEN ? T(T_OPEN_SUFFIX) : "");
         buf_append(&b, "<option value=\"");
         buf_append_esc(&b, ssid);
         buf_append(&b, "\">");
@@ -297,48 +471,67 @@ static esp_err_t root_get(httpd_req_t *req)
         buf_append(&b, info);
         buf_append(&b, "</option>");
     }
-    buf_append(&b,
-        "</select><small><a href=\"/scan\">Netze neu suchen</a> (die Verbindung zum Handy kann kurz abreißen)</small>"
-        "<label for=\"pass\">WLAN-Passwort</label>"
+    buf_append(&b, "</select><small><a href=\"/scan\">");
+    buf_append(&b, T(T_RESCAN));
+    buf_append(&b, "</a>");
+    buf_append(&b, T(T_RESCAN_NOTE));
+    buf_append(&b, "</small><label for=\"pass\">");
+    buf_append(&b, T(T_PASS_LBL));
+    buf_append(&b, "</label>"
         "<input id=\"pass\" name=\"pass\" type=\"password\" maxlength=\"63\" autocomplete=\"off\" placeholder=\"");
-    buf_append(&b, s_cfg.pass[0] ? "gesetzt – leer lassen = unverändert" : "");
-    buf_append(&b, "\">"
-        "<label class=\"cb\"><input type=\"checkbox\" name=\"open\" value=\"1\">Offenes WLAN (kein Passwort)</label>"
-        "<label for=\"ssid\">WLAN-Name (SSID)</label>"
+    buf_append(&b, s_cfg.pass[0] ? T(T_PH_SET_KEEP) : "");
+    buf_append(&b, "\"><label class=\"cb\"><input type=\"checkbox\" name=\"open\" value=\"1\">");
+    buf_append(&b, T(T_OPEN_NET));
+    buf_append(&b, "</label><label for=\"ssid\">");
+    buf_append(&b, T(T_SSID_LBL));
+    buf_append(&b, "</label>"
         "<input id=\"ssid\" name=\"ssid\" maxlength=\"32\" autocomplete=\"off\" autocapitalize=\"none\" value=\"");
     buf_append_esc(&b, s_cfg.ssid);
-    buf_append(&b, "\"><small>Freitext hat Vorrang vor der Auswahl.</small>"
-        "<label for=\"url\">Server-URL</label>"
+    buf_append(&b, "\"><small>");
+    buf_append(&b, T(T_SSID_NOTE));
+    buf_append(&b, "</small><label for=\"url\">");
+    buf_append(&b, T(T_URL_LBL));
+    buf_append(&b, "</label>"
         "<input id=\"url\" name=\"url\" type=\"url\" maxlength=\"200\" autocapitalize=\"none\" "
         "placeholder=\"http://192.168.1.10:8000\" value=\"");
     buf_append_esc(&b, s_cfg.url);
-    buf_append(&b, "\">"
-        "<label for=\"token\">Upload-Token</label>"
+    buf_append(&b, "\"><label for=\"token\">");
+    buf_append(&b, T(T_TOKEN_LBL));
+    buf_append(&b, "</label>"
         "<input id=\"token\" name=\"token\" type=\"password\" maxlength=\"128\" autocomplete=\"off\" placeholder=\"");
-    buf_append(&b, s_cfg.token[0] ? "gesetzt – leer lassen = unverändert" : "vom Server, siehe README");
-    buf_append(&b, "\">"
-        "<h2 style=\"margin-top:1.2rem\">Passwort für dieses Einrichtungs-WLAN</h2>"
-        "<label for=\"appass\">Neues Passwort (mindestens 8 Zeichen)</label>"
+    buf_append(&b, s_cfg.token[0] ? T(T_PH_SET_KEEP) : T(T_PH_TOKEN));
+    buf_append(&b, "\"><h2 style=\"margin-top:1.2rem\">");
+    buf_append(&b, T(T_AP_H));
+    buf_append(&b, "</h2><label for=\"appass\">");
+    buf_append(&b, T(T_AP_NEW));
+    buf_append(&b, "</label>"
         "<input id=\"appass\" name=\"ap_pass\" type=\"password\" maxlength=\"63\" autocomplete=\"new-password\" placeholder=\"");
-    buf_append(&b, s_cfg.ap_pass[0] ? "gesetzt – leer lassen = unverändert" : "Pflicht");
-    buf_append(&b, "\">"
-        "<label for=\"appass2\">Passwort wiederholen</label>"
+    buf_append(&b, s_cfg.ap_pass[0] ? T(T_PH_SET_KEEP) : T(T_PH_REQUIRED));
+    buf_append(&b, "\"><label for=\"appass2\">");
+    buf_append(&b, T(T_AP_REPEAT));
+    buf_append(&b, "</label>"
         "<input id=\"appass2\" name=\"ap_pass2\" type=\"password\" maxlength=\"63\" autocomplete=\"new-password\">"
-        "<small>Gilt ab dem nächsten Einrichtungsmodus (BOOT 3 s).</small>"
-        "<button type=\"submit\">Speichern und neu starten</button></form>"
-        "<form method=\"post\" action=\"/restart\"><button class=\"sec\" type=\"submit\">Ohne Änderung neu starten</button></form>"
-        "</section>");
+        "<small>");
+    buf_append(&b, T(T_AP_NOTE));
+    buf_append(&b, "</small><button type=\"submit\">");
+    buf_append(&b, T(T_SAVE_BTN));
+    buf_append(&b, "</button></form><form method=\"post\" action=\"/restart\"><button class=\"sec\" type=\"submit\">");
+    buf_append(&b, T(T_RESTART_BTN));
+    buf_append(&b, "</button></form></section>");
     buf_append(&b, PAGE_TAIL);
     return buf_send(req, &b);
 }
 
 static esp_err_t status_get(httpd_req_t *req)
 {
+    detect_lang(req);
     buf_t b;
     buf_init(&b);
-    buf_append(&b, PAGE_HEAD);
+    page_head(&b, "/status");
     status_block(&b);
-    buf_append(&b, "<p><a href=\"/\">Zur Einrichtung</a></p>");
+    buf_append(&b, "<p><a href=\"/\">");
+    buf_append(&b, T(T_TO_SETUP));
+    buf_append(&b, "</a></p>");
     buf_append(&b, PAGE_TAIL);
     return buf_send(req, &b);
 }
@@ -374,47 +567,46 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *ncp, bool fit, const
     app_config_t *nc_p = ncp;
 #define nc (*nc_p)
     if (!fit) {
-        return send_message(req, "err", "Ein Feld ist zu lang.", true);
+        return send_message(req, "err", T_E_LONG, true);
     }
     trim(token);
     strlcpy(nc.ssid, ssid[0] ? ssid : ssid_sel, sizeof(nc.ssid));
     if (!nc.ssid[0]) {
-        return send_message(req, "err", "Bitte ein WLAN auswählen oder den Namen eintragen.", true);
+        return send_message(req, "err", T_E_NOSSID, true);
     }
     if (open[0]) {
         nc.pass[0] = '\0';
     } else if (pass[0]) {
         if (strlen(pass) < 8) {
-            return send_message(req, "err", "Das WLAN-Passwort muss mindestens 8 Zeichen haben.", true);
+            return send_message(req, "err", T_E_PASSLEN, true);
         }
         strlcpy(nc.pass, pass, sizeof(nc.pass));
     }
     if (ap_pass[0] || !nc.ap_pass[0]) {
         if (strlen(ap_pass) < 8) {
-            return send_message(req, "err", "Bitte ein Passwort für das Einrichtungs-WLAN vergeben (mindestens 8 Zeichen).", true);
+            return send_message(req, "err", T_E_APPASS, true);
         }
         if (strcmp(ap_pass, ap_pass2) != 0) {
-            return send_message(req, "err", "Die beiden Passwörter für das Einrichtungs-WLAN stimmen nicht überein.", true);
+            return send_message(req, "err", T_E_APMATCH, true);
         }
         strlcpy(nc.ap_pass, ap_pass, sizeof(nc.ap_pass));
     }
     if (!config_normalize_url(url)) {
-        return send_message(req, "err", "Die Server-URL muss mit http:// oder https:// beginnen.", true);
+        return send_message(req, "err", T_E_URL, true);
     }
     strlcpy(nc.url, url, sizeof(nc.url));
     if (token[0]) {
         strlcpy(nc.token, token, sizeof(nc.token));
     }
     if (!nc.token[0]) {
-        return send_message(req, "err", "Bitte den Upload-Token eintragen.", true);
+        return send_message(req, "err", T_E_TOKEN, true);
     }
     if (config_save(&nc) != ESP_OK) {
-        return send_message(req, "err", "Speichern im Flash fehlgeschlagen.", true);
+        return send_message(req, "err", T_E_FLASH, true);
     }
     s_cfg = nc;
 #undef nc
-    esp_err_t err = send_message(req, "ok", "Gespeichert. Das Gerät startet neu und verbindet sich mit dem WLAN. "
-                                 "Dieses Einrichtungs-WLAN verschwindet danach.", false);
+    esp_err_t err = send_message(req, "ok", T_OK_SAVED, false);
     schedule_restart();
     return err;
 }
@@ -422,7 +614,7 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *ncp, bool fit, const
 static esp_err_t save_post(httpd_req_t *req)
 {
     if (req->content_len <= 0 || req->content_len >= FORM_MAX) {
-        return send_message(req, "err", "Formular leer oder zu groß.", true);
+        return send_message(req, "err", T_E_FORM, true);
     }
     static char body[FORM_MAX];
     int got = 0;
@@ -462,7 +654,7 @@ static esp_err_t save_post(httpd_req_t *req)
 
 static esp_err_t restart_post(httpd_req_t *req)
 {
-    esp_err_t err = send_message(req, "ok", "Neustart ohne Änderung.", false);
+    esp_err_t err = send_message(req, "ok", T_OK_RESTART, false);
     schedule_restart();
     return err;
 }
@@ -482,7 +674,11 @@ static esp_err_t captive_redirect(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Location", "http://" AP_IP_STR "/");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_sendstr(req, "<!DOCTYPE html><html><body><a href=\"http://" AP_IP_STR "/\">Einrichtung öffnen</a></body></html>");
+    detect_lang(req);
+    char page[200];
+    snprintf(page, sizeof(page), "<!DOCTYPE html><html lang=\"%s\"><body><a href=\"http://" AP_IP_STR "/\">%s</a></body></html>",
+             s_lang ? "en" : "de", T(T_CAPTIVE));
+    return httpd_resp_sendstr(req, page);
 }
 
 static void start_http(void)
