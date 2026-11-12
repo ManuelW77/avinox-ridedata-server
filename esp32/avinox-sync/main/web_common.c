@@ -202,6 +202,9 @@ static const char *const TXT[T_COUNT][2] = {
     [T_PH_REQUIRED] = { "Pflicht", "required" },
     [T_AP_REPEAT] = { "Passwort wiederholen", "Repeat password" },
     [T_AP_NOTE] = { "Gilt ab dem nächsten Einrichtungsmodus (BOOT 3 s).", "Applies from the next setup mode (hold BOOT 3 s)." },
+    [T_LANG_H] = { "Sprache", "Language" },
+    [T_LANG_NOTE] = { "Sprache der Weboberfläche. Wird im Browser gespeichert.", "Language of the web interface. Stored in your browser." },
+    [T_LANG_SAVE] = { "Speichern", "Save" },
     [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
     [T_RESTART_BTN] = { "Ohne Änderung neu starten", "Restart without changes" },
     [T_OPEN_SUFFIX] = { ", offen", ", open" },
@@ -400,6 +403,19 @@ esp_err_t web_send_message(httpd_req_t *req, const char *cls, web_text_t text, b
 
 void web_render_form(buf_t *b, const app_config_t *cfg, const wifi_ap_record_t *aps, uint16_t ap_count, bool portal)
 {
+    buf_append(b, "<section><h2>");
+    buf_append(b, T(T_LANG_H));
+    buf_append(b, "</h2><p class=\"hint\">");
+    buf_append(b, T(T_LANG_NOTE));
+    buf_append(b, "</p><form method=\"get\" action=\"/\"><label for=\"lang-select\">");
+    buf_append(b, T(T_LANG_H));
+    buf_append(b, "</label><select name=\"lang\" id=\"lang-select\"><option value=\"de\"");
+    buf_append(b, s_lang ? "" : " selected");
+    buf_append(b, ">Deutsch</option><option value=\"en\"");
+    buf_append(b, s_lang ? " selected" : "");
+    buf_append(b, ">English</option></select><button type=\"submit\">");
+    buf_append(b, T(T_LANG_SAVE));
+    buf_append(b, "</button></form></section>");
     buf_append(b, "<section><h2>");
     buf_append(b, portal ? T(T_SETUP) : T(T_SETTINGS));
     buf_append(b, "</h2><form method=\"post\" action=\"/save\"><label for=\"sel\">");
