@@ -1,5 +1,5 @@
 # Kopie des Display-Laufwerks: groß, enthält Seriennummer und GPS-Spuren
-Data/
+_demo-data/
 
 # Ausgewertete Fahrten / Datenbanken
 *.sqlite

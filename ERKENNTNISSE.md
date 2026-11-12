@@ -6,13 +6,13 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 
 | Weg | Ergebnis |
 |---|---|
-| Display per USB-C ans iPhone/Rechner | **Funktioniert.** Display meldet sich als USB-Laufwerk. So liegen die Daten in `Data/`. |
+| Display per USB-C ans iPhone/Rechner | **Funktioniert.** Display meldet sich als USB-Laufwerk. So liegen die Daten in `_demo-data/`. |
 | Strava-Auto-Sync | Offiziell, aber dünn: FIT mit Fahrerleistung, Motorleistung nicht belegt. Auflösung laut Forum 10 s, nach Update evtl. 1 s. |
 | ANT+ / BLE an Garmin | Geht nicht. Display empfängt nur (Pulsgurt), sendet keine E-Bike-Daten (kein ANT+ LEV). |
 | Live-BLE mitlesen | Kein öffentlicher Decoder. BikeBridge (codeberg.org/bg443/BikeBridge) forscht daran. |
 | Avinox-Cloud direkt | **Bewusst nicht verfolgt.** Die API (`api.avinox-ebike.com`) verlangt signierte Anfragen; die Signierung steckt in der nativen DJI-Bibliothek der App. Der Cloud-Import von avinox-beta.avinoxride.workers.dev läuft über den Server des Betreibers, der dabei die Avinox-Zugangsdaten durchreicht. Kein öffentlicher Client vorhanden, wäre instabil und ein Zugangsdaten-Risiko. |
 
-## 2. Inhalt des Display-Laufwerks (`Data/`, ca. 3 GB)
+## 2. Inhalt des Display-Laufwerks (`_demo-data/`, ca. 3 GB)
 
 | Pfad | Inhalt |
 |---|---|
