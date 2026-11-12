@@ -357,7 +357,7 @@ def mix(rows: list[dict]) -> dict:
             a["seconds"] += secs
             a["moving_seconds"] += mv
             a["distance_m"] += m.get("distance_m") or 0
-            for field, v, w in (("spd", m.get("avg_moving_speed_kmh"), mv), ("mot", m.get("avg_motor_power_w"), secs), ("rid", m.get("avg_rider_power_w"), secs)):
+            for field, v, w in (("spd", m.get("avg_moving_speed_kmh"), mv), ("mot", m.get("avg_motor_power_w"), mv), ("rid", m.get("avg_rider_power_w"), mv)):
                 if v is not None and w:
                     a[field] += v * w
                     a[field + "_t"] += w
