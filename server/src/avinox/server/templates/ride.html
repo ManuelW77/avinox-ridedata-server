@@ -79,8 +79,9 @@
 
 <div class="grid cols-2" style="margin-bottom:1rem">
   <section class="card">
-    <h2>{{ t('ride.modes') }}</h2>
-    {{ bars(a.assist.seconds_per_mode, 'motor') }}
+    <h2>{{ t('ride.modes') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2>
+    {% set mv_modes = {} %}{% for n, m in a.assist.per_mode.items() %}{% set _ = mv_modes.update({n: m.moving_seconds if m.moving_seconds is defined else m.seconds}) %}{% endfor %}
+    {{ bars(mv_modes, 'motor') }}
     <table class="plain" style="margin-top:0.9rem">
       <tr><th>{{ t('ride.th.mode') }}</th><th class="n">{{ t('ride.th.distance') }}</th><th class="n">{{ t('ride.th.avg_kmh') }}</th><th class="n">{{ t('ride.th.avg_motor') }}</th><th class="n">{{ t('ride.th.avg_rider') }}</th></tr>
       {% for name, m in a.assist.per_mode.items() %}
@@ -90,8 +91,9 @@
     <p class="muted small" style="margin-top:0.6rem">{{ t('ride.changes', n=a.assist.changes) }}{% if a.assist.seconds_per_mode.keys() | select('match', 'eigen_') | list %}{{ t('ride.custom_modes_html') }}{% endif %}</p>
   </section>
   <section class="card">
-    <h2>{{ t('ride.gears') }}</h2>
-    {{ bars(a.gears.seconds_per_gear, '', 's', 0, {}) }}
+    <h2>{{ t('ride.gears') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2>
+    {% set mv_gears = {} %}{% for n, m in (a.gears.per_gear or {}).items() %}{% set _ = mv_gears.update({n: m.moving_seconds if m.moving_seconds is defined else m.seconds}) %}{% endfor %}
+    {{ bars(mv_gears if mv_gears else a.gears.seconds_per_gear, '', 's', 0, {}) }}
     <p class="muted small" style="margin-top:0.6rem">{{ t('ride.gear_changes', n=a.gears.changes) }}</p>
   </section>
 </div>
