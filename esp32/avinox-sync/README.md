@@ -78,6 +78,21 @@ Nicht schon beim Einschalten drücken, sonst startet der ESP32 im Download-Modus
 
 Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`, `token`, `ap_pass`.
 
+## Weboberfläche im Betrieb
+
+Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgeschützte Weboberfläche an.
+
+- **Adresse:** `http://<IP des Geräts>/`. Die IP steht in der Geräteliste des Routers oder auf der Geräteseite des Servers.
+- **Login:** Benutzer `admin`, Passwort = das Passwort des Einrichtungs-WLANs (Feld „Zugangspasswort“). Ohne gesetztes
+  Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen sind alle Anfragen 30 s gesperrt.
+  Die Verbindung ist unverschlüsselt (HTTP): nur im vertrauten Heimnetz benutzen.
+- **Anzeige:** Firmware-Version, Geräte-ID, WLAN (Name, Signal), IP, Laufzeit, freier Speicher, USB-Laufwerk, letzter Sync,
+  Server-URL.
+- **Ändern:** WLAN (Name, Passwort), Server-URL, Upload-Token und Zugangspasswort. Gesetzte Passwörter und der Token werden
+  nie angezeigt; leer lassen = behalten. Speichern startet das Gerät neu. Außerdem „Neu starten“ und „Einrichtungsmodus starten“.
+- **Notfall:** Bei falschem WLAN-Namen oder -Passwort ist das Gerät danach nicht mehr erreichbar. Dann BOOT-Taste 3 s halten
+  (Einrichtungsmodus) und neu einrichten.
+
 ## LED
 
 | Farbe | Bedeutung |
@@ -165,6 +180,9 @@ Danach:
 | `main/main.c` | Ablauf, BOOT-Taste, Sync-Schleife, LED-Zustand |
 | `main/config.c/.h` | Konfiguration im NVS |
 | `main/portal.c/.h` | SoftAP, HTTP-Server mit Einrichtungs- und Statusseite, Captive-Portal-DNS |
+| `main/web_common.c/.h` | gemeinsamer Teil von Portal und Weboberfläche: Texte DE/EN, Formular, Speichern |
+| `main/webui.c/.h` | Weboberfläche im Betrieb (Basic Auth, Status, Einstellungen) |
+| `main/web_auth.c/.h` | Basic-Auth-Prüfung und Origin-Vergleich (Host-Test) |
 | `main/wifi_sta.c/.h` | WLAN-Station mit 30-s-Fenster / 60-s-Pause |
 | `main/usb_drive.c/.h` | USB-Host + MSC (aus usb-probe), Einhängen unter `/usb` |
 | `main/sync.c/.h` | Manifest, Upload-Status, Upload in Stücken, Ergebnis im NVS |
@@ -172,12 +190,14 @@ Danach:
 | `main/led.c/.h` | Status-LED |
 | `main/ota.c/.h` | Firmware-Update per WLAN, Bestätigung/Rollback |
 | `test/host/test_paths.c` | Host-Test für `sync_paths.c` |
+| `test/host/test_auth.c` | Host-Test für `web_auth.c` (mit base64-Shim) |
 
 Host-Test (ohne ESP-IDF):
 
 ```sh
 cd esp32/avinox-sync/test/host
 cc -Wall -Wextra -I../../main ../../main/sync_paths.c test_paths.c -o test_paths && ./test_paths
+cc -Wall -Wextra -Ishim -I../../main ../../main/web_auth.c test_auth.c -o test_auth && ./test_auth
 ```
 
 ## Bekannte Grenzen
