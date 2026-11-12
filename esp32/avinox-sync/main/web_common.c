@@ -205,10 +205,10 @@ static const char *const TXT[T_COUNT][2] = {
     [T_LANG_H] = { "Sprache", "Language" },
     [T_LANG_NOTE] = { "Sprache der Weboberfläche. Wird im Browser gespeichert.", "Language of the web interface. Stored in your browser." },
     [T_LANG_SAVE] = { "Speichern", "Save" },
-    [T_RESCUE] = { "Notfallmodus: Einrichtungs-WLAN ohne Passwort. Bitte ein neues Zugangspasswort vergeben. Bei geänderter Server-URL muss der Token neu eingegeben werden.",
-                   "Emergency mode: setup Wi-Fi without a password. Please set a new access password. If the server URL is changed, the token must be entered again." },
-    [T_E_RESCUE_TOKEN] = { "Notfallmodus: Bei geänderter Server-URL muss der Token neu eingegeben werden.",
-                           "Emergency mode: if the server URL is changed, the token must be entered again." },
+    [T_RESCUE] = { "Notfallmodus: Einrichtungs-WLAN ohne Passwort. Bitte ein neues Zugangspasswort vergeben und den Upload-Token neu eingeben (steht auf dem Server unter Einstellungen).",
+                   "Emergency mode: setup Wi-Fi without a password. Please set a new access password and enter the upload token again (shown on the server under Settings)." },
+    [T_E_RESCUE_TOKEN] = { "Notfallmodus: Bitte den Upload-Token neu eingeben.",
+                           "Emergency mode: please enter the upload token again." },
     [T_E_RESCUE_WIFI] = { "Notfallmodus: Bei geändertem WLAN-Namen muss das WLAN-Passwort neu eingegeben werden.",
                           "Emergency mode: if the Wi-Fi name is changed, the Wi-Fi password must be entered again." },
     [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
@@ -578,7 +578,7 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     if (!config_normalize_url(url)) {
         return web_send_message(req, "err", T_E_URL, true);
     }
-    if (s_rescue && strcmp(url, cur->url) != 0 && !token[0]) {
+    if (s_rescue && !token[0]) {        /* gespeicherten Token nie übernehmen: sonst über anderes WLAN/URL abgreifbar */
         return web_send_message(req, "err", T_E_RESCUE_TOKEN, true);
     }
     strlcpy(nc->url, url, sizeof(nc->url));

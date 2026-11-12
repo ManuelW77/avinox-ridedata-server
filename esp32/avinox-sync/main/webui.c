@@ -149,12 +149,12 @@ static bool access_ok(httpd_req_t *req, bool post)
     if (client_ip(req, ip, ip_txt, sizeof(ip_txt))) {
         cl = client_entry(ip, now);
         if (!cl) {
-            ESP_LOGW(TAG, "Alle Sperr-Plätze belegt: %s gilt als gesperrt", ip_txt);
-            reply_429(req, now + LOCK_US, now);
-            return false;
+            /* Alle Plätze gesperrt: trotzdem prüfen (Besitzer nicht aussperren), Fehlversuche zählen nur global. */
+            ESP_LOGW(TAG, "Alle Sperr-Plätze belegt: %s wird nur global gezählt", ip_txt);
+        } else {
+            cl->last_us = now;
         }
-        cl->last_us = now;
-        if (now < cl->lock_until_us) {
+        if (cl && now < cl->lock_until_us) {
             reply_429(req, cl->lock_until_us, now);
             return false;
         }

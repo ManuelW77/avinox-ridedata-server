@@ -102,7 +102,7 @@ Neu einrichten: BOOT-Taste 3 s halten. Werkseinstellung: BOOT-Taste 10 s halten.
 
 **Weboberfläche im Betrieb:** Ist der ESP32 im Heim-WLAN, erreichst du ihn unter `http://<IP des ESP32>/` (IP aus dem Router). Login: Benutzer **`avinox`** (fest), Passwort = Zugangspasswort, also dasselbe wie für das Einrichtungs-WLAN. Dort siehst du den Status und änderst WLAN, Server-URL, Token und Passwort.
 
-**Rückfallebene (Passwort vergessen oder WLAN falsch eingetragen):** BOOT-Taste 3 s gedrückt halten und loslassen. Der ESP32 öffnet das Einrichtungs-WLAN dann **ohne Passwort**, und du vergibst beim Speichern ein neues Zugangspasswort. Ohne Speichern startet er nach 15 min wieder normal.
+**Rückfallebene (Passwort vergessen oder WLAN falsch eingetragen):** BOOT-Taste 3 s gedrückt halten und loslassen. Der ESP32 öffnet das Einrichtungs-WLAN dann **ohne Passwort**, und du vergibst beim Speichern ein neues Zugangspasswort und gibst den Upload-Token neu ein (steht auf dem Server unter Einstellungen). Ohne Speichern startet er nach 15 min wieder normal.
 
 ### d) Updates per WLAN (OTA)
 

@@ -98,7 +98,7 @@ Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgesch�
   (Einrichtungsmodus) und neu einrichten.
 - **Passwort vergessen (Notfallmodus):** Wird der Einrichtungsmodus per BOOT-Taste ausgelöst (Taste beim Start halten oder
   im Betrieb ≥ 3 s halten und loslassen), startet das Einrichtungs-WLAN **ohne Passwort**. Die Seite zeigt oben einen
-  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Bei geänderter Server-URL muss der Token, bei geändertem WLAN-Namen (nicht offen) das WLAN-Passwort neu eingegeben werden. Nach 15 min ohne Speichern
+  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Der Upload-Token muss immer neu eingegeben werden (gespeicherter wird nie übernommen), bei geändertem WLAN-Namen (nicht offen) auch das WLAN-Passwort. Nach 15 min ohne Speichern
   startet das Gerät in den Normalbetrieb neu (nur bei vollständiger Konfiguration). Über die Weboberfläche oder wegen
   unvollständiger Konfiguration gestarteter Einrichtungsmodus bleibt wie gehabt passwortgeschützt.
 

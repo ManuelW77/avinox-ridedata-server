@@ -102,7 +102,7 @@ Set up again: hold the BOOT button for 3 s. Factory reset: hold BOOT for 10 s.
 
 **Web interface in normal operation:** Once the ESP32 is on your home Wi-Fi, open `http://<ESP32 IP>/` (IP from your router). Login: user **`avinox`** (fixed), password = access password, the same as for the setup Wi-Fi. There you see the status and change Wi-Fi, server URL, token and password.
 
-**Fallback (password forgotten or wrong Wi-Fi entered):** Hold the BOOT button for 3 s and release it. The ESP32 then opens the setup Wi-Fi **without a password**, and you set a new access password when saving. Without saving it restarts normally after 15 min.
+**Fallback (password forgotten or wrong Wi-Fi entered):** Hold the BOOT button for 3 s and release it. The ESP32 then opens the setup Wi-Fi **without a password**, and when saving you set a new access password and enter the upload token again (shown on the server under Settings). Without saving it restarts normally after 15 min.
 
 ### d) Updates over Wi-Fi (OTA)
 
