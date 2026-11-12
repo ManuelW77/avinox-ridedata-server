@@ -3,6 +3,18 @@
 {% block main %}
 <div class="lead"><div><h1>{{ t('set.title') }}</h1></div></div>
 
+<section class="card" id="language" style="margin-bottom:1rem">
+  <h2>{{ t('set.lang') }}</h2>
+  <p class="muted small">{{ t('set.lang_text') }}</p>
+  <form method="get" action="/settings" class="actions">
+    <select name="lang" id="lang-select" aria-label="{{ t('set.lang') }}">
+      <option value="de"{% if lang == 'de' %} selected{% endif %}>Deutsch</option>
+      <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
+    </select>
+    <button type="submit" class="btn">{{ t('set.save') }}</button>
+  </form>
+</section>
+
 <section class="card" style="margin-bottom:1rem">
   <h2>{{ t('set.modes') }}</h2>
   <p class="muted small">{{ t('set.modes_text_html') }}</p>
