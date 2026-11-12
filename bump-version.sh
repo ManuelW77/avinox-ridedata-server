@@ -4,6 +4,8 @@
 # Welche Komponente Änderungen hat, wird per git diff gegen den letzten Tag der Komponente erkannt
 # (Fallback: letzter alter Tag vX.Y.Z). Gebumpt werden nur die erkannten bzw. erzwungenen Komponenten.
 # Ablauf: Version setzen, (bei server) testen, committen, devel -> main mergen, Tags setzen, pushen.
+# Release Notes: aus den Commit-Betreffen seit dem letzten Tag (ohne Merges und Versions-Commits), vor dem Taggen
+# editierbar; sie werden Tag-Nachricht und von der GitHub Action in das Release übernommen.
 # Tag server-v* startet Test + Docker-Image + Release, Tag fw-v* startet Firmware-Build + Release.
 #
 #   ./bump-version.sh                 # mit Abfrage (braucht ein Terminal), erkannte Komponenten
@@ -95,6 +97,19 @@ ask_version() {
   esac
 }
 
+# Release Notes (Commit-Betreffe) für <tag> (leer = alles) und <pfad>, ohne die Bump-Commits
+release_notes() {
+  local tag="$1" path="$2" out
+  if [[ -n "$tag" ]]; then
+    out="$(git log --no-merges --format='- %s' "$tag..devel" -- "$path")"
+  else
+    out="$(git log --no-merges --format='- %s' devel -- "$path")"
+  fi
+  out="$(printf '%s\n' "$out" | grep -v '^- Version ' || true)"
+  [[ -n "${out//[[:space:]]/}" ]] || out="- Kleinere Änderungen"
+  printf '%s\n' "$out"
+}
+
 cd "$(git rev-parse --show-toplevel)"
 
 if [[ -z "$CHECK" ]]; then
@@ -145,7 +160,9 @@ if [[ -z "$FORCE" ]] && { exec 4</dev/tty; } 2>/dev/null; then
 fi
 
 
-TAGS=() MSG=() FILES=()
+TAGS=() MSG=() FILES=() NOTEFILES=()
+NOTES_DIR="$(mktemp -d)"
+trap 'rm -rf "$NOTES_DIR"' EXIT
 if [[ "$DO_SERVER" == 1 ]]; then
   CUR_S="$(sed -nE 's/^version = "([^"]+)".*/\1/p' "$PY" | head -1)"
   NEW_S="$(ask_version "$CUR_S" "$CHOICE")" || exit 1
@@ -153,6 +170,8 @@ if [[ "$DO_SERVER" == 1 ]]; then
   git rev-parse -q --verify "refs/tags/$TAG_S" >/dev/null && { echo "❌ Tag $TAG_S gibt es schon." >&2; exit 1; }
   echo "➡️  Server ${CUR_S} → ${NEW_S}"
   TAGS+=("$TAG_S"); MSG+=("server $NEW_S"); FILES+=("$PY" server/uv.lock)
+  NF_S="$NOTES_DIR/server.txt"; NOTEFILES+=("$NF_S")
+  { echo "$TAG_S"; echo; release_notes "$server_TAG" server/; } > "$NF_S"
 fi
 if [[ "$DO_FW" == 1 ]]; then
   CUR_F="$(sed -nE 's/.*set\(PROJECT_VER "([^"]+)"\).*/\1/p' "$FW")"
@@ -161,7 +180,23 @@ if [[ "$DO_FW" == 1 ]]; then
   git rev-parse -q --verify "refs/tags/$TAG_F" >/dev/null && { echo "❌ Tag $TAG_F gibt es schon." >&2; exit 1; }
   echo "➡️  Firmware ${CUR_F} → ${NEW_F}"
   TAGS+=("$TAG_F"); MSG+=("fw $NEW_F"); FILES+=("$FW")
+  NF_F="$NOTES_DIR/fw.txt"; NOTEFILES+=("$NF_F")
+  { echo "$TAG_F"; echo; release_notes "$fw_TAG" esp32/avinox-sync/; } > "$NF_F"
 fi
+
+# Release Notes zeigen, mit Terminal optional bearbeiten, leere Notes abbrechen
+for i in "${!TAGS[@]}"; do
+  echo ""; echo "📝 Release Notes ${TAGS[$i]}:"; cat "${NOTEFILES[$i]}"
+  if { exec 6</dev/tty; } 2>/dev/null; then
+    read -r -p "Release Notes bearbeiten? [j/N] " ans <&6 || ans=""
+    if [[ "$ans" == [jJ]* ]]; then
+      ${EDITOR:-vi} "${NOTEFILES[$i]}" </dev/tty >/dev/tty
+    fi
+  fi
+  if [[ -z "$(tail -n +3 "${NOTEFILES[$i]}" | tr -d '[:space:]')" ]]; then
+    echo "❌ Release Notes für ${TAGS[$i]} sind leer – abgebrochen." >&2; exit 1
+  fi
+done
 
 if [[ "$DO_SERVER" == 1 ]]; then
   sed -i.bak -E "s/^version = \"[^\"]+\"/version = \"$NEW_S\"/" "$PY" && rm "$PY.bak"
@@ -186,13 +221,14 @@ git commit -qm "Version $SUMMARY"
 git switch -q main
 git merge -q --ff-only origin/main
 git merge --no-ff -q devel -m "Merge devel: Release $SUMMARY"
-for t in "${TAGS[@]}"; do git tag -a "$t" -m "$t"; done
+for i in "${!TAGS[@]}"; do git tag -a --cleanup=whitespace "${TAGS[$i]}" -F "${NOTEFILES[$i]}"; done
 git switch -q devel
 
 echo "main: $(git log --oneline -1 main)"
 echo "Tags: ${TAGS[*]}"
 
 if [[ "$DRY" == "--dry" ]]; then
+  for i in "${!TAGS[@]}"; do echo ""; echo "Release Notes ${TAGS[$i]}:"; cat "${NOTEFILES[$i]}"; done
   echo "--dry: nichts gepusht. Rückgängig: git tag -d ${TAGS[*]}; git switch main; git reset --hard origin/main; git switch devel; git reset --hard origin/devel"
   exit 0
 fi
