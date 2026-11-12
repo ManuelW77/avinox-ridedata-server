@@ -53,10 +53,10 @@ static void button_task(void *arg)
         int prev = held_ms;
         held_ms = pressed ? held_ms + 100 : 0;
         if (prev < BOOT_HOLD_MS && held_ms >= BOOT_HOLD_MS) {
-            led_set_state(LED_HOLD);
+            led_set_override(LED_HOLD);
         }
         if (prev < BOOT_FACTORY_MS && held_ms >= BOOT_FACTORY_MS) {
-            led_set_state(LED_FACTORY);
+            led_set_override(LED_FACTORY);
             ESP_LOGW(TAG, "BOOT %d s gedrückt: Werkseinstellung, Konfiguration wird gelöscht", BOOT_FACTORY_MS / 1000);
             if (config_factory_reset() != ESP_OK) {
                 ESP_LOGE(TAG, "Konfiguration nicht gelöscht");
@@ -67,9 +67,12 @@ static void button_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(300));
             esp_restart();
         }
+        if (prev > 0 && prev < BOOT_HOLD_MS && !pressed) {
+            led_clear_override();           /* vor 3 s losgelassen: normale Anzeige */
+        }
         if (prev >= BOOT_HOLD_MS && !pressed) {
             ESP_LOGW(TAG, "BOOT losgelassen: Neustart in den Einrichtungsmodus");
-            led_set_state(LED_SETUP);
+            led_set_override(LED_SETUP);
             if (config_request_portal() != ESP_OK) {
                 ESP_LOGE(TAG, "Merker nicht gespeichert");
             }
@@ -96,6 +99,9 @@ static void sync_task(void *arg)
     uint32_t seen_wifi = 0, seen_drive = 0;
     int64_t next_sync = 0;
     bool waiting_logged = false;
+    int64_t no_drive_since = esp_timer_get_time();   /* Start bzw. letztes Abziehen */
+    bool no_drive_logged = false;
+    const int64_t no_drive_us = (int64_t)CONFIG_AVX_NO_DRIVE_HINT_S * 1000000;
 
     while (true) {
         if (usb_drive_host_failed()) {
@@ -105,11 +111,25 @@ static void sync_task(void *arg)
         }
         drive_state_t ds = usb_drive_state();
         bool wifi = wifi_sta_connected();
+        bool no_drive_hint = false;
+        if (ds != DRIVE_ABSENT) {
+            no_drive_since = esp_timer_get_time();
+            no_drive_logged = false;
+        } else if (esp_timer_get_time() - no_drive_since >= no_drive_us) {
+            led_state_t cur = led_get_state();
+            no_drive_hint = cur != LED_HOLD && cur != LED_FACTORY;
+            if (!no_drive_logged) {
+                ESP_LOGW(TAG, "Kein Laufwerk gefunden - Display eingeschaltet? An der richtigen (nativen) USB-Buchse?");
+                no_drive_logged = true;
+            }
+        }
         if (ds == DRIVE_FAILED) {
             led_set_state(LED_ERROR);       /* bis zum Abziehen */
         }
         if (ds != DRIVE_READY || !wifi) {
-            if (ds != DRIVE_FAILED) {
+            if (no_drive_hint) {
+                led_set_state(LED_NO_DRIVE);
+            } else if (ds != DRIVE_FAILED) {
                 led_set_state(LED_WAIT);
             }
             if (!waiting_logged) {

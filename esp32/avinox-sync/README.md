@@ -32,6 +32,7 @@ Einstellungen unter `idf.py menuconfig` → „Avinox-Sync“:
 | `AVX_LED_GPIO` | 48 | WS2812-Status-LED, `-1` = aus (manche Boards: 38) |
 | `AVX_BOOT_GPIO` | 0 | BOOT-Taste (low-aktiv) |
 | `AVX_SYNC_INTERVAL_MIN` | 10 | Abstand zwischen zwei Syncs |
+| `AVX_NO_DRIVE_HINT_S` | 30 | Sekunden ohne Laufwerk bis die LED orange blinkt |
 | `AVX_CHUNK_SIZE` | 32768 | Größe eines Upload-Stücks in Byte |
 
 Flash-Aufteilung (`partitions.csv`, eingestellt sind 4 MB, das Board hat 16 MB): NVS 64 KB, phy_init, App 3 MB.
@@ -84,10 +85,14 @@ Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`
 | violett dauerhaft | BOOT ≥ 3 s gedrückt (Loslassen = Einrichtungsmodus) |
 | rot schnell blinkend | BOOT ≥ 10 s: Werkseinstellung |
 | blau blinkend | wartet auf Laufwerk und/oder WLAN |
+| orange blinkend | seit 30 s (`AVX_NO_DRIVE_HINT_S`) kein Laufwerk gefunden: Display eingeschaltet? An der nativen USB-Buchse? |
 | cyan | Sync läuft |
 | grün | Sync ok, alles aktuell |
 | gelb | Sync mit Fehlern (Server nicht erreichbar, Token falsch, Datei nicht hochgeladen …) – siehe Log |
 | rot | schwerer Fehler: USB-Host startet nicht, Laufwerk lässt sich nicht anmelden (bis zum Abziehen), NVS kaputt, Einrichtungs-WLAN startet nicht |
+
+**Hinweis:** Das Display muss an der **nativen USB-Buchse** des Boards hängen. Die UART-Buchse (CH343) ist selbst ein
+USB-Gerät und kann kein Laufwerk lesen.
 
 ## Ablauf
 
