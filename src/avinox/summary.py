@@ -181,6 +181,6 @@ def summarize(ride: Ride) -> Summary:
         motor_energy_wh=sum(x.motor_power_w * dt for x, dt in zip(s, dts)) / 3600,
         gps_points=sum(1 for x in s if x.latitude is not None),
         samples_avg_moving_speed_kmh=(sum(x.speed_kmh * dt for x, dt in moving) / moving_time) if moving_time else None,
-        samples_ascent_m=up,
-        samples_descent_m=down,
+        samples_ascent_m=None if up is None else round(up, 1),
+        samples_descent_m=None if down is None else round(down, 1),
     )

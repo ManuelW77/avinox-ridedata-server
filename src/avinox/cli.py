@@ -1,4 +1,10 @@
-"""Kommandozeile: ``avinox summary <datei|ordner> ... [--json]``."""
+"""Kommandozeile.
+
+* ``avinox summary <datei|ordner> ... [--json]`` – Kennzahlen je Fahrt
+* ``avinox analyze <datei> [--buried datei]`` – vollständige Auswertung als JSON
+* ``avinox gpx <datei> [-o ziel]`` / ``avinox geojson <datei> [-o ziel]`` – Strecke
+* ``avinox device <buried_file_cur.json>`` – Geräte- und Sessiondaten
+"""
 
 from __future__ import annotations
 
@@ -7,8 +13,12 @@ import json
 import sys
 from pathlib import Path
 
+from .analysis import analyze
+from .buried import device_info, parse_buried_file
+from .hms import parse_hms_file
 from .ride_rec import RideRecError, parse_file
 from .summary import summarize
+from .track import SIMPLIFY_TOLERANCE_M, to_geojson, to_gpx
 
 
 def _ride_files(paths: list[str]) -> list[Path]:
@@ -63,6 +73,79 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def find_buried(ride_path: Path) -> Path | None:
+    """Sucht ``buried_rec/buried_file_cur.json`` oberhalb der Fahrtdatei (Laufwerkswurzel)."""
+    for parent in ride_path.resolve().parents:
+        candidate = parent / "buried_rec" / "buried_file_cur.json"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _write(text: str, target: str | None) -> None:
+    if target:
+        Path(target).write_text(text, encoding="utf-8")
+    else:
+        sys.stdout.write(text)
+
+
+def _load(path: str):
+    try:
+        return parse_file(path)
+    except (OSError, RideRecError) as exc:
+        print(f"{path}: {exc}", file=sys.stderr)
+        return None
+
+
+def cmd_analyze(args: argparse.Namespace) -> int:
+    ride = _load(args.path)
+    if ride is None:
+        return 1
+    buried = Path(args.buried) if args.buried else find_buried(Path(args.path))
+    sessions = parse_buried_file(buried) if buried and buried.is_file() else None
+    _write(json.dumps(analyze(ride, sessions), indent=2 if args.pretty else None, ensure_ascii=False) + "\n", args.output)
+    return 0
+
+
+def cmd_gpx(args: argparse.Namespace) -> int:
+    ride = _load(args.path)
+    if ride is None:
+        return 1
+    _write(to_gpx(ride), args.output)
+    return 0
+
+
+def cmd_geojson(args: argparse.Namespace) -> int:
+    ride = _load(args.path)
+    if ride is None:
+        return 1
+    _write(json.dumps(to_geojson(ride, tolerance_m=args.tolerance), ensure_ascii=False) + "\n", args.output)
+    return 0
+
+
+def cmd_device(args: argparse.Namespace) -> int:
+    sessions = parse_buried_file(args.path)
+    out = {
+        **device_info(sessions),
+        "sessions": [
+            {
+                "boot_count": s.boot_count,
+                "end_time": s.end_time.isoformat() if s.end_time else None,
+                "power_on_s": s.power_on_s,
+                "rides": len(s.rides),
+                "battery": s.battery,
+                "thermal_limit": s.thermal_limit,
+            }
+            for s in sessions
+        ],
+    }
+    hms = Path(args.path).resolve().parent.parent / "hms_rec" / "hms_current_storage.proto"
+    if hms.is_file():
+        out["hms"] = [{"code": e.code, "time": e.time.isoformat() if e.time else None} for e in parse_hms_file(hms)]
+    print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avinox", description="Avinox-Fahrtdaten auswerten")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -70,6 +153,28 @@ def main(argv: list[str] | None = None) -> int:
     p_sum.add_argument("paths", nargs="+", help="ride_rec_*.proto-Dateien oder Ordner")
     p_sum.add_argument("--json", action="store_true", help="Ausgabe als JSON")
     p_sum.set_defaults(func=cmd_summary)
+
+    p_an = sub.add_parser("analyze", help="vollständige Auswertung einer Fahrt als JSON")
+    p_an.add_argument("path")
+    p_an.add_argument("--buried", help="buried_file_cur.json (Standard: auf dem Laufwerk suchen)")
+    p_an.add_argument("-o", "--output")
+    p_an.add_argument("--pretty", action="store_true")
+    p_an.set_defaults(func=cmd_analyze)
+
+    p_gpx = sub.add_parser("gpx", help="Strecke als GPX")
+    p_gpx.add_argument("path")
+    p_gpx.add_argument("-o", "--output")
+    p_gpx.set_defaults(func=cmd_gpx)
+
+    p_geo = sub.add_parser("geojson", help="vereinfachte Strecke als GeoJSON")
+    p_geo.add_argument("path")
+    p_geo.add_argument("-o", "--output")
+    p_geo.add_argument("--tolerance", type=float, default=SIMPLIFY_TOLERANCE_M, help="Vereinfachung in Metern")
+    p_geo.set_defaults(func=cmd_geojson)
+
+    p_dev = sub.add_parser("device", help="Geräte- und Sessiondaten aus buried_file_cur.json")
+    p_dev.add_argument("path")
+    p_dev.set_defaults(func=cmd_device)
     args = parser.parse_args(argv)
     return args.func(args)
 
