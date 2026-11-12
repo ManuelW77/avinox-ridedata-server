@@ -138,7 +138,7 @@ def test_highlights(store, filled):
     h = {x["key"]: x for x in d["highlights"]}
     assert filled["test"] not in {x.get("ride") for x in d["highlights"]}  # Testfahrt ignoriert
     assert h["rider_kj"]["ride"] == filled["oct"]
-    assert h["rider_kj"]["sentence"] == "Am Do 15.10.2026 hattest du die meiste Eigenleistung: 450 kJ."
+    assert h["rider_kj"]["sentence"] == "Am Do 15.10.2026 hast du die meiste eigene Energie aufgebracht: 450 kJ."
     assert h["distance"]["ride"] == filled["oct"]
     assert h["motor_share_max"]["ride"] == filled["last"]
     assert h["motor_share_min"]["ride"] == filled["oct"]

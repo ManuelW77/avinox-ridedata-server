@@ -68,7 +68,7 @@ _DE: dict[str, str] = {
     "recent.title": "Letzte Fahrten", "recent.all": "Alle Fahrten", "recent.share_title": "Motoranteil {v} %",
     "total.title": "Gesamtbilanz",
     "fig.rides": "Fahrten", "fig.distance": "Strecke", "fig.time": "Fahrzeit", "fig.ascent": "Höhenmeter",
-    "fig.rider_energy": "Eigenleistung", "fig.motor_energy": "Motorenergie", "fig.avg_share": "Ø Motoranteil", "fig.calories": "Kalorien",
+    "fig.rider_energy": "Eigene Energie", "fig.motor_energy": "Motorenergie", "fig.avg_share": "Ø Motoranteil", "fig.calories": "Kalorien",
     "dash.undated_one": "{n} Fahrt ohne Uhrzeit ist nur hier enthalten, nicht in den Zeiträumen.",
     "dash.undated_many": "{n} Fahrten ohne Uhrzeit sind nur hier enthalten, nicht in den Zeiträumen.",
     # --- Zeiträume (Python)
@@ -79,12 +79,12 @@ _DE: dict[str, str] = {
     "week.short": "KW {w}", "week.title": "KW {w}/{y} ({a}–{b})",
     "when.on": "Am {d}", "when.ride": "Bei Fahrt {n} (ohne Datum)", "when.week": "In KW {w}/{y}", "when.month": "Im {m} {y}",
     "bestp.title.day": "Bester Tag", "bestp.title.week": "Beste Woche", "bestp.title.month": "Bester Monat",
-    "bestp.title.rider_kj": "{t} · Eigenleistung", "bestp.title.distance_km": "{t} · Strecke",
+    "bestp.title.rider_kj": "{t} · Eigene Energie", "bestp.title.distance_km": "{t} · Strecke",
     "bestp.noun.day": "an einem Tag", "bestp.noun.week": "in einer Woche", "bestp.noun.month": "in einem Monat",
     "bestp.what.rider_kj": "am meisten selbst geleistet", "bestp.what.distance_km": "die längste Strecke geschafft",
     "bestp.sentence": "{when} hast du {noun} {what}: {v} bei {n} Fahrten.",
     # --- Bestwerte (Python)
-    "best.rider_kj.title": "Meiste Eigenleistung", "best.rider_kj.s": "{when} hattest du die meiste Eigenleistung: {v}.",
+    "best.rider_kj.title": "Meiste eigene Energie", "best.rider_kj.s": "{when} hast du die meiste eigene Energie aufgebracht: {v}.",
     "best.avg_rider_power.title": "Höchste Ø-Leistung", "best.avg_rider_power.s": "{when} bist du mit der höchsten Durchschnittsleistung gefahren: {v}.",
     "best.best_5min.title": "Stärkste 5 Minuten", "best.best_5min.s": "{when} hast du deine stärksten 5 Minuten getreten: {v} im Schnitt.",
     "best.best_20min.title": "Stärkste 20 Minuten", "best.best_20min.s": "{when} hast du deine stärksten 20 Minuten getreten: {v} im Schnitt.",
@@ -206,7 +206,7 @@ _DE: dict[str, str] = {
     "sync.events": "Letzte Ereignisse", "sync.th.time": "Zeit", "sync.th.ip": "IP", "sync.th.device": "Gerät", "sync.th.kind": "Art", "sync.th.file": "Datei",
     "sync.th.size": "Größe", "sync.th.detail": "Status / Detail",
     # --- JS (Präfix js.)
-    "js.kpi.rides": "Fahrten", "js.kpi.moving": "Fahrzeit", "js.kpi.ascent": "Höhenmeter", "js.kpi.rider": "Eigenleistung", "js.kpi.avg_rider": "Ø Fahrerleistung",
+    "js.kpi.rides": "Fahrten", "js.kpi.moving": "Fahrzeit", "js.kpi.ascent": "Höhenmeter", "js.kpi.rider": "Eigene Energie", "js.kpi.avg_rider": "Ø Fahrerleistung",
     "js.kpi.motor_wh": "Motorenergie", "js.kpi.share": "Motoranteil", "js.kpi.battery": "Akkuverbrauch", "js.kpi.calories": "Kalorien",
     "js.no_compare": "kein Vergleich", "js.same": "wie davor", "js.pts": "Pkt.", "js.nothing_before": "davor nichts",
     "js.versus_prefix": "ggü. ",
