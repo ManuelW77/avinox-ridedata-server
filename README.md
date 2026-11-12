@@ -39,6 +39,7 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 ## Benötigt
 
 - **ESP32-S3-Board mit zwei USB-Buchsen:** eine native (zum Display) und eine UART-Buchse (zum Flashen).
+  Empfohlen und getestet: [ESP32-S3-N16R8 mit RGB-LED](https://link.amazon/B08n7R9ww). Die LED zeigt den Zustand an, man braucht keine Zusatzteile.
 - **Rechner oder NAS mit Docker**, im selben WLAN erreichbar.
 
 ## Installation

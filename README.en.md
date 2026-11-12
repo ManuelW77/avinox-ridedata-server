@@ -39,6 +39,7 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 ## Requirements
 
 - **ESP32-S3 board with two USB ports:** one native (to the display) and one UART port (for flashing).
+  Recommended and tested: [ESP32-S3-N16R8 with RGB LED](https://link.amazon/B08n7R9ww). The LED shows the status, no extra parts needed.
 - **Computer or NAS with Docker**, reachable on the same Wi-Fi.
 
 ## Installation
