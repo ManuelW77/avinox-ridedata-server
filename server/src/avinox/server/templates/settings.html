@@ -92,8 +92,9 @@
 
 <section class="card">
   <h2>{{ t('set.api') }}</h2>
-  <div class="form-row" style="margin-bottom:0.75rem">
+  <div class="form-row" style="margin-bottom:0.75rem;align-items:start">
     <label>{{ t('set.server_url') }}</label>
+    <div>
     <p class="muted small" style="margin:0 0 0.5rem">{{ t('set.url_explain') }}</p>
     {% for key, url, hint in server_urls %}
     <div style="margin-bottom:0.5rem">
@@ -110,6 +111,7 @@
     {% if server_url_unreachable %}
     <p class="notice small" style="margin-top:0.5rem">{{ t('set.url_unreachable_html') }}</p>
     {% endif %}
+    </div>
   </div>
   <div class="form-row" style="margin-bottom:0.75rem">
     <label for="token">{{ t('set.token') }}</label>
