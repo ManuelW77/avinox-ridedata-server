@@ -1,5 +1,10 @@
 "use strict";
 (() => {
+  // Texte aus <script id="i18n"> (siehe base.html), Sprache in I.lang
+  let I = {};
+  try { I = JSON.parse(document.getElementById("i18n").textContent) || {}; } catch (e) { I = {}; }
+  const tr = (key, vars) => String(I[key] != null ? I[key] : key).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m));
+  const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
   // ---- Eigene Modi benennen
   const form = document.getElementById("modes-form");
   if (form) {
@@ -8,14 +13,14 @@
       ev.preventDefault();
       const body = {};
       form.querySelectorAll("input[data-level]").forEach((el) => { body[el.dataset.level] = el.value.trim(); });
-      status.textContent = "Speichere …";
+      status.textContent = tr("saving");
       try {
         const res = await fetch("/api/v1/settings/modes", {
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
-        status.textContent = res.ok ? "Gespeichert." : `Fehler ${res.status}`;
+        status.textContent = res.ok ? tr("saved") : tr("error_n", { n: res.status });
       } catch (e) {
-        status.textContent = "Fehler: " + e.message;
+        status.textContent = tr("error_msg", { m: e.message });
       }
     });
   }
@@ -43,11 +48,11 @@
     doneEl.hidden = true;
     const c = { done: 0, neu: 0, known: 0, err: 0 };
     const show = () => {
-      statusEl.textContent = `${c.done} / ${items.length} · neu: ${c.neu} · bekannt: ${c.known} · Fehler: ${c.err}`;
+      statusEl.textContent = tr("upload_progress", { done: c.done, total: items.length, new: c.neu, known: c.known, err: c.err });
     };
     show();
     if (!items.length) {
-      statusEl.textContent = "Keine passenden Dateien gefunden (erwartet: Ordner mit ride_rec/, buried_rec/ oder hms_rec/).";
+      statusEl.textContent = tr("upload_none");
       busy = false;
       return;
     }
@@ -104,7 +109,7 @@
       zone.classList.remove("over");
       const entries = [...ev.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
       const out = [];
-      statusEl.textContent = "Lese Ordner …";
+      statusEl.textContent = tr("reading_folder");
       for (const e of entries) await walk(e, out);
       upload(out);
     });
@@ -118,7 +123,7 @@
     showBtn.addEventListener("click", () => {
       const hidden = token.type === "password";
       token.type = hidden ? "text" : "password";
-      showBtn.textContent = hidden ? "verbergen" : "anzeigen";
+      showBtn.textContent = hidden ? tr("hide") : tr("show");
     });
   }
   if (token && copyBtn) {
@@ -128,8 +133,8 @@
       } catch (e) {
         token.type = "text"; token.select(); document.execCommand("copy"); token.type = "password";
       }
-      copyBtn.textContent = "kopiert";
-      setTimeout(() => { copyBtn.textContent = "kopieren"; }, 1500);
+      copyBtn.textContent = tr("copied");
+      setTimeout(() => { copyBtn.textContent = tr("copy"); }, 1500);
     });
   }
 
@@ -143,8 +148,8 @@
       } catch (e) {
         urlEl.select(); document.execCommand("copy");
       }
-      urlCopy.textContent = "kopiert";
-      setTimeout(() => { urlCopy.textContent = "kopieren"; }, 1500);
+      urlCopy.textContent = tr("copied");
+      setTimeout(() => { urlCopy.textContent = tr("copy"); }, 1500);
     });
   }
 
@@ -158,24 +163,24 @@
       if (!file) return;
       const fd = new FormData();
       fd.append("file", file, file.name);
-      fwStatus.textContent = "Lade hoch …";
+      fwStatus.textContent = tr("fw_uploading");
       try {
         const res = await fetch("/api/v1/firmware", { method: "POST", body: fd });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) { fwStatus.textContent = body.detail || `Fehler ${res.status}`; return; }
+        if (!res.ok) { fwStatus.textContent = body.detail || tr("error_n", { n: res.status }); return; }
         location.reload();
       } catch (e) {
-        fwStatus.textContent = "Fehler: " + e.message;
+        fwStatus.textContent = tr("error_msg", { m: e.message });
       }
     });
   }
   document.querySelectorAll("[data-fw-current],[data-fw-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const del = btn.hasAttribute("data-fw-delete");
-      if (del && !confirm("Diese Firmware-Version löschen?")) return;
+      if (del && !confirm(tr("fw_confirm_delete"))) return;
       const id = del ? btn.dataset.fwDelete : btn.dataset.fwCurrent;
       const res = await fetch(`/api/v1/firmware/${id}` + (del ? "" : "/current"), { method: del ? "DELETE" : "POST" });
-      if (res.ok) location.reload(); else if (fwStatus) fwStatus.textContent = `Fehler ${res.status}`;
+      if (res.ok) location.reload(); else if (fwStatus) fwStatus.textContent = tr("error_n", { n: res.status });
     });
   });
 })();

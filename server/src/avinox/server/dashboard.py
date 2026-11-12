@@ -11,6 +11,9 @@ from zoneinfo import ZoneInfo
 
 from markupsafe import Markup, escape
 
+from . import i18n
+from .i18n import t
+
 PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5}
 """Zeitraum -> Anzahl der Balken in der Zeitreihe."""
 
@@ -21,13 +24,9 @@ MIN_KM_SELF = 2.0
 MIN_BATTERY_PCT = 5
 """„Sparsamste Fahrt“ nur bei mindestens so viel Akkuverbrauch (sonst rundungsgetrieben)."""
 
-WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
-MONTHS = ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
-MONTHS_SHORT = ("Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
-
-CURRENT = {"day": "Heute", "week": "Diese Woche", "month": "Dieser Monat", "year": "Dieses Jahr"}
-LAST = {"day": "Gestern", "week": "Letzte Woche", "month": "Letzter Monat", "year": "Letztes Jahr"}
-VERSUS = {"day": "ggü. Vortag", "week": "ggü. Vorwoche", "month": "ggü. Vormonat", "year": "ggü. Vorjahr"}
+WEEKDAYS = i18n.WEEKDAYS["de"]
+MONTHS = i18n.MONTHS["de"]
+MONTHS_SHORT = i18n.MONTHS_SHORT["de"]
 
 RIDE_SQL = """
 SELECT id, ride_id, start_utc, distance_m, duration_s, moving_time_s, ascent_m, max_speed_kmh,
@@ -50,11 +49,9 @@ ORDER BY start_utc IS NULL, start_utc DESC, path DESC
 # ----------------------------------------------------------------- Formatierung
 
 
-def num(value: float | None, digits: int = 0) -> str:
-    """Deutsche Zahl: 1.234,5"""
-    if value is None:
-        return "–"
-    return f"{value:,.{digits}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def num(value: float | None, digits: int = 0, lang: str = "de") -> str:
+    """Zahl je Sprache: 1.234,5 bzw. 1,234.5"""
+    return i18n.num(value, digits, lang)
 
 
 def emphasize(sentence: str, value_text: str) -> Markup:
@@ -63,8 +60,8 @@ def emphasize(sentence: str, value_text: str) -> Markup:
     return Markup(safe.replace(escape(value_text), Markup("<strong>") + escape(value_text) + Markup("</strong>"), 1))
 
 
-def day_text(d: date) -> str:
-    return f"{WEEKDAYS[d.weekday()]} {d:%d.%m.%Y}"
+def day_text(d: date, lang: str = "de") -> str:
+    return i18n.day_text(d, lang)
 
 
 # ----------------------------------------------------------------- Zeiträume
@@ -114,27 +111,28 @@ def period_key(start: date, period: str) -> str:
     return str(start.year)
 
 
-def period_label(start: date, period: str) -> str:
+def period_label(start: date, period: str, lang: str = "de") -> str:
     """Kurz für die Diagrammachse."""
     if period == "day":
         return f"{start.day}.{start.month}."
     if period == "week":
-        return f"KW {start.isocalendar()[1]}"
+        return t("week.short", lang, w=start.isocalendar()[1])
     if period == "month":
-        return f"{MONTHS_SHORT[start.month - 1]} {start:%y}"
+        return f"{i18n.MONTHS_SHORT[i18n.norm(lang)][start.month - 1]} {start:%y}"
     return str(start.year)
 
 
-def period_title(start: date, period: str) -> str:
+def period_title(start: date, period: str, lang: str = "de") -> str:
     """Ausführlich, z. B. für Überschriften und Sätze."""
     if period == "day":
-        return day_text(start)
+        return day_text(start, lang)
     if period == "week":
         y, w, _ = start.isocalendar()
         end = start + timedelta(days=6)
-        return f"KW {w}/{y} ({start:%d.%m.}–{end:%d.%m.%Y})"
+        first = f"{start:%d.%m.}" if i18n.norm(lang) == "de" else f"{start:%m-%d}"
+        return t("week.title", lang, w=w, y=y, a=first, b=i18n.date_text(end, lang))
     if period == "month":
-        return f"{MONTHS[start.month - 1]} {start.year}"
+        return f"{i18n.MONTHS[i18n.norm(lang)][start.month - 1]} {start.year}"
     return str(start.year)
 
 
@@ -200,49 +198,36 @@ def compare(cur: dict, prev: dict) -> dict:
 # ----------------------------------------------------------------- Bestwerte
 
 
-def _when(r: dict) -> str:
+def _when(r: dict, lang: str = "de") -> str:
     """Satzanfang: „Am Do 05.11.2026“ bzw. „Bei Fahrt 7 (ohne Datum)“."""
-    return f"Am {day_text(r['_local'])}" if r["_local"] else f"Bei Fahrt {r['ride_id']} (ohne Datum)"
+    return t("when.on", lang, d=day_text(r["_local"], lang)) if r["_local"] else t("when.ride", lang, n=r["ride_id"])
 
 
 RIDE_BESTS = [
-    # key, Gruppe, Titel, Feld, Einheit, Stellen, max/min, Mindest-km, Satz
-    ("rider_kj", "rider", "Meiste Eigenleistung", "rider_kj", "kJ", 0, max, MIN_KM_BEST,
-     "{when} hattest du die meiste Eigenleistung: {v}."),
-    ("avg_rider_power", "rider", "Höchste Ø-Leistung", "avg_rider_power_w", "W", 0, max, MIN_KM_BEST,
-     "{when} bist du mit der höchsten Durchschnittsleistung gefahren: {v}."),
-    ("best_5min", "rider", "Stärkste 5 Minuten", "best_5min_w", "W", 0, max, MIN_KM_BEST,
-     "{when} hast du deine stärksten 5 Minuten getreten: {v} im Schnitt."),
-    ("best_20min", "rider", "Stärkste 20 Minuten", "best_20min_w", "W", 0, max, MIN_KM_BEST,
-     "{when} hast du deine stärksten 20 Minuten getreten: {v} im Schnitt."),
-    ("max_rider_power", "rider", "Höchste Spitzenleistung", "max_rider_power_w", "W", 0, max, MIN_KM_BEST,
-     "{when} hast du am kräftigsten in die Pedale getreten: {v} Spitze."),
-    ("motor_share_max", "motor", "Motor hat am meisten geholfen", "motor_share_pct", "%", 0, max, MIN_KM_BEST,
-     "{when} hat der Motor am meisten geholfen: {v} der Energie kamen von ihm."),
-    ("motor_share_min", "motor", "Am meisten selbst getreten", "motor_share_pct", "%", 0, min, MIN_KM_SELF,
-     "{when} hast du am meisten selbst getreten: nur {v} Motoranteil."),
-    ("motor_wh", "motor", "Meiste Motorenergie", "motor_wh", "Wh", 0, max, MIN_KM_BEST,
-     "{when} hat der Motor am meisten Energie geliefert: {v}."),
-    ("max_motor_power", "motor", "Höchste Motorleistung", "max_motor_power_w", "W", 0, max, MIN_KM_BEST,
-     "{when} hat der Motor am kräftigsten geschoben: {v} Spitze."),
-    ("distance", "ride", "Längste Fahrt", "distance_km", "km", 1, max, MIN_KM_BEST,
-     "{when} bist du am weitesten gefahren: {v}."),
-    ("ascent", "ride", "Meiste Höhenmeter", "ascent_m", "m", 0, max, MIN_KM_BEST,
-     "{when} hast du die meisten Höhenmeter gesammelt: {v}."),
-    ("max_speed", "ride", "Höchstes Tempo", "max_speed_kmh", "km/h", 1, max, MIN_KM_BEST,
-     "{when} warst du am schnellsten unterwegs: {v}."),
-    ("km_per_pct", "ride", "Sparsamste Fahrt", "km_per_pct", "km je 1 % Akku", 2, max, MIN_KM_BEST,
-     "{when} bist du am sparsamsten gefahren: {v}."),
+    # key, Gruppe, Feld, Einheit, Stellen, max/min, Mindest-km (Titel und Satz: ``best.<key>.title``/``.s`` in i18n)
+    ("rider_kj", "rider", "rider_kj", "kJ", 0, max, MIN_KM_BEST),
+    ("avg_rider_power", "rider", "avg_rider_power_w", "W", 0, max, MIN_KM_BEST),
+    ("best_5min", "rider", "best_5min_w", "W", 0, max, MIN_KM_BEST),
+    ("best_20min", "rider", "best_20min_w", "W", 0, max, MIN_KM_BEST),
+    ("max_rider_power", "rider", "max_rider_power_w", "W", 0, max, MIN_KM_BEST),
+    ("motor_share_max", "motor", "motor_share_pct", "%", 0, max, MIN_KM_BEST),
+    ("motor_share_min", "motor", "motor_share_pct", "%", 0, min, MIN_KM_SELF),
+    ("motor_wh", "motor", "motor_wh", "Wh", 0, max, MIN_KM_BEST),
+    ("max_motor_power", "motor", "max_motor_power_w", "W", 0, max, MIN_KM_BEST),
+    ("distance", "ride", "distance_km", "km", 1, max, MIN_KM_BEST),
+    ("ascent", "ride", "ascent_m", "m", 0, max, MIN_KM_BEST),
+    ("max_speed", "ride", "max_speed_kmh", "km/h", 1, max, MIN_KM_BEST),
+    ("km_per_pct", "ride", "km_per_pct", "km je 1 % Akku", 2, max, MIN_KM_BEST),
 ]
 
 
-def _value_text(value: float, unit: str, digits: int) -> str:
-    return f"{num(value, digits)} {unit}" if unit != "%" else f"{num(value, digits)} %"
+def _value_text(value: float, unit: str, digits: int, lang: str = "de") -> str:
+    return f"{num(value, digits, lang)} {unit}"
 
 
-def ride_bests(rows: list[dict]) -> list[dict]:
+def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
     out = []
-    for key, group, title, field, unit, digits, pick, min_km, sentence in RIDE_BESTS:
+    for key, group, field, unit, digits, pick, min_km in RIDE_BESTS:
         cands = [r for r in rows if r[field] is not None and r["distance_km"] >= min_km]
         if field == "km_per_pct":
             cands = [r for r in cands if (r["battery_used_pct"] or 0) >= MIN_BATTERY_PCT]
@@ -251,17 +236,18 @@ def ride_bests(rows: list[dict]) -> list[dict]:
         if not cands:
             continue
         best = pick(cands, key=lambda r: r[field])
-        vt = _value_text(best[field], unit, digits)
+        unit = t("unit.km_per_pct", lang) if unit == "km je 1 % Akku" else unit
+        vt = _value_text(best[field], unit, digits, lang)
         out.append({
-            "key": key, "group": group, "title": title, "ride": best["id"],
+            "key": key, "group": group, "title": t(f"best.{key}.title", lang), "ride": best["id"],
             "date": best["_local"].isoformat() if best["_local"] else None,
             "value": best[field], "unit": unit, "value_text": vt,
-            "sentence": sentence.format(when=_when(best), v=vt),
+            "sentence": t(f"best.{key}.s", lang, when=_when(best, lang), v=vt),
         })
     return out
 
 
-def period_bests(rows: list[dict], today: date) -> list[dict]:
+def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
     """Tag/Woche/Monat mit der meisten Eigenleistung und der längsten Strecke.
 
     Ein Zeitraum erscheint nur, wenn er mehr bringt als die nächstkleinere Stufe
@@ -273,13 +259,12 @@ def period_bests(rows: list[dict], today: date) -> list[dict]:
         "rider_kj": max((r["rider_kj"] or 0 for r in dated), default=0),
         "distance_km": max((r["distance_km"] for r in dated), default=0),
     }
-    for period, noun in (("day", "an einem Tag"), ("week", "in einer Woche"), ("month", "in einem Monat")):
+    for period in ("day", "week", "month"):
         buckets: dict[date, dict] = {}
         for r in dated:
             _add(buckets.setdefault(period_start(r["_local"], period), _empty()), r)
         sums = {k: _finish(v) for k, v in buckets.items()}
-        for field, unit, digits, what in (("rider_kj", "kJ", 0, "am meisten selbst geleistet"),
-                                          ("distance_km", "km", 1, "die längste Strecke geschafft")):
+        for field, unit, digits in (("rider_kj", "kJ", 0), ("distance_km", "km", 1)):
             if not sums:
                 continue
             start = max(sums, key=lambda k: (sums[k][field], k))
@@ -288,16 +273,16 @@ def period_bests(rows: list[dict], today: date) -> list[dict]:
             if round(value, digits) <= round(finer[field], digits):
                 continue
             finer[field] = value
-            vt = _value_text(value, unit, digits)
-            when = {"day": f"Am {day_text(start)}", "week": f"In KW {start.isocalendar()[1]}/{start.isocalendar()[0]}",
-                    "month": f"Im {MONTHS[start.month - 1]} {start.year}"}[period]
+            vt = _value_text(value, unit, digits, lang)
+            when = {"day": t("when.on", lang, d=day_text(start, lang)),
+                    "week": t("when.week", lang, w=start.isocalendar()[1], y=start.isocalendar()[0]),
+                    "month": t("when.month", lang, m=i18n.MONTHS[i18n.norm(lang)][start.month - 1], y=start.year)}[period]
             out.append({
                 "key": f"{period}_{field}", "group": "period", "period": period,
-                "title": {"day": "Bester Tag", "week": "Beste Woche", "month": "Bester Monat"}[period]
-                + (" · Eigenleistung" if field == "rider_kj" else " · Strecke"),
+                "title": t(f"bestp.title.{field}", lang, t=t(f"bestp.title.{period}", lang)),
                 "offset": steps_between(period_start(today, period), start, period),
-                "label": period_title(start, period), "value": value, "unit": unit, "value_text": vt, "rides": s["rides"],
-                "sentence": f"{when} hast du {noun} {what}: {vt} bei {s['rides']} Fahrten.",
+                "label": period_title(start, period, lang), "value": value, "unit": unit, "value_text": vt, "rides": s["rides"],
+                "sentence": t("bestp.sentence", lang, when=when, noun=t(f"bestp.noun.{period}", lang), what=t(f"bestp.what.{field}", lang), v=vt, n=s["rides"]),
             })
     return out
 
@@ -315,7 +300,7 @@ def load_rows(db, tz: ZoneInfo) -> list[dict]:
     return rows
 
 
-def build(rows: list[dict], period: str, offset: int, today: date) -> dict:
+def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "de") -> dict:
     if period not in PERIODS:
         raise ValueError(f"Unbekannter Zeitraum: {period}")
     dated = [r["_local"] for r in rows if r["_local"]]
@@ -336,16 +321,16 @@ def build(rows: list[dict], period: str, offset: int, today: date) -> dict:
             _add(accs[i], r)
     series = []
     for s, acc in zip(starts, accs):
-        series.append({"key": period_key(s, period), "label": period_label(s, period), "title": period_title(s, period),
+        series.append({"key": period_key(s, period), "label": period_label(s, period, lang), "title": period_title(s, period, lang),
                        "start": s.isoformat(), "end": period_end(s, period).isoformat(), **_finish(acc)})
     cur, prev = series[-1], series[-2]
 
     if offset == 0:
-        cur_name = CURRENT[period]
+        cur_name = t(f"cur.{period}", lang)
     elif offset == 1:
-        cur_name = LAST[period]
+        cur_name = t(f"last.{period}", lang)
     else:
-        cur_name = period_title(current, period)
+        cur_name = period_title(current, period, lang)
 
     total_acc = _empty()
     for r in rows:
@@ -365,9 +350,10 @@ def build(rows: list[dict], period: str, offset: int, today: date) -> dict:
 
     cmp = compare(cur, prev)
     d = cmp["distance_km"]
-    headline = f"{cur_name}: {num(cur['distance_km'], 1)} km"
+    versus = t(f"versus.{period}", lang)
+    headline = t("headline", lang, name=cur_name, km=num(cur["distance_km"], 1, lang))
     if d["delta_pct"] is not None:
-        headline += f", {'+' if d['delta_pct'] >= 0 else '−'}{abs(d['delta_pct'])} % {VERSUS[period]}"
+        headline += t("headline.delta", lang, sign="+" if d["delta_pct"] >= 0 else "−", p=abs(d["delta_pct"]), versus=versus)
 
     return {
         "period": period,
@@ -377,12 +363,12 @@ def build(rows: list[dict], period: str, offset: int, today: date) -> dict:
         "last_offset": max(0, steps_between(period_start(today, period), period_start(max(dated), period), period)) if dated else None,
         "today": today.isoformat(),
         "current": {**cur, "name": cur_name},
-        "previous": {**prev, "name": "Zeitraum davor"},
-        "versus": VERSUS[period],
+        "previous": {**prev, "name": t("period.before", lang)},
+        "versus": versus,
         "comparison": cmp,
         "headline": headline,
         "series": series,
-        "highlights": ride_bests(real) + period_bests(real, today),
+        "highlights": ride_bests(real, lang) + period_bests(real, today, lang),
         "total": total,
         "recent": recent,
     }

@@ -2,20 +2,20 @@
 {% block main %}
 <div class="lead">
   <div>
-    <h1>Fahrten</h1>
-    <p>{{ stats.total.rides }} Fahrten · {{ stats.total.distance_km | num(1) }} km · {{ stats.total.ascent_m | num }} Hm · {{ stats.total.moving_time_s | duration }} h in Bewegung</p>
+    <h1>{{ t('rides.title') }}</h1>
+    <p>{{ t('rides.summary', n=stats.total.rides, km=stats.total.distance_km | num(1), hm=stats.total.ascent_m | num, h=stats.total.moving_time_s | duration) }}</p>
   </div>
-  <a class="btn ghost" href="/settings#upload">Dateien hochladen</a>
+  <a class="btn ghost" href="/settings#upload">{{ t('btn.upload') }}</a>
 </div>
 
 {% if stats.months %}
 {% set max_km = stats.months.values() | map(attribute='distance_km') | max %}
 <section class="card" style="margin-bottom:1rem">
-  <h2>Pro Monat</h2>
+  <h2>{{ t('rides.per_month') }}</h2>
   <div class="bars wide">
     {% for month, m in stats.months.items() %}
     <div class="bar">
-      <span class="label">{{ month[5:] }}/{{ month[:4] }} · {{ m.rides }} Fahrten</span>
+      <span class="label">{{ t('rides.month_label', m=month[5:], y=month[:4], n=m.rides) }}</span>
       <span class="track"><span class="fill motor" style="width: {{ (100 * m.distance_km / max_km) if max_km else 0 }}%"></span></span>
       <span class="val">{{ m.distance_km | num(1) }} km</span>
     </div>
@@ -26,27 +26,27 @@
 
 {% if rides %}
 <div class="rides-head">
-  <span>Datum</span><span>Strecke</span><span>Dauer</span><span class="opt">Höhe</span><span class="opt">Ø Fahrer</span><span class="opt">Akku</span><span></span>
+  <span>{{ t('col.date') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span><span></span>
 </div>
 <ul class="rides">
   {% for r in rides %}
   <li>
     <a class="ride-row" href="/rides/{{ r.id }}">
-      <span class="when">{{ r.start_utc | localtime('%a %d.%m.%Y') }}<span>{{ r.start_utc | localtime('%H:%M Uhr') if r.start_utc else 'Fahrt ' ~ r.ride_id }}</span></span>
+      <span class="when">{{ r.start_utc | localtime('%a %d.%m.%Y') }}<span>{{ r.start_utc | localtime('%H:%M Uhr') if r.start_utc else t('ride_n', n=r.ride_id) }}</span></span>
       <span class="n">{{ (r.distance_m / 1000) | num(1) }}<small>km</small></span>
       <span class="n">{{ r.duration_s | duration }}</span>
       <span class="n opt">{{ r.ascent_m | num }}<small>m</small></span>
       <span class="n opt">{{ r.avg_rider_power_w | num }}<small>W</small></span>
       <span class="n opt">{% if r.battery_start_pct is not none %}{{ r.battery_start_pct }}→{{ r.battery_end_pct }}<small>%</small>{% else %}–{% endif %}</span>
-      <span class="flags" title="{{ 'mit GPS' if r.has_gps else 'ohne GPS' }}">{{ '◉' if r.has_gps else '' }}</span>
+      <span class="flags" title="{{ t('gps.with') if r.has_gps else t('gps.without') }}">{{ '◉' if r.has_gps else '' }}</span>
     </a>
   </li>
   {% endfor %}
 </ul>
 {% else %}
 <div class="card empty">
-  <p>Noch keine Fahrten.</p>
-  <p class="small">Dateien vom Display unter <a href="/settings#upload">Einstellungen</a> hochladen oder mit <code>avinox import &lt;laufwerk&gt;</code> einlesen.</p>
+  <p>{{ t('empty.none') }}</p>
+  <p class="small">{{ t('empty.hint_html') }}</p>
 </div>
 {% endif %}
 {% endblock %}

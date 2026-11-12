@@ -4,6 +4,11 @@
 
   const dataEl = document.getElementById("ride-data");
   if (!dataEl) return;
+  // Texte aus <script id="i18n"> (siehe base.html), Sprache in I.lang
+  let I = {};
+  try { I = JSON.parse(document.getElementById("i18n").textContent) || {}; } catch (e) { I = {}; }
+  const tr = (key, vars) => String(I[key] != null ? I[key] : key).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m));
+  const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
   let ride;
   try { ride = JSON.parse(dataEl.textContent); } catch (e) { return; }
 
@@ -17,7 +22,7 @@
   const cssVar = (name, fallback) => (css().getPropertyValue(name) || "").trim() || fallback;
 
   const fmt = (v, digits) => (v == null || !isFinite(v)) ? "–"
-    : Number(v).toLocaleString("de-DE", { minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0 });
+    : Number(v).toLocaleString(LOCALE, { minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0 });
 
   function withAlpha(color, a) {
     const c = color.trim();
@@ -45,7 +50,7 @@
   function modeName(v) {
     if (v == null) return "–";
     const k = String(Math.round(v));
-    return modes[k] || ("Modus " + k);
+    return modes[k] || tr("mode_n", { n: k });
   }
 
   // Binäre Suche: Index des Werts in arr (aufsteigend, über get) am nächsten an target.
@@ -151,7 +156,7 @@
         buildSegments(t, vals.map((v) => classOf(v, br.cuts)), (c) => (c === -1 ? grey : SCALE[c]));
       } else {
         buildSegments(t, vals.map(() => -1), () => grey);
-        items.push([grey, "keine Werte"]);
+        items.push([grey, tr("no_values")]);
       }
     }
     legend(items);
@@ -249,7 +254,7 @@
       if (pts.length > 1) {
         L.polyline(pts, { color: cssVar("--alt", "#6b6f9a"), weight: 3, dashArray: "6 6", interactive: false }).addTo(map);
         bounds = L.latLngBounds(pts);
-        legend([[cssVar("--alt", "#6b6f9a"), "Vorschau (ohne GPS)"]]);
+        legend([[cssVar("--alt", "#6b6f9a"), tr("preview_nogps")]]);
       }
     }
 
@@ -260,7 +265,7 @@
       L.circleMarker([c[1], c[0]], {
         radius: 6, weight: 2, color: surface, fillOpacity: 1,
         fillColor: kind === "start" ? cssVar("--motor", "#13877a") : ink,
-      }).bindTooltip(kind === "start" ? "Start" : "Ende").addTo(map);
+      }).bindTooltip(kind === "start" ? tr("start") : tr("end")).addTo(map);
     });
 
     if (geo && Array.isArray(geo.bbox) && geo.bbox.length >= 4) {
@@ -310,7 +315,7 @@
     if (typeof uPlot === "undefined" || !rows.length) {
       const p = document.createElement("p");
       p.className = "muted small";
-      p.textContent = rows.length ? "Diagramme konnten nicht geladen werden." : "Keine Verlaufsdaten.";
+      p.textContent = rows.length ? tr("charts_failed") : tr("no_course");
       chartsEl.appendChild(p);
       return;
     }
@@ -343,36 +348,36 @@
     const xAxis = axis({
       values: mode === "time" ? (u, vals) => vals.map(hmm) : (u, vals) => vals.map((v) => fmt(v, v < 10 ? 1 : 0)),
     });
-    const xLabel = mode === "time" ? "Zeit" : "Strecke";
+    const xLabel = mode === "time" ? tr("time") : tr("distance");
     const xValue = mode === "time" ? (u, v) => hmm(v) : (u, v) => (v == null ? "–" : fmt(v, 2) + " km");
     const val = (unit, digits) => (u, v) => (v == null ? "–" : fmt(v, digits) + " " + unit);
     const yVals = (u, vals) => vals.map((v) => fmt(v, 0));
 
     const defs = [];
     const alt = get("altitude_m");
-    if (hasData(alt)) defs.push({ title: "Höhe", data: [alt], series: [{ label: "Höhe", stroke: c.alt, fill: withAlpha(c.alt, 0.25), value: val("m", 0) }] });
+    if (hasData(alt)) defs.push({ title: tr("c.alt"), data: [alt], series: [{ label: tr("c.alt"), stroke: c.alt, fill: withAlpha(c.alt, 0.25), value: val("m", 0) }] });
     const spd = get("speed_kmh");
-    if (hasData(spd)) defs.push({ title: "Tempo", data: [spd], series: [{ label: "Tempo", stroke: c.ink2, value: val("km/h", 1) }] });
+    if (hasData(spd)) defs.push({ title: tr("c.speed"), data: [spd], series: [{ label: tr("c.speed"), stroke: c.ink2, value: val("km/h", 1) }] });
     const rp = get("rider_power_w"), mp = get("motor_power_w");
     if (hasData(rp) || hasData(mp)) {
-      const d = { title: "Leistung", data: [], series: [] };
-      if (hasData(rp)) { d.data.push(rp); d.series.push({ label: "Fahrer", stroke: c.rider, value: val("W", 0) }); }
-      if (hasData(mp)) { d.data.push(mp); d.series.push({ label: "Motor", stroke: c.motor, value: val("W", 0) }); }
+      const d = { title: tr("c.power"), data: [], series: [] };
+      if (hasData(rp)) { d.data.push(rp); d.series.push({ label: tr("s.rider"), stroke: c.rider, value: val("W", 0) }); }
+      if (hasData(mp)) { d.data.push(mp); d.series.push({ label: tr("s.motor"), stroke: c.motor, value: val("W", 0) }); }
       defs.push(d);
     }
     const cad = get("cadence_rpm");
-    if (hasData(cad)) defs.push({ title: "Trittfrequenz", data: [cad], series: [{ label: "Trittfrequenz", stroke: c.rider, value: val("U/min", 0) }] });
+    if (hasData(cad)) defs.push({ title: tr("c.cadence"), data: [cad], series: [{ label: tr("c.cadence"), stroke: c.rider, value: val(tr("rpm"), 0) }] });
     const bat = get("battery_pct"), tmp = get("temperature_c");
     if (hasData(bat) || hasData(tmp)) {
-      const d = { title: "Akku", data: [], series: [], axes: [] };
+      const d = { title: tr("c.battery"), data: [], series: [], axes: [] };
       if (hasData(bat)) {
         d.data.push(bat);
-        d.series.push({ label: "Akku", stroke: c.motor, scale: "pct", value: val("%", 0) });
+        d.series.push({ label: tr("c.battery"), stroke: c.motor, scale: "pct", value: val("%", 0) });
         d.axes.push(axis({ scale: "pct", values: (u, vs) => vs.map((v) => fmt(v, 0) + " %") }));
       }
       if (hasData(tmp)) {
         d.data.push(tmp);
-        d.series.push({ label: "Temperatur", stroke: c.ink3, scale: "c", value: val("°C", 1) });
+        d.series.push({ label: tr("c.temp"), stroke: c.ink3, scale: "c", value: val("°C", 1) });
         d.axes.push(axis(Object.assign({ scale: "c", values: (u, vs) => vs.map((v) => fmt(v, 0) + " °C") },
           d.axes.length ? { side: 1, grid: { show: false } } : {})));
       }

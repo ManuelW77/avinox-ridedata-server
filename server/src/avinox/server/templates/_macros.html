@@ -20,6 +20,6 @@
   </div>
   {% endif %}
   {% endfor %}
-  {% if not total %}<p class="muted small">Keine Daten.</p>{% endif %}
+  {% if not total %}<p class="muted small">{{ t('no_data') }}</p>{% endif %}
 </div>
 {%- endmacro %}

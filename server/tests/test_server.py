@@ -285,3 +285,103 @@ def test_settings_server_url(tmp_path, monkeypatch):
     client = TestClient(create_app(load_settings(tmp_path)))
     html = client.get("/settings", headers={"host": "localhost:8000"}).text
     assert 'value="http://10.0.0.5:8000"' in html and "erreicht der ESP32 nicht" not in html
+
+
+# ------------------------------------------------------------ Sprache und Fußzeile
+
+FOOTER = '© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · '
+PAGES = ("/", "/rides", "/device", "/sync", "/settings")
+
+
+@pytest.mark.parametrize("path", PAGES)
+@pytest.mark.parametrize("lang", ["de", "en"])
+def test_footer_on_every_page(client, path, lang):
+    html = client.get(path, params={"lang": lang}).text
+    assert FOOTER in html
+    assert '<a href="https://manuelw.de" rel="noopener">manuelw.de</a>' in html
+
+
+def test_default_language_is_german(client):
+    r = client.get("/")
+    assert '<html lang="de">' in r.text and "Noch keine Fahrten." in r.text
+    assert "set-cookie" not in r.headers
+
+
+def test_lang_query_sets_cookie_and_english(client):
+    r = client.get("/", params={"lang": "en"})
+    assert '<html lang="en">' in r.text and "No rides yet." in r.text and "Noch keine Fahrten" not in r.text
+    cookie = r.headers["set-cookie"]
+    assert "lang=en" in cookie and "Max-Age=31536000" in cookie and "SameSite=lax" in cookie
+    # Cookie bleibt für Folgeaufrufe ohne ?lang= erhalten
+    assert "No rides yet." in client.get("/").text
+    # Query schlägt Cookie
+    assert "Noch keine Fahrten." in client.get("/", params={"lang": "de"}).text
+
+
+def test_invalid_lang_ignored(client):
+    r = client.get("/", params={"lang": "fr"})
+    assert '<html lang="de">' in r.text and "set-cookie" not in r.headers
+
+
+def test_accept_language(client):
+    r = client.get("/", headers={"Accept-Language": "en-US,en;q=0.9,de;q=0.8"})
+    assert '<html lang="en">' in r.text
+    assert '<html lang="de">' in client.get("/", headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.5"}).text
+    assert '<html lang="de">' in client.get("/", headers={"Accept-Language": "fr-FR,fr;q=0.9"}).text
+    # Cookie schlägt Accept-Language
+    client.cookies.set("lang", "de")
+    assert '<html lang="de">' in client.get("/", headers={"Accept-Language": "en"}).text
+
+
+def test_language_switcher_keeps_query(client):
+    html = client.get("/", params={"period": "week", "lang": "en"}).text
+    assert 'href="?period=week&amp;lang=de"' in html and 'href="?period=week&amp;lang=en"' in html
+
+
+def test_pages_render_in_english_with_data(client, settings):
+    assert put(client, settings, ride_bytes()).status_code == 200
+    pages = {p: client.get(p, params={"lang": "en"}) for p in (*PAGES, "/rides/1")}
+    for p, r in pages.items():
+        assert r.status_code == 200, p
+        assert 'id="i18n"' in r.text
+    assert "Fahrten" not in pages["/rides"].text
+    assert "Elevation gain" in pages["/rides/1"].text
+    assert "Abgleich" not in pages["/sync"].text
+
+
+def test_dashboard_api_texts_follow_language(client, settings):
+    put(client, settings, ride_bytes())
+    de = client.get("/api/v1/dashboard", params={"period": "week"}).json()
+    en = client.get("/api/v1/dashboard", params={"period": "week", "lang": "en"}).json()
+    assert de["current"]["name"] == "Diese Woche" and en["current"]["name"] == "This week"
+    assert set(de) == set(en)
+
+
+def test_all_keys_in_both_languages():
+    import string
+
+    from avinox.server import i18n
+
+    assert set(i18n.TEXTS["de"]) == set(i18n.TEXTS["en"])
+    for key in i18n.TEXTS["de"]:
+        names = {lang: {f for _, f, _, _ in string.Formatter().parse(i18n.TEXTS[lang][key]) if f} for lang in i18n.LANGS}
+        assert names["de"] == names["en"], key
+    assert i18n.js_texts("de").keys() == i18n.js_texts("en").keys()
+
+
+def test_used_keys_exist():
+    """Jeder in Templates, Code und Skripten verwendete Schlüssel steht im Wörterbuch."""
+    import re
+    from pathlib import Path
+
+    from avinox.server import i18n
+
+    base = Path(i18n.__file__).parent
+    known = set(i18n.TEXTS["de"])
+    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.")
+    for path in [*base.glob("templates/*.html"), base / "app.py", base / "dashboard.py"]:
+        for key in re.findall(r"\bt\(\s*['\"]([a-z0-9_.]+)['\"]", path.read_text()):
+            assert key in known or key.startswith(dynamic), (path.name, key)
+    for path in base.glob("static/*.js"):
+        for key in re.findall(r"\btr\(\s*\"([a-z0-9_.]+)\"", path.read_text()):
+            assert f"js.{key}" in known or f"js.{key}".startswith("js.span."), (path.name, key)
