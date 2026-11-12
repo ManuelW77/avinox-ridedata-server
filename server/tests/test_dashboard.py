@@ -268,3 +268,13 @@ def test_mix_in_api(client):
     assert "mix" in j and j["mix"]["rides"] >= 0 and "seconds_per_mode" in j["mix"]["assist"]
     page = client.get("/", params={"period": "year"})
     assert 'id="mix"' in page.text
+
+
+def test_mix_moving_seconds_per_mode_and_gear():
+    a = _mix_ride({"eco": _mode(100, 50, 1000, 20.0, 100, 50)})
+    a["gears"]["per_gear"] = {"2": {"seconds": 60, "moving_seconds": 30}, "1": {"seconds": 40, "moving_seconds": 40}}
+    b = _mix_ride({"eco": _mode(300, 150, 3000, 10.0, 200, 150), "turbo": _mode(60, 60, 500, 30.0, 400, 80)})
+    b["gears"]["per_gear"] = {"1": {"seconds": 10}}  # altes Format ohne moving_seconds
+    m = dash.mix([a, b])
+    assert m["assist"]["moving_seconds_per_mode"] == {"eco": 200, "turbo": 60}
+    assert m["gears"]["moving_seconds_per_gear"] == {"1": 50, "2": 30}

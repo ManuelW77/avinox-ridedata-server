@@ -343,12 +343,15 @@ def mix(rows: list[dict]) -> dict:
     acc: dict[str, dict] = {}
     changes = gear_changes = 0
     gears: dict[str, float] = {}
+    moving_modes: dict[str, float] = {}
+    moving_gears: dict[str, float] = {}
     dists: dict[str, dict[str, float] | None] = {k: None for k in DIST_KEYS}
     for r in rows:
         assist = r.get("assist") or {}
         for name, secs in (assist.get("seconds_per_mode") or {}).items():
             seconds_per_mode[name] = seconds_per_mode.get(name, 0) + (secs or 0)
         for name, m in (assist.get("per_mode") or {}).items():
+            moving_modes[name] = moving_modes.get(name, 0) + (m.get("moving_seconds", m.get("seconds")) or 0)
             a = acc.setdefault(name, {"seconds": 0, "moving_seconds": 0, "distance_m": 0, "spd": 0.0, "spd_t": 0, "mot": 0.0, "mot_t": 0, "rid": 0.0, "rid_t": 0})
             secs, mv = m.get("seconds") or 0, m.get("moving_seconds") or 0
             a["seconds"] += secs
@@ -362,6 +365,8 @@ def mix(rows: list[dict]) -> dict:
         g = r.get("gears") or {}
         for gear, secs in (g.get("seconds_per_gear") or {}).items():
             gears[gear] = gears.get(gear, 0) + (secs or 0)
+        for gear, m in (g.get("per_gear") or {}).items():
+            moving_gears[gear] = moving_gears.get(gear, 0) + (m.get("moving_seconds", m.get("seconds")) or 0)
         gear_changes += g.get("changes") or 0
         d = r.get("dist") or {}
         for key in DIST_KEYS:
@@ -380,8 +385,10 @@ def mix(rows: list[dict]) -> dict:
     return {
         "rides": len(rows),
         "assist": {"seconds_per_mode": dict(sorted(seconds_per_mode.items(), key=lambda kv: _mode_order(kv[0]))),
-                   "per_mode": dict(sorted(per_mode.items(), key=lambda kv: _mode_order(kv[0]))), "changes": changes},
-        "gears": {"seconds_per_gear": dict(sorted(gears.items(), key=lambda kv: _gear_order(kv[0]))), "changes": gear_changes},
+                   "per_mode": dict(sorted(per_mode.items(), key=lambda kv: _mode_order(kv[0]))), "changes": changes,
+                   "moving_seconds_per_mode": dict(sorted(moving_modes.items(), key=lambda kv: _mode_order(kv[0])))},
+        "gears": {"seconds_per_gear": dict(sorted(gears.items(), key=lambda kv: _gear_order(kv[0]))), "changes": gear_changes,
+                  "moving_seconds_per_gear": dict(sorted(moving_gears.items(), key=lambda kv: _gear_order(kv[0])))},
         "distributions": dists,
     }
 

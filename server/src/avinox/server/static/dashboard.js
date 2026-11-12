@@ -176,10 +176,10 @@
     if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
     box.innerHTML =
       `<div class="grid cols-2" style="margin-bottom:1rem">
-        <section class="card"><h2>${esc(tr("mix.modes"))}</h2>${barsHtml(a.seconds_per_mode, "motor")}
+        <section class="card"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
           <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table>
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</p></section>
-        <section class="card"><h2>${esc(tr("mix.gears"))}</h2>${barsHtml(g.seconds_per_gear, "")}
+        <section class="card"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
       </div>
       <div class="grid cols-3" style="margin-bottom:1rem">${cards.join("")}</div>`;
