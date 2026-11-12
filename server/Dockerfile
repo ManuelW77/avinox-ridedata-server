@@ -13,7 +13,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 # … dann das Paket selbst (nicht editable, inkl. static/ und templates/)
-COPY README.md LICENSE ./
+COPY README.md ./
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
