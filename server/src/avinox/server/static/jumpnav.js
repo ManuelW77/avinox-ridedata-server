@@ -22,6 +22,7 @@
   function build() {
     nav.textContent = "";
     links = [];
+    current = null; // neue Links brauchen die Markierung neu
     blocks.forEach(function (b) {
       if (!visible(b)) return;
       var a = document.createElement("a");
@@ -60,6 +61,7 @@
   }
 
   build();
+  document.addEventListener("themechange", function () { build(); });
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", onScroll);
   // Blöcke, die erst per Skript eingeblendet werden (z. B. Verteilung), neu erfassen.

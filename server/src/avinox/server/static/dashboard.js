@@ -386,6 +386,7 @@
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(buildCharts, 150);
   });
+  document.addEventListener("themechange", buildCharts);
   if (window.matchMedia) {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     (mq.addEventListener ? mq.addEventListener.bind(mq, "change") : mq.addListener.bind(mq))(buildCharts);
