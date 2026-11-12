@@ -503,8 +503,6 @@ bool sync_run(const app_config_t *cfg, sync_result_t *out)
     http_ctx_t ctx = { 0 };
 
     ESP_LOGI(TAG, "Sync startet (Server %s)", cfg->url);
-    char auth[CFG_TOKEN_MAX + 16];
-    snprintf(auth, sizeof(auth), "Bearer %s", cfg->token);
     char first_url[URL_MAX];
     snprintf(first_url, sizeof(first_url), "%s/api/v1/manifest", cfg->url);
     esp_http_client_config_t hc = {
@@ -521,9 +519,7 @@ bool sync_run(const app_config_t *cfg, sync_result_t *out)
         snprintf(res.msg, sizeof(res.msg), "HTTP-Client: kein Speicher");
         goto done;
     }
-    esp_http_client_set_header(ctx.client, "Authorization", auth);
-    esp_http_client_set_header(ctx.client, "X-Avinox-Device", report_device_id());
-    memset(auth, 0, sizeof(auth));
+    report_set_headers(ctx.client, cfg->token);
 
     if (fetch_manifest(&ctx, cfg->url, &manifest, res.msg, sizeof(res.msg)) != ESP_OK) {
         goto done;

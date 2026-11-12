@@ -6,6 +6,7 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_system.h"
@@ -131,6 +132,95 @@ static esp_err_t scan_get(httpd_req_t *req)
     return httpd_resp_send(req, NULL, 0);
 }
 
+/* ---- Verbindung prüfen: Station für die Prüfung kurz mit dem eingetragenen WLAN verbinden */
+
+#define PROBE_WIFI_MS   15000
+#define BIT_GOT_IP      BIT0
+#define BIT_FAILED      BIT1
+
+static EventGroupHandle_t s_wev;
+static volatile bool s_probing;
+static volatile int s_fail_reason;
+
+static void probe_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    if (!s_probing) {
+        return;
+    }
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        s_fail_reason = ((const wifi_event_sta_disconnected_t *)data)->reason;
+        xEventGroupSetBits(s_wev, BIT_FAILED);
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        xEventGroupSetBits(s_wev, BIT_GOT_IP);
+    }
+}
+
+static web_wifi_result_t probe_connect(const char *ssid, const char *pass, int *reason)
+{
+    if (!s_wev) {
+        s_wev = xEventGroupCreate();
+        if (!s_wev ||
+            esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, probe_event, NULL) != ESP_OK ||
+            esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, probe_event, NULL) != ESP_OK) {
+            return WIFI_PROBE_FAIL;
+        }
+    }
+    wifi_config_t wc = { 0 };
+    strlcpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid));
+    strlcpy((char *)wc.sta.password, pass, sizeof(wc.sta.password));
+    wc.sta.threshold.authmode = pass[0] ? WIFI_AUTH_WPA_PSK : WIFI_AUTH_OPEN;
+    wc.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    wc.sta.pmf_cfg.capable = true;
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &wc);
+    memset(&wc, 0, sizeof(wc));
+    if (err != ESP_OK) {
+        *reason = err;
+        return WIFI_PROBE_FAIL;
+    }
+    xEventGroupClearBits(s_wev, BIT_GOT_IP | BIT_FAILED);
+    s_fail_reason = 0;
+    s_probing = true;
+    err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        *reason = err;
+        return WIFI_PROBE_FAIL;
+    }
+    EventBits_t bits = xEventGroupWaitBits(s_wev, BIT_GOT_IP | BIT_FAILED, pdTRUE, pdFALSE, pdMS_TO_TICKS(PROBE_WIFI_MS));
+    if (bits & BIT_GOT_IP) {
+        return WIFI_PROBE_OK;
+    }
+    if (!(bits & BIT_FAILED)) {
+        return WIFI_PROBE_TIMEOUT;
+    }
+    *reason = s_fail_reason;
+    ESP_LOGI(TAG, "WLAN-Prüfung fehlgeschlagen, Grund %d", s_fail_reason);
+    switch (s_fail_reason) {
+    case WIFI_REASON_NO_AP_FOUND:
+        return WIFI_PROBE_NOT_FOUND;
+    case WIFI_REASON_AUTH_FAIL:
+    case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_HANDSHAKE_TIMEOUT:
+    case WIFI_REASON_MIC_FAILURE:
+        return WIFI_PROBE_AUTH;
+    default:
+        return WIFI_PROBE_FAIL;
+    }
+}
+
+static void probe_release(void)
+{
+    s_probing = false;
+    esp_wifi_disconnect();      /* Portal läuft danach wie vorher (Station getrennt) */
+}
+
+static const web_wifi_probe_t s_probe = { .connect = probe_connect, .release = probe_release };
+
+static esp_err_t check_post(httpd_req_t *req)
+{
+    return web_handle_check(req, &s_cfg, &s_probe);
+}
+
 static esp_err_t save_post(httpd_req_t *req)
 {
     return web_handle_save(req, &s_cfg, true);
@@ -170,7 +260,7 @@ static esp_err_t captive_redirect(httpd_req_t *req)
 static void start_http(void)
 {
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 16;
+    c.max_uri_handlers = 20;
     c.max_open_sockets = 7;
     c.lru_purge_enable = true;
     c.stack_size = 6144;
@@ -187,6 +277,7 @@ static void start_http(void)
         { .uri = "/scan", .method = HTTP_GET, .handler = scan_get },
         { .uri = "/save", .method = HTTP_POST, .handler = save_post },
         { .uri = "/restart", .method = HTTP_POST, .handler = restart_post },
+        { .uri = "/check", .method = HTTP_POST, .handler = check_post },
         { .uri = "/hotspot-detect.html", .method = HTTP_GET, .handler = captive_redirect },
         { .uri = "/library/test/success.html", .method = HTTP_GET, .handler = captive_redirect },
         { .uri = "/generate_204", .method = HTTP_GET, .handler = captive_redirect },
