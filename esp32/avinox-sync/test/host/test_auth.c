@@ -3,6 +3,7 @@
  *   cd test/host && cc -Wall -Wextra -Ishim -I../../main ../../main/web_auth.c test_auth.c -o test_auth && ./test_auth
  */
 #include <stdio.h>
+#include <string.h>
 #include "web_auth.h"
 
 static int fails;
@@ -32,6 +33,30 @@ int main(void)
     for (int i = 6; i < 599; i++) big[i] = 'A';
     big[599] = '\0';
     CHECK(!web_basic_auth_valid(big, "admin", "geheim123"));
+
+    /* Diagnose */
+    web_auth_info_t in;
+    CHECK(web_basic_auth_check(ok, "admin", "geheim123", &in) && in.reason == AUTH_OK);
+    CHECK(!web_basic_auth_check(ok, "admin", "geheim124", &in) && in.reason == AUTH_BAD_PASS);
+    CHECK(strcmp(in.user, "admin") == 0 && in.pass_len == 9 && in.expected_pass_len == 9);
+    CHECK(!web_basic_auth_check(ok, "root", "geheim123", &in) && in.reason == AUTH_BAD_USER);
+    CHECK(!web_basic_auth_check(ok, "admin", "geheim1234", &in) && in.reason == AUTH_BAD_PASS && in.expected_pass_len == 10);
+    CHECK(!web_basic_auth_check("Bearer abc", "admin", "geheim123", &in) && in.reason == AUTH_NOT_BASIC);
+    CHECK(!web_basic_auth_check("Basic !!!!", "admin", "geheim123", &in) && in.reason == AUTH_BAD_BASE64);
+    CHECK(!web_basic_auth_check("Basic YWRtaW4=", "admin", "geheim123", &in) && in.reason == AUTH_NO_COLON);   /* "admin" */
+    CHECK(!web_basic_auth_check(NULL, "admin", "geheim123", &in) && in.reason == AUTH_NO_HEADER);
+    CHECK(!web_basic_auth_check(big, "admin", "geheim123", &in) && in.reason == AUTH_BAD_BASE64);
+    /* Benutzername mit Nicht-ASCII: "ad\xc3\xa4:x" -> "ad??" */
+    CHECK(!web_basic_auth_check("Basic YWTDpDp4", "admin", "geheim123", &in) && strcmp(in.user, "ad??") == 0);
+    CHECK(strlen(web_auth_reason_str(AUTH_TRUNCATED)) > 0);
+
+    CHECK(web_referer_matches_host("http://192.168.1.5/", "192.168.1.5"));
+    CHECK(web_referer_matches_host("http://192.168.1.5:8080/setup?x=1", "192.168.1.5:8080"));
+    CHECK(web_referer_matches_host("http://Avinox.local/", "avinox.local"));
+    CHECK(!web_referer_matches_host("http://evil.example/http://192.168.1.5/", "192.168.1.5"));
+    CHECK(!web_referer_matches_host("http://192.168.1.5.evil.example/x", "192.168.1.5"));
+    CHECK(!web_referer_matches_host("", "192.168.1.5"));
+    CHECK(!web_referer_matches_host(NULL, "192.168.1.5"));
 
     CHECK(web_origin_matches_host("http://192.168.1.5", "192.168.1.5"));
     CHECK(web_origin_matches_host("http://192.168.1.5:8080", "192.168.1.5:8080"));

@@ -31,10 +31,18 @@ esp_err_t config_save(const app_config_t *cfg);
 /* Werkseinstellung: gesamten Namespace "cfg" löschen. */
 esp_err_t config_factory_reset(void);
 
-/* Merker für "beim nächsten Start Einrichtungsmodus" (BOOT-Taste im Betrieb). */
-esp_err_t config_request_portal(void);
-/* true, wenn der Merker gesetzt war; löscht ihn dabei. */
-bool config_take_portal_request(void);
+/* Merker für "beim nächsten Start Einrichtungsmodus". rescue = per BOOT-Taste ausgelöst (Notfallmodus,
+ * Einrichtungs-WLAN offen), sonst über die Weboberfläche (normal). */
+esp_err_t config_request_portal(bool rescue);
+
+typedef enum {
+    PORTAL_REQ_NONE = 0,
+    PORTAL_REQ_NORMAL = 1,
+    PORTAL_REQ_RESCUE = 2,
+} portal_request_t;
+
+/* Liefert den Merker und löscht ihn dabei. */
+portal_request_t config_take_portal_request(void);
 
 /* Server-URL säubern (Leerzeichen, abschließende '/'); true wenn http:// oder https://. */
 bool config_normalize_url(char *url);

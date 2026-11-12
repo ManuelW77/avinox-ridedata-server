@@ -197,14 +197,20 @@ static const char *const TXT[T_COUNT][2] = {
     [T_URL_LBL] = { "Server-URL", "Server URL" },
     [T_TOKEN_LBL] = { "Upload-Token", "Upload token" },
     [T_PH_TOKEN] = { "vom Server, siehe README", "from the server, see README" },
-    [T_AP_H] = { "Passwort für dieses Einrichtungs-WLAN", "Password for this setup Wi-Fi" },
+    [T_AP_H] = { "Zugangspasswort (Einrichtungs-WLAN und Weboberfläche)", "Access password (setup Wi-Fi and web interface)" },
     [T_AP_NEW] = { "Neues Passwort (mindestens 8 Zeichen)", "New password (at least 8 characters)" },
     [T_PH_REQUIRED] = { "Pflicht", "required" },
     [T_AP_REPEAT] = { "Passwort wiederholen", "Repeat password" },
-    [T_AP_NOTE] = { "Gilt ab dem nächsten Einrichtungsmodus (BOOT 3 s).", "Applies from the next setup mode (hold BOOT 3 s)." },
+    [T_AP_NOTE] = { "Schützt das Einrichtungs-WLAN und die Weboberfläche im Betrieb (Benutzer avinox). Nicht das Passwort deines Heim-WLANs verwenden.", "Protects the setup Wi-Fi and the web interface in normal operation (user avinox). Do not use your home Wi-Fi password." },
     [T_LANG_H] = { "Sprache", "Language" },
     [T_LANG_NOTE] = { "Sprache der Weboberfläche. Wird im Browser gespeichert.", "Language of the web interface. Stored in your browser." },
     [T_LANG_SAVE] = { "Speichern", "Save" },
+    [T_RESCUE] = { "Notfallmodus: Einrichtungs-WLAN ohne Passwort. Bitte ein neues Zugangspasswort vergeben und den Upload-Token neu eingeben (steht auf dem Server unter Einstellungen).",
+                   "Emergency mode: setup Wi-Fi without a password. Please set a new access password and enter the upload token again (shown on the server under Settings)." },
+    [T_E_RESCUE_TOKEN] = { "Notfallmodus: Bitte den Upload-Token neu eingeben.",
+                           "Emergency mode: please enter the upload token again." },
+    [T_E_RESCUE_WIFI] = { "Notfallmodus: Bei geändertem WLAN-Namen muss das WLAN-Passwort neu eingegeben werden.",
+                          "Emergency mode: if the Wi-Fi name is changed, the Wi-Fi password must be entered again." },
     [T_SAVE_BTN] = { "Speichern und neu starten", "Save and restart" },
     [T_RESTART_BTN] = { "Ohne Änderung neu starten", "Restart without changes" },
     [T_OPEN_SUFFIX] = { ", offen", ", open" },
@@ -242,8 +248,8 @@ static const char *const TXT[T_COUNT][2] = {
     [T_SETTINGS] = { "Einstellungen", "Settings" },
     [T_ACCESS_H] = { "Zugangspasswort", "Access password" },
     [T_ACCESS_NEW] = { "Neues Passwort (mindestens 8 Zeichen)", "New password (at least 8 characters)" },
-    [T_ACCESS_NOTE] = { "Login dieser Seite (Benutzer admin) und Passwort des Einrichtungs-WLANs.",
-                        "Login of this page (user admin) and password of the setup Wi-Fi." },
+    [T_ACCESS_NOTE] = { "Login dieser Seite (Benutzer avinox) und Passwort des Einrichtungs-WLANs.",
+                        "Login of this page (user avinox) and password of the setup Wi-Fi." },
     [T_WARN_WIFI] = { "Achtung: Bei falschem WLAN-Namen oder -Passwort ist das Gerät danach nicht mehr erreichbar. "
                       "Dann die BOOT-Taste 3 Sekunden halten (Einrichtungsmodus) und neu einrichten.",
                       "Caution: with a wrong Wi-Fi name or password the device is no longer reachable afterwards. "
@@ -401,6 +407,22 @@ esp_err_t web_send_message(httpd_req_t *req, const char *cls, web_text_t text, b
 
 /* ------------------------------------------------------------ Einstellungsformular */
 
+static bool s_rescue;
+
+void web_set_rescue(bool on)
+{
+    s_rescue = on;
+}
+
+void web_render_rescue_banner(buf_t *b)
+{
+    if (s_rescue) {
+        buf_append(b, "<section class=\"err\"><p><b>");
+        buf_append_esc(b, T(T_RESCUE));
+        buf_append(b, "</b></p></section>");
+    }
+}
+
 void web_render_form(buf_t *b, const app_config_t *cfg, const wifi_ap_record_t *aps, uint16_t ap_count, bool portal)
 {
     buf_append(b, "<section><h2>");
@@ -532,6 +554,10 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     if (!nc->ssid[0]) {
         return web_send_message(req, "err", T_E_NOSSID, true);
     }
+    /* Notfallmodus: Zugangsdaten dürfen nicht stillschweigend an ein anderes Ziel umgeleitet werden. */
+    if (s_rescue && strcmp(nc->ssid, cur->ssid) != 0 && !open[0] && !pass[0]) {
+        return web_send_message(req, "err", T_E_RESCUE_WIFI, true);
+    }
     if (open[0]) {
         nc->pass[0] = '\0';
     } else if (pass[0]) {
@@ -540,7 +566,7 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
         }
         strlcpy(nc->pass, pass, sizeof(nc->pass));
     }
-    if (ap_pass[0] || !nc->ap_pass[0]) {
+    if (s_rescue || ap_pass[0] || !nc->ap_pass[0]) {      /* Notfallmodus: altes Passwort nie behalten */
         if (strlen(ap_pass) < 8) {
             return web_send_message(req, "err", T_E_APPASS, true);
         }
@@ -551,6 +577,9 @@ static esp_err_t save_apply(httpd_req_t *req, app_config_t *cur, app_config_t *n
     }
     if (!config_normalize_url(url)) {
         return web_send_message(req, "err", T_E_URL, true);
+    }
+    if (s_rescue && !token[0]) {        /* gespeicherten Token nie übernehmen: sonst über anderes WLAN/URL abgreifbar */
+        return web_send_message(req, "err", T_E_RESCUE_TOKEN, true);
     }
     strlcpy(nc->url, url, sizeof(nc->url));
     if (token[0]) {

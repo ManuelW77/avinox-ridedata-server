@@ -109,12 +109,12 @@ esp_err_t config_factory_reset(void)
     return err;
 }
 
-esp_err_t config_request_portal(void)
+esp_err_t config_request_portal(bool rescue)
 {
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err == ESP_OK) {
-        err = nvs_set_u8(h, K_PORTAL, 1);
+        err = nvs_set_u8(h, K_PORTAL, rescue ? PORTAL_REQ_RESCUE : PORTAL_REQ_NORMAL);
         if (err == ESP_OK) {
             err = nvs_commit(h);
         }
@@ -123,19 +123,19 @@ esp_err_t config_request_portal(void)
     return err;
 }
 
-bool config_take_portal_request(void)
+portal_request_t config_take_portal_request(void)
 {
     nvs_handle_t h;
     uint8_t v = 0;
     if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) {
-        return false;
+        return PORTAL_REQ_NONE;
     }
     if (nvs_get_u8(h, K_PORTAL, &v) == ESP_OK) {
         nvs_erase_key(h, K_PORTAL);
         nvs_commit(h);
     }
     nvs_close(h);
-    return v != 0;
+    return v == PORTAL_REQ_RESCUE ? PORTAL_REQ_RESCUE : v != 0 ? PORTAL_REQ_NORMAL : PORTAL_REQ_NONE;
 }
 
 bool config_normalize_url(char *url)

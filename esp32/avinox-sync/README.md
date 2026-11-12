@@ -83,8 +83,12 @@ Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`
 Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgeschützte Weboberfläche an.
 
 - **Adresse:** `http://<IP des Geräts>/`. Die IP steht in der Geräteliste des Routers oder auf der Geräteseite des Servers.
-- **Login:** Benutzer `admin`, Passwort = das Passwort des Einrichtungs-WLANs (Feld „Zugangspasswort“). Ohne gesetztes
-  Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen sind alle Anfragen 30 s gesperrt.
+- **Login:** Benutzer `avinox` (fest), Passwort = Zugangspasswort = Passwort des Einrichtungs-WLANs. Ohne gesetztes
+  Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen werden
+  alle Anfragen dieser Client-IP 30 s lang mit 429 abgewiesen (auch mit richtigen Daten, andere Geräte sind nicht betroffen). Gesperrte Einträge werden nie verdrängt (8 Plätze, alle belegt = neuer Client gesperrt). Mehr als 20 Fehlversuche in 60 s sperren zusätzlich alle ungültigen Anmeldungen 60 s lang; richtige Daten nicht gesperrter Adressen gehen weiter durch.
+  Abgewiesene Anmeldungen stehen mit Grund, Benutzername und Passwortlänge (nie dem Passwort) im Log.
+- **CSRF-Schutz:** Änderungen (POST) werden nur angenommen, wenn `Origin` oder ersatzweise `Referer` zum Host passt;
+  fehlen beide Header, wird abgelehnt (403).
   Die Verbindung ist unverschlüsselt (HTTP): nur im vertrauten Heimnetz benutzen.
 - **Anzeige:** Firmware-Version, Geräte-ID, WLAN (Name, Signal), IP, Laufzeit, freier Speicher, USB-Laufwerk, letzter Sync,
   Server-URL.
@@ -92,6 +96,11 @@ Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgesch�
   nie angezeigt; leer lassen = behalten. Speichern startet das Gerät neu. Außerdem „Neu starten“ und „Einrichtungsmodus starten“.
 - **Notfall:** Bei falschem WLAN-Namen oder -Passwort ist das Gerät danach nicht mehr erreichbar. Dann BOOT-Taste 3 s halten
   (Einrichtungsmodus) und neu einrichten.
+- **Passwort vergessen (Notfallmodus):** Wird der Einrichtungsmodus per BOOT-Taste ausgelöst (Taste beim Start halten oder
+  im Betrieb ≥ 3 s halten und loslassen), startet das Einrichtungs-WLAN **ohne Passwort**. Die Seite zeigt oben einen
+  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Der Upload-Token muss immer neu eingegeben werden (gespeicherter wird nie übernommen), bei geändertem WLAN-Namen (nicht offen) auch das WLAN-Passwort. Nach 15 min ohne Speichern
+  startet das Gerät in den Normalbetrieb neu (nur bei vollständiger Konfiguration). Über die Weboberfläche oder wegen
+  unvollständiger Konfiguration gestarteter Einrichtungsmodus bleibt wie gehabt passwortgeschützt.
 
 ## LED
 
@@ -214,4 +223,4 @@ cc -Wall -Wextra -Ishim -I../../main ../../main/web_auth.c test_auth.c -o test_a
 - Die WLAN-Suche im Einrichtungsmodus läuft beim Start und über „Netze neu suchen“; dabei kann die Verbindung zum
   Handy kurz abreißen.
 - Leere Dateien (0 Byte) werden übersprungen.
-- Der Einrichtungsmodus bleibt aktiv, bis gespeichert oder neu gestartet wird (kein Timeout).
+- Der Einrichtungsmodus bleibt aktiv, bis gespeichert oder neu gestartet wird (kein Timeout; Ausnahme: Notfallmodus, siehe oben).

@@ -7,6 +7,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "esp_system.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_netif.h"
@@ -22,6 +24,7 @@ static const char *TAG = "portal";
 
 #define AP_IP_STR       "192.168.4.1"
 #define MAX_APS         20
+#define RESCUE_TIMEOUT_US (15LL * 60 * 1000000)
 
 static app_config_t s_cfg;
 static char s_ap_ssid[33];
@@ -88,6 +91,7 @@ static esp_err_t root_get(httpd_req_t *req)
     buf_t b;
     buf_init(&b);
     web_page_head(&b, "/");
+    web_render_rescue_banner(&b);
     status_block(&b);
     web_render_form(&b, &s_cfg, s_aps, s_ap_count, true);
     web_page_tail(&b);
@@ -101,6 +105,7 @@ static esp_err_t status_get(httpd_req_t *req)
     buf_t b;
     buf_init(&b);
     web_page_head(&b, "/status");
+    web_render_rescue_banner(&b);
     status_block(&b);
     buf_append(&b, "<p><a href=\"/\">");
     buf_append(&b, T(T_TO_SETUP));
@@ -257,8 +262,9 @@ static void dns_task(void *arg)
 
 /* ------------------------------------------------------------ Start */
 
-void portal_run(void)
+void portal_run(bool rescue)
 {
+    web_set_rescue(rescue);
     led_set_state(LED_SETUP);
     config_load(&s_cfg);
 
@@ -285,7 +291,7 @@ void portal_run(void)
     ap.ap.ssid_len = strlen(s_ap_ssid);
     ap.ap.channel = 1;
     ap.ap.max_connection = 4;
-    if (strlen(s_cfg.ap_pass) >= 8) {
+    if (!rescue && strlen(s_cfg.ap_pass) >= 8) {
         strlcpy((char *)ap.ap.password, s_cfg.ap_pass, sizeof(ap.ap.password));
         ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
     } else {
@@ -300,6 +306,10 @@ void portal_run(void)
             vTaskDelay(pdMS_TO_TICKS(10000));
         }
     }
+    if (rescue) {
+        ESP_LOGW(TAG, "NOTFALLMODUS (BOOT-Taste): Einrichtungs-WLAN '%s' OFFEN, neues Zugangspasswort erforderlich, "
+                 "Ende nach 15 min ohne Speichern", s_ap_ssid);
+    }
     ESP_LOGI(TAG, "Einrichtungsmodus: WLAN '%s' (%s), dann http://" AP_IP_STR "/",
              s_ap_ssid, ap.ap.authmode == WIFI_AUTH_OPEN ? "offen" : "WPA2");
 
@@ -308,7 +318,13 @@ void portal_run(void)
     if (xTaskCreate(dns_task, "dns", 3072, NULL, 4, NULL) != pdPASS) {
         ESP_LOGW(TAG, "DNS-Task nicht gestartet (kein Captive Portal)");
     }
+    int64_t start_us = esp_timer_get_time();
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(60000));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        if (rescue && config_complete(&s_cfg) && esp_timer_get_time() - start_us >= RESCUE_TIMEOUT_US) {
+            ESP_LOGW(TAG, "Notfallmodus: 15 min ohne Speichern, Neustart in den Normalbetrieb");
+            vTaskDelay(pdMS_TO_TICKS(200));
+            esp_restart();
+        }
     }
 }

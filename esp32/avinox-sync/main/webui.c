@@ -11,6 +11,7 @@
 #include "esp_system.h"
 #include "esp_app_desc.h"
 #include "esp_http_server.h"
+#include "lwip/sockets.h"
 
 #include "report.h"
 #include "sync.h"
@@ -21,16 +22,31 @@
 
 static const char *TAG = "webui";
 
-#define WEB_USER        "admin"
+#define WEB_USER        "avinox"
 #define MAX_APS         20
 #define MAX_FAILS       5
 #define LOCK_US         (30LL * 1000000)
+#define GLOBAL_FAILS    20                  /* mehr als so viele Fehlversuche ... */
+#define GLOBAL_WIN_US   (60LL * 1000000)    /* ... innerhalb dieses Fensters sperren alle ungültigen Anmeldungen */
+#define GLOBAL_LOCK_US  (60LL * 1000000)
 
 static app_config_t s_cfg;
 static wifi_ap_record_t s_aps[MAX_APS];
 static uint16_t s_ap_count;
-static int s_fails;
-static int64_t s_lock_until_us;
+
+/* Fehlversuche und Sperre je Client-IP (kleine Tabelle, älteste/abgelaufene Einträge werden ersetzt). */
+#define MAX_CLIENTS     8
+typedef struct {
+    bool used;
+    uint8_t ip[16];         /* IPv4 (auch IPv4-mapped) als ::ffff:a.b.c.d */
+    int fails;
+    int64_t lock_until_us;
+    int64_t last_us;
+} client_t;
+static client_t s_clients[MAX_CLIENTS];
+static int s_glob_fails;
+static int64_t s_glob_start_us;
+static int64_t s_glob_lock_until_us;
 
 /* ------------------------------------------------------------ Zugriffsschutz */
 
@@ -42,44 +58,178 @@ static esp_err_t reply_plain(httpd_req_t *req, const char *status, const char *t
     return httpd_resp_sendstr(req, text);
 }
 
-/* true = Anfrage darf weiter. Sonst ist die Antwort (429/401/403) schon gesendet. */
+/* Benutzername für das Log: nur druckbares ASCII, Rest wurde schon in web_auth ersetzt. */
+static void log_auth_fail(const web_auth_info_t *info)
+{
+    ESP_LOGW(TAG, "Anmeldung abgewiesen: %s, Benutzer '%s', Passwortlänge empfangen %d, erwartet %d",
+             web_auth_reason_str(info->reason), info->user, info->pass_len, info->expected_pass_len);
+}
+
+/* Adresse des Clients (IPv4 als IPv4-mapped IPv6 normalisiert). false = nicht ermittelbar. */
+static bool client_ip(httpd_req_t *req, uint8_t ip[16], char *txt, size_t txt_cap)
+{
+    struct sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    int fd = httpd_req_to_sockfd(req);
+    if (fd < 0 || getpeername(fd, (struct sockaddr *)&ss, &len) != 0) {
+        return false;
+    }
+    memset(ip, 0, 16);
+    if (ss.ss_family == AF_INET) {
+        const struct sockaddr_in *a = (const struct sockaddr_in *)&ss;
+        ip[10] = ip[11] = 0xff;
+        memcpy(ip + 12, &a->sin_addr, 4);
+        snprintf(txt, txt_cap, "%d.%d.%d.%d", ip[12], ip[13], ip[14], ip[15]);
+    } else if (ss.ss_family == AF_INET6) {
+        const struct sockaddr_in6 *a = (const struct sockaddr_in6 *)&ss;
+        memcpy(ip, &a->sin6_addr, 16);
+        static const uint8_t mapped[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
+        if (memcmp(ip, mapped, 12) == 0) {
+            snprintf(txt, txt_cap, "%d.%d.%d.%d", ip[12], ip[13], ip[14], ip[15]);
+        } else {
+            snprintf(txt, txt_cap, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                     ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7],
+                     ip[8], ip[9], ip[10], ip[11], ip[12], ip[13], ip[14], ip[15]);
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+
+/* Eintrag der IP suchen oder anlegen. Gesperrte Einträge werden nie verdrängt; sind alle Plätze gesperrt,
+ * gibt es NULL (der neue Client gilt dann als gesperrt). */
+static client_t *client_entry(const uint8_t ip[16], int64_t now)
+{
+    client_t *free_slot = NULL, *oldest = NULL;
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        client_t *c = &s_clients[i];
+        if (c->used && memcmp(c->ip, ip, 16) == 0) {
+            return c;
+        }
+        if (c->used && c->lock_until_us > now) {
+            continue;
+        }
+        bool idle = !c->used || c->fails == 0;
+        if (idle && !free_slot) {
+            free_slot = c;
+        }
+        if (!oldest || c->last_us < oldest->last_us) {
+            oldest = c;
+        }
+    }
+    client_t *c = free_slot ? free_slot : oldest;
+    if (!c) {
+        return NULL;
+    }
+    memset(c, 0, sizeof(*c));
+    c->used = true;
+    memcpy(c->ip, ip, 16);
+    return c;
+}
+
+static void reply_429(httpd_req_t *req, int64_t until_us, int64_t now)
+{
+    char retry[12];
+    snprintf(retry, sizeof(retry), "%d", (int)((until_us - now) / 1000000 + 1));
+    httpd_resp_set_hdr(req, "Retry-After", retry);
+    reply_plain(req, "429 Too Many Requests", "Zu viele Fehlversuche, bitte warten. / Too many failed attempts, please wait.");
+}
+
+/* true = Anfrage darf weiter. Sonst ist die Antwort (429/401/403) schon gesendet.
+ * Gesperrt wird je Client-IP: Während der Sperre bekommt diese IP immer 429, die Zugangsdaten
+ * werden dann gar nicht geprüft (kein Raten möglich). Andere IPs sind nicht betroffen. */
 static bool access_ok(httpd_req_t *req, bool post)
 {
     int64_t now = esp_timer_get_time();
-    if (now < s_lock_until_us) {
-        char retry[12];
-        snprintf(retry, sizeof(retry), "%d", (int)((s_lock_until_us - now) / 1000000 + 1));
-        httpd_resp_set_hdr(req, "Retry-After", retry);
-        reply_plain(req, "429 Too Many Requests", "Zu viele Fehlversuche, bitte warten. / Too many failed attempts, please wait.");
+    uint8_t ip[16];
+    char ip_txt[48] = "?";
+    client_t *cl = NULL;
+    bool glob_locked = now < s_glob_lock_until_us;
+    if (client_ip(req, ip, ip_txt, sizeof(ip_txt))) {
+        cl = client_entry(ip, now);
+        if (!cl) {
+            /* Alle Plätze gesperrt: trotzdem prüfen (Besitzer nicht aussperren), Fehlversuche zählen nur global. */
+            ESP_LOGW(TAG, "Alle Sperr-Plätze belegt: %s wird nur global gezählt", ip_txt);
+        } else {
+            cl->last_us = now;
+        }
+        if (cl && now < cl->lock_until_us) {
+            reply_429(req, cl->lock_until_us, now);
+            return false;
+        }
+    } else if (glob_locked) {
+        reply_429(req, s_glob_lock_until_us, now);      /* Adresse unbekannt: während globaler Sperre immer 429 */
         return false;
     }
 
     char auth[192];
     esp_err_t e = httpd_req_get_hdr_value_str(req, "Authorization", auth, sizeof(auth));
     bool have = e == ESP_OK || e == ESP_ERR_HTTPD_RESULT_TRUNC;
-    bool valid = e == ESP_OK && web_basic_auth_valid(auth, WEB_USER, s_cfg.ap_pass);
+    web_auth_info_t info;
+    bool valid = false;
+    if (e == ESP_OK) {
+        valid = web_basic_auth_check(auth, WEB_USER, s_cfg.ap_pass, &info);
+    } else {
+        memset(&info, 0, sizeof(info));
+        info.pass_len = -1;
+        info.expected_pass_len = (int)strlen(s_cfg.ap_pass);
+        info.reason = e == ESP_ERR_HTTPD_RESULT_TRUNC ? AUTH_TRUNCATED : AUTH_NO_HEADER;
+    }
     memset(auth, 0, sizeof(auth));
+
     if (!valid) {
-        if (have && ++s_fails >= MAX_FAILS) {
-            s_fails = 0;
-            s_lock_until_us = now + LOCK_US;
-            ESP_LOGW(TAG, "%d Fehlversuche: Anmeldung 30 s gesperrt", MAX_FAILS);
+        if (have) {
+            log_auth_fail(&info);
+        } else {
+            ESP_LOGI(TAG, "Anfrage ohne Authorization-Header (Browser fragt erst an)");
+        }
+        if (have) {
+            if (now - s_glob_start_us > GLOBAL_WIN_US) {
+                s_glob_start_us = now;
+                s_glob_fails = 0;
+            }
+            if (++s_glob_fails > GLOBAL_FAILS) {
+                s_glob_fails = 0;
+                s_glob_lock_until_us = now + GLOBAL_LOCK_US;
+                glob_locked = true;
+                ESP_LOGW(TAG, "Mehr als %d Fehlversuche in 60 s: ungültige Anmeldungen 60 s gesperrt", GLOBAL_FAILS);
+            }
+            if (cl && ++cl->fails >= MAX_FAILS) {
+                cl->fails = 0;
+                cl->lock_until_us = now + LOCK_US;
+                ESP_LOGW(TAG, "%d Fehlversuche von %s: Anmeldung dieser Adresse 30 s gesperrt", MAX_FAILS, ip_txt);
+            }
+        }
+        if (glob_locked && have) {      /* ohne Header weiter 401, damit der Browser den Login-Dialog zeigt */
+            reply_429(req, s_glob_lock_until_us, now);
+            return false;
         }
         httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Avinox-Sync\", charset=\"UTF-8\"");
         reply_plain(req, "401 Unauthorized", "Anmeldung erforderlich. / Authentication required.");
         return false;
     }
-    s_fails = 0;
+    if (cl) {
+        cl->fails = 0;
+        cl->lock_until_us = 0;
+    }
 
     if (post) {
-        char origin[96], host[96];
-        if (httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin)) != ESP_ERR_NOT_FOUND) {
-            bool match = httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK &&
-                         web_origin_matches_host(origin, host);
-            if (!match) {
-                reply_plain(req, "403 Forbidden", "Anfrage von fremder Seite abgelehnt. / Cross-site request rejected.");
-                return false;
+        /* CSRF fail-closed: Origin, ersatzweise Referer, muss zum Host passen; fehlen beide, wird abgelehnt. */
+        char origin[96], referer[160], host[96];
+        bool match = false;
+        if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK) {
+            esp_err_t eo = httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin));
+            if (eo != ESP_ERR_NOT_FOUND) {
+                match = eo == ESP_OK && web_origin_matches_host(origin, host);
+            } else if (httpd_req_get_hdr_value_str(req, "Referer", referer, sizeof(referer)) == ESP_OK) {
+                match = web_referer_matches_host(referer, host);
             }
+        }
+        if (!match) {
+            ESP_LOGW(TAG, "POST ohne passenden Origin/Referer abgelehnt");
+            reply_plain(req, "403 Forbidden", "Anfrage von fremder Seite abgelehnt. / Cross-site request rejected.");
+            return false;
         }
     }
     return true;
@@ -208,7 +358,7 @@ static esp_err_t setup_post(httpd_req_t *req)
     if (!access_ok(req, true)) {
         return ESP_OK;
     }
-    if (config_request_portal() != ESP_OK) {
+    if (config_request_portal(false) != ESP_OK) {
         return web_send_message(req, "err", T_E_FLASH, true);
     }
     esp_err_t err = web_send_message(req, "ok", T_OK_SETUP, false);
