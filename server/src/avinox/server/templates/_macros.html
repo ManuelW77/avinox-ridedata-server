@@ -26,13 +26,13 @@
 {%- endmacro %}
 
 {# Zwei dünne Balken je Zeile (a/b), gemeinsame Skala; Werte {Bereich: {key: Zahl}} #}
-{% macro bars_pair(rows, key_a, key_b, cls_a, cls_b, unit='W') -%}
+{% macro bars_pair(rows, key_a, key_b, cls_a, cls_b, unit='W', labels=None) -%}
 {% set vals = [] %}{% for k, r in rows.items() %}{% set _ = vals.append(r[key_a] or 0) %}{% set _ = vals.append(r[key_b] or 0) %}{% endfor %}
 {% set peak = vals | max if vals else 0 %}
 <div class="bars pair">
   {% for key, r in rows.items() %}
   <div class="bar">
-    <span class="label" title="{{ key }}">{{ key }}</span>
+    <span class="label" title="{{ key }}">{{ labels[key] if labels and key in labels else key }}</span>
     <span class="track-pair">
       <span class="track"><span class="fill {{ cls_a }}" style="width: {{ (100 * (r[key_a] or 0) / peak) if peak else 0 }}%"></span></span>
       <span class="track"><span class="fill {{ cls_b }}" style="width: {{ (100 * (r[key_b] or 0) / peak) if peak else 0 }}%"></span></span>
