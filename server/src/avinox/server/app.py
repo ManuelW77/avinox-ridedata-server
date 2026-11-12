@@ -80,9 +80,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     basic = HTTPBasic(auto_error=False)
 
     def client_ip(request: Request) -> str | None:
-        fwd = request.headers.get("x-forwarded-for")
-        if fwd and fwd.split(",")[0].strip():
-            return fwd.split(",")[0].strip()
+        # Kein eigenes X-Forwarded-For: das kann jeder Client setzen. Hinter einem Proxy
+        # übernimmt uvicorn (--proxy-headers, forwarded_allow_ips) die echte Adresse.
         return request.client.host if request.client else None
 
     def device_header(request: Request) -> str | None:
@@ -91,7 +90,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def upload_auth(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
         if not cred or not secrets.compare_digest(cred.credentials, settings.upload_token):
-            synclog.event("auth_error", client_ip(request), device_header(request), path=request.url.path, status=401, detail="Token fehlt" if not cred else "Token falsch")
+            # Ohne gültiges Token keine Geräte-ID übernehmen – sonst ließe sich der Gerätestatus fälschen.
+            synclog.event("auth_error", client_ip(request), None, path=request.url.path, status=401, detail="Token fehlt" if not cred else "Token falsch")
             raise HTTPException(401, "Upload-Token fehlt oder ist falsch", headers={"WWW-Authenticate": "Bearer"})
 
     def read_auth(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:

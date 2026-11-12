@@ -83,7 +83,8 @@ def test_report_updates_device(client, settings):
 def test_device_header_updates_last_seen(client, settings):
     client.get("/api/v1/manifest", headers={**auth(settings), "X-Avinox-Device": "esp1", "X-Forwarded-For": "10.0.0.5, 1.1.1.1"})
     dev = client.get("/api/v1/sync/log").json()["devices"][0]
-    assert dev["device_id"] == "esp1" and dev["last_ip"] == "10.0.0.5"
+    # X-Forwarded-For wird bewusst ignoriert (fälschbar); maßgeblich ist die Verbindungsadresse
+    assert dev["device_id"] == "esp1" and dev["last_ip"] not in ("10.0.0.5", "1.1.1.1")
 
 
 @pytest.mark.parametrize("body", [
@@ -119,3 +120,21 @@ def test_prune(client, settings):
     log.prune()
     n = client.app.state.store.db.one("SELECT COUNT(*) AS n FROM sync_events")["n"]
     assert n == KEEP_EVENTS
+
+
+def test_auth_error_does_not_touch_device_and_ignores_forwarded_for(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from avinox.server.app import create_app
+    from avinox.server.config import load_settings
+
+    client = TestClient(create_app(load_settings(tmp_path)))
+    r = client.get(
+        "/api/v1/manifest",
+        headers={"Authorization": "Bearer falsch", "X-Avinox-Device": "avinox-sync-FAKE", "X-Forwarded-For": "6.6.6.6"},
+    )
+    assert r.status_code == 401
+    log = client.get("/api/v1/sync/log").json()
+    assert log["devices"] == []
+    ev = [e for e in log["events"] if e["kind"] == "auth_error"][0]
+    assert ev["device_id"] is None and ev["client_ip"] != "6.6.6.6"
