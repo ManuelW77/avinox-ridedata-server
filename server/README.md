@@ -57,7 +57,7 @@ Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellun
 | `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
 | `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
 | `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
-| `AVINOX_PUBLIC_URL` | leer | Adresse des Servers für den ESP32, z. B. `http://192.168.1.18:8000`; sonst wird sie aus der Browser-Anfrage übernommen |
+| `AVINOX_PUBLIC_URL` | leer | Adresse(n) des Servers für den ESP32, kommagetrennt, z. B. `https://avinox.example.org,http://192.168.1.18:8000`; die Einstellungsseite bietet zusätzlich die aufgerufene Adresse und die LAN-IP an |
 | `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
 | `AVINOX_TILE_URL` | OpenStreetMap | Kachel-URL für die Karte |
 | `AVINOX_TILE_ATTRIBUTION` | © OpenStreetMap | Quellenangabe der Karte |

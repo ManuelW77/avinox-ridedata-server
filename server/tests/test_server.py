@@ -276,16 +276,38 @@ def test_token_shown_with_web_login(tmp_path, monkeypatch):
     assert settings.upload_token in client.get("/settings", auth=("u", "p")).text
 
 
+def _urls(html):
+    import re
+
+    return re.findall(r'class="server-url" value="([^"]*)"', html)
+
+
 def test_settings_server_url(tmp_path, monkeypatch):
+    monkeypatch.setattr("avinox.server.app._in_docker", lambda: False)
+    monkeypatch.setattr("avinox.server.app._lan_ip", lambda: None)
     client = TestClient(create_app(load_settings(tmp_path)))
-    html = client.get("/settings", headers={"host": "192.168.1.18:8000"}).text
-    assert 'value="http://192.168.1.18:8000"' in html and "erreicht der ESP32 nicht" not in html
+    html = client.get("/settings", headers={"host": "192.0.2.10:8000"}).text
+    assert "http://192.0.2.10:8000" in _urls(html) and "erreicht der ESP32 nicht" not in html
     for host in ("localhost:8000", "127.0.0.1:8000", "172.18.0.2:8000", "[::1]:8000", "0.0.0.0:8000"):
         assert "erreicht der ESP32 nicht" in client.get("/settings", headers={"host": host}).text, host
-    monkeypatch.setenv("AVINOX_PUBLIC_URL", "http://10.0.0.5:8000/")
+    html = client.get("/settings", headers={"host": "example.org", "x-forwarded-proto": "https"}).text
+    assert "https://example.org" in _urls(html) and "empfohlen" in html
+    html = client.get("/settings", headers={"host": "example.org", "x-forwarded-proto": "javascript"}).text
+    assert "http://example.org" in _urls(html)
+    monkeypatch.setenv("AVINOX_PUBLIC_URL", "https://a.example.org/, http://192.0.2.5:8000")
     client = TestClient(create_app(load_settings(tmp_path)))
-    html = client.get("/settings", headers={"host": "localhost:8000"}).text
-    assert 'value="http://10.0.0.5:8000"' in html and "erreicht der ESP32 nicht" not in html
+    urls = _urls(client.get("/settings", headers={"host": "localhost:8000"}).text)
+    assert urls[:2] == ["https://a.example.org", "http://192.0.2.5:8000"]
+
+
+def test_settings_server_url_docker(tmp_path, monkeypatch):
+    monkeypatch.setattr("avinox.server.app._in_docker", lambda: True)
+    monkeypatch.setattr("avinox.server.app._lan_ip", lambda: "198.51.100.7")
+    client = TestClient(create_app(load_settings(tmp_path)))
+    html = client.get("/settings", headers={"host": "example.org"}).text
+    assert "198.51.100.7" not in html and "Im Docker-Container ist die LAN-IP nicht erkennbar" in html
+    html = client.get("/settings", headers={"host": "192.0.2.10:8000"}).text
+    assert "http://192.0.2.10:8000" in _urls(html)
 
 
 # ------------------------------------------------------------ Sprache und Fußzeile
