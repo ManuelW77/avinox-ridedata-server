@@ -10,21 +10,25 @@
 
 {% if stats.months %}
 {% set max_km = stats.months.values() | map(attribute='distance_km') | max %}
-<section class="card" style="margin-bottom:1rem">
-  <h2>{{ t('rides.per_month') }}</h2>
+<div class="block t-ride block-first" id="sec-months" data-jump="{{ t('rides.per_month') }}">
+  <h2 class="section-title">{{ t('rides.per_month') }}</h2>
+<section class="card">
   <div class="bars wide">
     {% for month, m in stats.months.items() %}
     <div class="bar">
       <span class="label">{{ t('rides.month_label', m=month[5:], y=month[:4], n=m.rides) }}</span>
-      <span class="track"><span class="fill motor" style="width: {{ (100 * m.distance_km / max_km) if max_km else 0 }}%"></span></span>
+      <span class="track"><span class="fill" style="width: {{ (100 * m.distance_km / max_km) if max_km else 0 }}%"></span></span>
       <span class="val">{{ m.distance_km | num(1) }} km</span>
     </div>
     {% endfor %}
   </div>
 </section>
+</div>
 {% endif %}
 
 {% if rides %}
+<div class="block t-ride{% if not stats.months %} block-first{% endif %}" id="sec-list" data-jump="{{ t('rides.sec.list') }}">
+  <h2 class="section-title">{{ t('rides.sec.list') }}</h2>
 <div class="rides-head">
   <span>{{ t('col.date') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span><span></span>
 </div>
@@ -43,10 +47,14 @@
   </li>
   {% endfor %}
 </ul>
+</div>
 {% else %}
 <div class="card empty">
   <p>{{ t('empty.none') }}</p>
   <p class="small">{{ t('empty.hint_html') }}</p>
 </div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% endblock %}

@@ -21,7 +21,9 @@
   <p><a href="/settings">{{ t('sync.setup') }}</a></p>
 </section>
 {% else %}
-<div class="grid cols-2" style="margin-bottom:1rem">
+<div class="block t-motor block-first" id="sec-devices" data-jump="{{ t('sync.sec.devices') }}">
+  <h2 class="section-title">{{ t('sync.sec.devices') }}</h2>
+<div class="grid cols-2">
   {% for d in snap.devices %}
   {% set r = d.last_report or {} %}
   {% set s = d.last_sync %}
@@ -67,9 +69,11 @@
   </section>
   {% endfor %}
 </div>
+</div>
 
+<div class="block t-neutral" id="sec-events" data-jump="{{ t('sync.events') }}">
+  <h2 class="section-title">{{ t('sync.events') }}</h2>
 <section class="card">
-  <h2>{{ t('sync.events') }}</h2>
   <div style="overflow-x:auto">
   <table class="plain sync">
     <thead><tr><th>{{ t('sync.th.time') }}</th><th>{{ t('sync.th.ip') }}</th><th>{{ t('sync.th.device') }}</th><th>{{ t('sync.th.kind') }}</th><th>{{ t('sync.th.file') }}</th><th class="n">{{ t('sync.th.size') }}</th><th>{{ t('sync.th.detail') }}</th></tr></thead>
@@ -89,5 +93,9 @@
   </table>
   </div>
 </section>
+</div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% endblock %}

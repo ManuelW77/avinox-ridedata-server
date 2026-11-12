@@ -11,7 +11,10 @@
   </div>
 </div>
 
-<section class="card" style="margin-bottom:1rem">
+<div class="block t-motor block-first" id="sec-overview" data-jump="{{ t('dev.sec.overview') }}">
+  <h2 class="section-title">{{ t('dev.sec.overview') }}</h2>
+<div class="grid cols-2">
+<section class="card">
   <div class="figures">
     {{ figure(d.charge_cycles, t('fig.cycles')) }}
     {{ figure(d.boot_count, t('fig.boots')) }}
@@ -20,7 +23,6 @@
   </div>
 </section>
 
-<div class="grid cols-2" style="margin-bottom:1rem">
   <section class="card">
     <h2>{{ t('fw.title') }}</h2>
     {% if d.firmware %}
@@ -36,6 +38,11 @@
     <p class="muted">{{ t('dev.nostats') }}</p>
     {% endif %}
   </section>
+</div>
+</div>
+
+<div class="block t-motor" id="sec-battery" data-jump="{{ t('dev.sec.battery') }}">
+  <h2 class="section-title">{{ t('dev.sec.battery') }}</h2>
 
   <section class="card">
     <h2>{{ t('cell.title') }}</h2>
@@ -59,8 +66,9 @@
   </section>
 </div>
 
-<section class="card" style="margin-bottom:1rem">
-  <h2>{{ t('hist.title') }}</h2>
+<div class="block t-motor" id="sec-history" data-jump="{{ t('hist.title') }}">
+  <h2 class="section-title">{{ t('hist.title') }}</h2>
+<section class="card">
   {% if hist %}
   <div style="overflow-x:auto">
   <table class="plain">
@@ -86,10 +94,12 @@
   <p class="muted">{{ t('dev.nostats') }}</p>
   {% endif %}
 </section>
+</div>
 
+<div class="block t-neutral" id="sec-hms" data-jump="{{ t('hms.title') }}">
+  <h2 class="section-title">{{ t('hms.title') }}</h2>
+  <p class="muted small block-desc">{{ t('hms.text') }}</p>
 <section class="card">
-  <h2>{{ t('hms.title') }}</h2>
-  <p class="muted small">{{ t('hms.text') }}</p>
   {% if d.hms %}
   <table class="plain">
     <thead><tr><th>{{ t('hms.time') }}</th><th>{{ t('hms.code') }}</th></tr></thead>
@@ -103,4 +113,8 @@
   <p class="muted">{{ t('hms.none') }}</p>
   {% endif %}
 </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% endblock %}
