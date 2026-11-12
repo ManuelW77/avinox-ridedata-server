@@ -420,10 +420,10 @@ class Store:
             m["moving_time_s"] += r["moving_time_s"]
         return {"total": total, "months": dict(sorted(months.items()))}
 
-    def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None) -> dict:
+    def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None, lang: str = "de") -> dict:
         """Übersicht für die Startseite (siehe ``dashboard.build``). ``today`` nur für Tests."""
         today = today or datetime.now(self.settings.tz).date()
-        return dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today)
+        return dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today, lang)
 
     def device(self) -> dict:
         sessions = self.sessions()

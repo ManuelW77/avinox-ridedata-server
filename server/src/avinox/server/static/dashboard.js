@@ -4,13 +4,18 @@
 
   const dataEl = document.getElementById("dash-data");
   if (!dataEl) return;
+  // Texte aus <script id="i18n"> (siehe base.html), Sprache in I.lang
+  let I = {};
+  try { I = JSON.parse(document.getElementById("i18n").textContent) || {}; } catch (e) { I = {}; }
+  const tr = (key, vars) => String(I[key] != null ? I[key] : key).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m));
+  const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
   let dash;
   try { dash = JSON.parse(dataEl.textContent); } catch (e) { return; }
 
   const $ = (id) => document.getElementById(id);
   const cssVar = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name) || "").trim() || fallback;
   const fmt = (v, digits) => (v == null || !isFinite(v)) ? "–"
-    : Number(v).toLocaleString("de-DE", { minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0 });
+    : Number(v).toLocaleString(LOCALE, { minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0 });
 
   function hm(sec) {
     if (sec == null || !isFinite(sec)) return "–";
@@ -29,30 +34,30 @@
 
   // key, Bezeichnung, Formatierer, Klasse, Richtung bewerten?
   const KPIS = [
-    ["rides", "Fahrten", (v) => fmt(v, 0), "", true],
-    ["moving_time_s", "Fahrzeit", (v) => hm(v) + "<small>h</small>", "", true],
-    ["ascent_m", "Höhenmeter", (v) => fmt(v, 0) + "<small>m</small>", "", true],
-    ["rider_kj", "Eigenleistung", (v) => fmt(v, 0) + "<small>kJ</small>", "rider", true],
-    ["avg_rider_power_w", "Ø Fahrerleistung", (v) => fmt(v, 0) + "<small>W</small>", "rider", true],
-    ["motor_wh", "Motorenergie", (v) => fmt(v, 0) + "<small>Wh</small>", "motor", false],
-    ["motor_share_pct", "Motoranteil", (v) => fmt(v, 0) + "<small>%</small>", "motor", false],
-    ["battery_used_pct", "Akkuverbrauch", (v) => fmt(v, 0) + "<small>%</small>", "", false],
-    ["calories_kcal", "Kalorien", (v) => fmt(v, 0) + "<small>kcal</small>", "", true],
+    ["rides", tr("kpi.rides"), (v) => fmt(v, 0), "", true],
+    ["moving_time_s", tr("kpi.moving"), (v) => hm(v) + "<small>h</small>", "", true],
+    ["ascent_m", tr("kpi.ascent"), (v) => fmt(v, 0) + "<small>m</small>", "", true],
+    ["rider_kj", tr("kpi.rider"), (v) => fmt(v, 0) + "<small>kJ</small>", "rider", true],
+    ["avg_rider_power_w", tr("kpi.avg_rider"), (v) => fmt(v, 0) + "<small>W</small>", "rider", true],
+    ["motor_wh", tr("kpi.motor_wh"), (v) => fmt(v, 0) + "<small>Wh</small>", "motor", false],
+    ["motor_share_pct", tr("kpi.share"), (v) => fmt(v, 0) + "<small>%</small>", "motor", false],
+    ["battery_used_pct", tr("kpi.battery"), (v) => fmt(v, 0) + "<small>%</small>", "", false],
+    ["calories_kcal", tr("kpi.calories"), (v) => fmt(v, 0) + "<small>kcal</small>", "", true],
   ];
 
   // Prozentpunkte statt Prozent bei Anteilen
   const POINTS = { motor_share_pct: true };
 
   function deltaHtml(key, c, judge) {
-    if (!c || c.current == null || c.previous == null) return '<span class="d none">kein Vergleich</span>';
+    if (!c || c.current == null || c.previous == null) return '<span class="d none">' + tr("no_compare") + '</span>';
     if (POINTS[key]) {
       const d = c.current - c.previous;
-      if (Math.abs(d) < 0.5) return '<span class="d same">wie davor</span>';
-      return `<span class="d ${judge ? (d > 0 ? "up" : "down") : "neutral"}">${d > 0 ? "↑" : "↓"} ${fmt(Math.abs(d), 0)} Pkt.</span>`;
+      if (Math.abs(d) < 0.5) return '<span class="d same">' + tr("same") + '</span>';
+      return `<span class="d ${judge ? (d > 0 ? "up" : "down") : "neutral"}">${d > 0 ? "↑" : "↓"} ${fmt(Math.abs(d), 0)} ${tr("pts")}</span>`;
     }
-    if (!c.previous) return c.current ? '<span class="d none">davor nichts</span>' : '<span class="d none">–</span>';
+    if (!c.previous) return c.current ? '<span class="d none">' + tr("nothing_before") + '</span>' : '<span class="d none">–</span>';
     const p = c.delta_pct;
-    if (p == null || p === 0) return '<span class="d same">wie davor</span>';
+    if (p == null || p === 0) return '<span class="d same">' + tr("same") + '</span>';
     return `<span class="d ${judge ? (p > 0 ? "up" : "down") : "neutral"}">${change(c)}</span>`;
   }
 
@@ -79,13 +84,13 @@
     const d = cmp.distance_km;
     let delta = "";
     if (d.previous && !cur.rides) {
-      delta = `${dash.versus.replace("ggü. ", "")}: ${fmt(d.previous, 1)} km`;
+      delta = tr("hero_prev", { versus: dash.versus.replace(tr("versus_prefix"), ""), km: fmt(d.previous, 1) });
     } else if (d.previous) {
       const p = d.delta_pct || 0;
       const cls = p > 0 ? "up" : p < 0 ? "down" : "same";
-      delta = `<span class="d ${cls}">${change(d)}</span> ${dash.versus} (${fmt(d.previous, 1)} km)`;
+      delta = tr("hero_vs", { delta: `<span class="d ${cls}">${change(d)}</span>`, versus: dash.versus, km: fmt(d.previous, 1) });
     } else if (cur.distance_km) {
-      delta = `Im Zeitraum davor keine Fahrt.`;
+      delta = tr("hero_none_before");
     }
     $("hero-delta").innerHTML = delta;
 
@@ -96,19 +101,19 @@
       const rp = 100 * cur.rider_kj / energy;
       split.querySelector(".rider").style.width = rp + "%";
       split.querySelector(".motor").style.width = (100 - rp) + "%";
-      $("split-rider").innerHTML = `<i></i>Du ${fmt(rp, 0)} % · ${fmt(cur.rider_kj, 0)} kJ`;
-      $("split-motor").innerHTML = `<i></i>Motor ${fmt(100 - rp, 0)} % · ${fmt(cur.motor_kj, 0)} kJ`;
+      $("split-rider").innerHTML = `<i></i>${tr("you")} ${fmt(rp, 0)} % · ${fmt(cur.rider_kj, 0)} kJ`;
+      $("split-motor").innerHTML = `<i></i>${tr("motor")} ${fmt(100 - rp, 0)} % · ${fmt(cur.motor_kj, 0)} kJ`;
     }
     const empty = $("hero-empty");
     empty.hidden = cur.rides > 0;
     empty.textContent = "";
     if (!cur.rides) {
-      empty.appendChild(document.createTextNode("In diesem Zeitraum keine Fahrt."));
+      empty.appendChild(document.createTextNode(tr("no_rides_period")));
       if (dash.last_offset != null && dash.last_offset !== dash.offset) {
         const b = document.createElement("button");
         b.type = "button";
         b.className = "btn ghost small-btn";
-        b.textContent = "Zur letzten Fahrt springen";
+        b.textContent = tr("jump_last");
         b.addEventListener("click", () => load(dash.period, dash.last_offset));
         empty.appendChild(b);
       }
@@ -121,9 +126,9 @@
     }).join("");
 
     const sum = (k) => dash.series.reduce((a, s) => a + (s[k] || 0), 0);
-    const span = { day: "30 Tagen", week: "26 Wochen", month: "24 Monaten", year: "5 Jahren" }[dash.period];
-    $("sum-distance").textContent = `${fmt(sum("distance_km"), 0)} km in ${span}`;
-    $("sum-ascent").textContent = `${fmt(sum("ascent_m"), 0)} m in ${span}`;
+    const span = tr("span." + dash.period);
+    $("sum-distance").textContent = tr("sum_in", { v: fmt(sum("distance_km"), 0), unit: "km", span });
+    $("sum-ascent").textContent = tr("sum_in", { v: fmt(sum("ascent_m"), 0), unit: "m", span });
   }
 
   /* --------------------------------------------------------- Diagramme */
@@ -160,7 +165,7 @@
       cursor: { drag: { x: false, y: false }, points: { show: false }, y: false },
       legend: { show: false },
       scales: { x: { time: false, range: [-0.5, n - 0.5] }, y: cfg.yRange ? { range: cfg.yRange } : { range: (u, min, max) => [0, max > 0 ? max * 1.12 : 1] } },
-      series: [{ label: "Zeitraum", value: (u, v) => (v == null ? "" : titles[v] || "") }].concat(cfg.series),
+      series: [{ label: tr("period"), value: (u, v) => (v == null ? "" : titles[v] || "") }].concat(cfg.series),
       axes: [
         { stroke: c.ink2, font: c.font, grid: { show: false }, ticks: { show: false }, splits, values: (u, vs) => vs.map((v) => labels[v] || ""), gap: 6, size: 28 },
         { stroke: c.ink3, font: c.font, grid: { stroke: withAlpha(c.line.startsWith("#") ? c.line : "#dcd8cf", 0.7), width: 1 }, ticks: { show: false },
@@ -209,7 +214,7 @@
     charts.forEach((u) => u.destroy());
     charts = [];
     if (typeof uPlot === "undefined") {
-      document.querySelectorAll(".dchart").forEach((el) => { el.innerHTML = '<p class="muted small">Diagramme konnten nicht geladen werden.</p>'; });
+      document.querySelectorAll(".dchart").forEach((el) => { el.innerHTML = '<p class="muted small">' + tr("charts_failed") + '</p>'; });
       return;
     }
     const c = colors();
@@ -219,25 +224,25 @@
     const defs = [
       ["chart-distance", {
         data: [s.map((x) => x.distance_km)],
-        series: [{ label: "Strecke", stroke: c.alt, fill: c.alt, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("km", 1) }],
+        series: [{ label: tr("s.distance"), stroke: c.alt, fill: c.alt, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("km", 1) }],
       }],
       ["chart-energy", {
         data: [s.map((x) => x.rider_kj), s.map((x) => x.motor_kj)],
         series: [
-          { label: "Fahrer", stroke: c.rider, fill: c.rider, width: 0, paths: bars([0.36, 22], -1), points: { show: false }, value: val("kJ", 0) },
-          { label: "Motor", stroke: c.motor, fill: c.motor, width: 0, paths: bars([0.36, 22], 1), points: { show: false },
+          { label: tr("s.rider"), stroke: c.rider, fill: c.rider, width: 0, paths: bars([0.36, 22], -1), points: { show: false }, value: val("kJ", 0) },
+          { label: tr("s.motor"), stroke: c.motor, fill: c.motor, width: 0, paths: bars([0.36, 22], 1), points: { show: false },
             value: (u, v, si, i) => (v == null ? "–" : fmt(v, 0) + " kJ (" + fmt(s[i] && s[i].motor_wh, 0) + " Wh)") },
         ],
       }],
       ["chart-share", {
         data: [s.map((x) => x.motor_share_pct)],
         yRange: [0, 100], unitTick: " %", ySplits: () => [0, 25, 50, 75, 100],
-        series: [{ label: "Motoranteil", stroke: c.motor, width: 2, spanGaps: true,
+        series: [{ label: tr("s.share"), stroke: c.motor, width: 2, spanGaps: true,
           points: { show: true, size: 6, fill: c.motor }, value: val("%", 0) }],
       }],
       ["chart-ascent", {
         data: [s.map((x) => x.ascent_m)],
-        series: [{ label: "Höhenmeter", stroke: c.ink3, fill: c.ink3, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("m", 0) }],
+        series: [{ label: tr("s.ascent"), stroke: c.ink3, fill: c.ink3, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("m", 0) }],
       }],
     ];
     defs.forEach(([id, cfg]) => {
@@ -245,12 +250,12 @@
       if (!el) return;
       el.textContent = "";
       if (!anyRide) {
-        el.innerHTML = '<div class="chart-empty">Keine Fahrten in diesem Zeitraum.</div>';
+        el.innerHTML = '<div class="chart-empty">' + tr("no_rides_chart") + '</div>';
         return;
       }
       cfg.readout = $(id.replace("chart-", "readout-"));
       if (cfg.readout) cfg.readout.textContent = "";
-      try { charts.push(makeChart(el, cfg)); } catch (e) { el.innerHTML = '<p class="muted small">Diagramm nicht verfügbar.</p>'; }
+      try { charts.push(makeChart(el, cfg)); } catch (e) { el.innerHTML = '<p class="muted small">' + tr("chart_unavailable") + '</p>'; }
     });
   }
 

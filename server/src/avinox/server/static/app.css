@@ -66,7 +66,7 @@ h3 { font-size: 0.95rem; color: var(--ink-2); font-weight: 600; margin-bottom: 0
 }
 .top nav a[aria-current="page"], .top nav a:hover { background: var(--surface-2); color: var(--ink); }
 
-main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 4rem; }
+main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 .lead { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0.75rem 0 1.25rem; }
 .lead p { margin: 0.25rem 0 0; color: var(--ink-2); }
 .muted { color: var(--ink-2); }
@@ -287,3 +287,12 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 table.sync td, table.sync th { padding-right: 0.9rem; vertical-align: top; }
 table.sync td:first-child { white-space: nowrap; }
 table.sync td.n { white-space: nowrap; }
+
+/* Fußzeile */
+.site-footer { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1.25rem 2.5rem; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 0.8rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1.5rem; }
+.site-footer p { margin: 0; }
+.site-footer a { color: var(--ink-2); text-underline-offset: 2px; }
+.site-footer a:hover { color: var(--ink); }
+.lang-switch a { text-decoration: none; }
+.lang-switch a[aria-current] { font-weight: 700; color: var(--ink); }
+@media (max-width: 600px) { .site-footer { padding-bottom: 2rem; } }

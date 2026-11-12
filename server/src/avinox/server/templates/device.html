@@ -1,28 +1,28 @@
 {% extends "base.html" %}
-{% from "_macros.html" import figure, figure_text %}
-{% block title %}Bike &amp; Akku – Avinox Ride Data{% endblock %}
+{% from "_macros.html" import figure, figure_text with context %}
+{% block title %}{{ t('dev.title') }} – Avinox Ride Data{% endblock %}
 {% block main %}
-{% set fw_labels = {'package': 'Gesamtpaket', 'screen': 'Display', 'motor': 'Motor', 'ble': 'Bluetooth', 'bat': 'Akku'} %}
+{% set fw_labels = {'package': t('fw.package'), 'screen': t('fw.screen'), 'motor': t('fw.motor'), 'ble': t('fw.ble'), 'bat': t('fw.bat')} %}
 {% set hist = d.battery_history | reverse | list %}
 <div class="lead">
   <div>
-    <h1>Bike &amp; Akku</h1>
-    <p>Stand aus der zuletzt hochgeladenen Nutzungsstatistik des Displays.</p>
+    <h1>{{ t('dev.title') }}</h1>
+    <p>{{ t('dev.sub') }}</p>
   </div>
 </div>
 
 <section class="card" style="margin-bottom:1rem">
   <div class="figures">
-    {{ figure(d.charge_cycles, 'Ladezyklen') }}
-    {{ figure(d.boot_count, 'Einschaltvorgänge') }}
-    {{ figure(d.files.n, 'gespeicherte Dateien') }}
-    {{ figure(d.files.bytes / 1048576, 'Datenmenge', 'MB', 1) }}
+    {{ figure(d.charge_cycles, t('fig.cycles')) }}
+    {{ figure(d.boot_count, t('fig.boots')) }}
+    {{ figure(d.files.n, t('fig.files')) }}
+    {{ figure(d.files.bytes / 1048576, t('fig.data'), 'MB', 1) }}
   </div>
 </section>
 
 <div class="grid cols-2" style="margin-bottom:1rem">
   <section class="card">
-    <h2>Firmware</h2>
+    <h2>{{ t('fw.title') }}</h2>
     {% if d.firmware %}
     <dl class="kv">
       {% for key in ['package', 'screen', 'motor', 'ble', 'bat'] %}{% if d.firmware[key] %}
@@ -33,13 +33,13 @@
       {% endfor %}
     </dl>
     {% else %}
-    <p class="muted">Noch keine Nutzungsstatistik hochgeladen.</p>
+    <p class="muted">{{ t('dev.nostats') }}</p>
     {% endif %}
   </section>
 
   <section class="card">
-    <h2>Zellspannungsdifferenz</h2>
-    <p class="muted small">Größte Differenz zwischen stärkster und schwächster Zelle je Einschaltvorgang. Sie ist der wichtigste Gesundheitswert des Akkus: eine größer werdende Differenz heißt, die Zellen driften auseinander.</p>
+    <h2>{{ t('cell.title') }}</h2>
+    <p class="muted small">{{ t('cell.text') }}</p>
     {% set deltas = hist | selectattr('max_cell_delta_mv') | list %}
     {% if deltas %}
     {% set peak = deltas | map(attribute='max_cell_delta_mv') | max %}
@@ -52,22 +52,22 @@
       </div>
       {% endfor %}
     </div>
-    {% if deltas | length > 30 %}<p class="muted small">Gezeigt: die neuesten 30 von {{ deltas | length }}.</p>{% endif %}
+    {% if deltas | length > 30 %}<p class="muted small">{{ t('cell.shown', n=deltas | length) }}</p>{% endif %}
     {% else %}
-    <p class="muted">Noch keine Nutzungsstatistik hochgeladen.</p>
+    <p class="muted">{{ t('dev.nostats') }}</p>
     {% endif %}
   </section>
 </div>
 
 <section class="card" style="margin-bottom:1rem">
-  <h2>Akku-Verlauf</h2>
+  <h2>{{ t('hist.title') }}</h2>
   {% if hist %}
   <div style="overflow-x:auto">
   <table class="plain">
     <thead><tr>
-      <th>Ende</th><th class="n">Start %</th><th class="n">Ende %</th>
-      <th class="n">min. Zelle mV</th><th class="n">max. Zelle mV</th><th class="n">Differenz mV</th>
-      <th class="n">max. Strom A</th><th class="n">max. Temp. °C</th>
+      <th>{{ t('hist.end') }}</th><th class="n">{{ t('hist.start_pct') }}</th><th class="n">{{ t('hist.end_pct') }}</th>
+      <th class="n">{{ t('hist.min_cell') }}</th><th class="n">{{ t('hist.max_cell') }}</th><th class="n">{{ t('hist.delta') }}</th>
+      <th class="n">{{ t('hist.max_current') }}</th><th class="n">{{ t('hist.max_temp') }}</th>
     </tr></thead>
     <tbody>
     {% for h in hist %}
@@ -83,16 +83,16 @@
   </table>
   </div>
   {% else %}
-  <p class="muted">Noch keine Nutzungsstatistik hochgeladen.</p>
+  <p class="muted">{{ t('dev.nostats') }}</p>
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>HMS-Meldungen</h2>
-  <p class="muted small">Fehler- und Statusmeldungen des Antriebs. Die Bedeutung der Codes ist bisher unbekannt.</p>
+  <h2>{{ t('hms.title') }}</h2>
+  <p class="muted small">{{ t('hms.text') }}</p>
   {% if d.hms %}
   <table class="plain">
-    <thead><tr><th>Zeit</th><th>Code</th></tr></thead>
+    <thead><tr><th>{{ t('hms.time') }}</th><th>{{ t('hms.code') }}</th></tr></thead>
     <tbody>
     {% for e in d.hms %}
     <tr><td>{{ e.time | localtime('%d.%m.%Y %H:%M') if e.time else '–' }}</td><td class="mono">{{ e.code }}</td></tr>
@@ -100,7 +100,7 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">Keine HMS-Meldungen hochgeladen.</p>
+  <p class="muted">{{ t('hms.none') }}</p>
   {% endif %}
 </section>
 {% endblock %}

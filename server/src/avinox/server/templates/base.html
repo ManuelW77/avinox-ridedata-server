@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,14 +14,21 @@
     <a class="brand" href="/"><img src="{{ url_for('static', path='icon-192.png') }}" alt=""> Avinox Ride Data</a>
     <nav>
       {% set p = request.url.path %}
-      <a href="/" {% if p == '/' %}aria-current="page"{% endif %}>Übersicht</a>
-      <a href="/rides" {% if p.startswith('/rides') %}aria-current="page"{% endif %}>Fahrten</a>
-      <a href="/device" {% if p == '/device' %}aria-current="page"{% endif %}>Bike &amp; Akku</a>
-      <a href="/sync" {% if p == '/sync' %}aria-current="page"{% endif %}>Sync</a>
-      <a href="/settings" {% if p == '/settings' %}aria-current="page"{% endif %}>Einstellungen</a>
+      <a href="/" {% if p == '/' %}aria-current="page"{% endif %}>{{ t('nav.overview') }}</a>
+      <a href="/rides" {% if p.startswith('/rides') %}aria-current="page"{% endif %}>{{ t('nav.rides') }}</a>
+      <a href="/device" {% if p == '/device' %}aria-current="page"{% endif %}>{{ t('nav.bike') }}</a>
+      <a href="/sync" {% if p == '/sync' %}aria-current="page"{% endif %}>{{ t('nav.sync') }}</a>
+      <a href="/settings" {% if p == '/settings' %}aria-current="page"{% endif %}>{{ t('nav.settings') }}</a>
     </nav>
   </header>
   <main>{% block main %}{% endblock %}</main>
+  <footer class="site-footer">
+    <p>© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · <a href="https://manuelw.de" rel="noopener">manuelw.de</a></p>
+    <p class="lang-switch" aria-label="{{ t('lang.label') }}">
+      <a href="{{ lang_links['de'] }}" hreflang="de" lang="de" {% if lang == 'de' %}aria-current="true"{% endif %}>DE</a> | <a href="{{ lang_links['en'] }}" hreflang="en" lang="en" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a>
+    </p>
+  </footer>
+  <script type="application/json" id="i18n">{{ js_i18n | tojson }}</script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

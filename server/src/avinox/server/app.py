@@ -18,8 +18,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Res
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBasic, HTTPBasicCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from urllib.parse import urlencode
 
 from ..analysis import ASSIST_LEVELS
+from . import i18n
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
 from .dashboard import PERIODS, day_text, emphasize
@@ -31,8 +33,8 @@ HERE = Path(__file__).parent
 MAX_FILES_PER_REQUEST = 50
 
 
-WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
-"""Deutsche Wochentage für ``%a`` – unabhängig von der System-Locale."""
+WEEKDAYS = i18n.WEEKDAYS["de"]
+"""Wochentage für ``%a`` – unabhängig von der System-Locale (siehe ``i18n.strftime``)."""
 
 
 def _fmt_duration(seconds: int | None) -> str:
@@ -84,16 +86,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def local_time(iso: str | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
         if not iso:
-            return "ohne Uhrzeit"
-        dt = datetime.fromisoformat(iso).astimezone(settings.tz)
-        return dt.strftime(fmt.replace("%a", WEEKDAYS[dt.weekday()]))
+            return i18n.t("no_time", i18n.current())
+        return i18n.strftime(datetime.fromisoformat(iso).astimezone(settings.tz), fmt, i18n.current())
+
+    def day_filter(iso: str | None) -> str:
+        return day_text(date.fromisoformat(iso), i18n.current()) if iso else i18n.t("no_date", i18n.current())
+
+    def num_filter(v, d=0) -> str:
+        return i18n.num(v, d, i18n.current())
+
+    def t_global(key: str, **kw) -> str:
+        return i18n.t(key, i18n.current(), **kw)
 
     templates.env.filters["duration"] = _fmt_duration
     templates.env.filters["localtime"] = local_time
     templates.env.filters["emph"] = emphasize
-    templates.env.filters["day"] = lambda iso: day_text(date.fromisoformat(iso)) if iso else "ohne Datum"
+    templates.env.filters["day"] = day_filter
     templates.env.tests["match"] = lambda value, pattern: re.match(pattern, str(value)) is not None
-    templates.env.filters["num"] = lambda v, d=0: "–" if v is None else f"{v:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    templates.env.filters["num"] = num_filter
+    templates.env.globals["t"] = t_global
+
+    def lang_of(request: Request) -> str:
+        return i18n.pick_language(request.query_params.get("lang"), request.cookies.get(i18n.COOKIE), request.headers.get("accept-language"))
 
     bearer = HTTPBearer(auto_error=False)
     basic = HTTPBasic(auto_error=False)
@@ -332,9 +346,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.stats()
 
     @app.get("/api/v1/dashboard", dependencies=[Depends(read_auth)], tags=["statistik"])
-    def dashboard_api(period: str = Query("week", pattern="^(day|week|month|year)$"), offset: int = Query(0, ge=0, le=10000)):
-        """Übersicht: Zeitreihe je Tag/Woche/Monat/Jahr, Vergleich zum Zeitraum davor, Bestwerte, Gesamt."""
-        return store.dashboard(period, offset)
+    def dashboard_api(request: Request, period: str = Query("week", pattern="^(day|week|month|year)$"), offset: int = Query(0, ge=0, le=10000)):
+        """Übersicht: Zeitreihe je Tag/Woche/Monat/Jahr, Vergleich zum Zeitraum davor, Bestwerte, Gesamt.
+
+        Texte (Titel, Sätze) in der Sprache aus ``?lang=``, Cookie oder ``Accept-Language``.
+        """
+        return store.dashboard(period, offset, lang=lang_of(request))
 
     @app.get("/api/v1/device", dependencies=[Depends(read_auth)], tags=["statistik"])
     def device():
@@ -387,20 +404,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ------------------------------------------------------------ Webseite
 
     def page(request: Request, name: str, **ctx) -> HTMLResponse:
-        return templates.TemplateResponse(request, name, {"tile_url": settings.tile_url, "tile_attribution": settings.tile_attribution, **ctx})
+        lang = ctx.pop("lang", None) or lang_of(request)
+        params = [(k, v) for k, v in request.query_params.multi_items() if k != "lang"]
+        lang_links = {code: "?" + urlencode([*params, ("lang", code)]) for code in i18n.LANGS}
+        token = i18n.use(lang)  # Filter und t() lesen die Sprache beim Rendern (läuft hier synchron)
+        try:
+            resp = templates.TemplateResponse(request, name, {
+                "tile_url": settings.tile_url, "tile_attribution": settings.tile_attribution,
+                "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang), **ctx,
+            })
+        finally:
+            i18n.reset(token)
+        if request.query_params.get("lang") in i18n.LANGS:
+            resp.set_cookie(i18n.COOKIE, lang, max_age=i18n.COOKIE_MAX_AGE, samesite="lax", httponly=True)
+        return resp
 
     @app.get("/", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def dashboard_page(request: Request, period: str | None = None, offset: int | None = None):
+        lang = lang_of(request)
         if period not in PERIODS:
             period = "month" if period is None else "week"
         if offset is None and request.query_params.get("period") is None:
             # Ohne Vorgaben: der Zeitraum der letzten Fahrt (sonst ist die Seite bei älteren Fahrten leer)
-            dash = store.dashboard(period, 0)
+            dash = store.dashboard(period, 0, lang=lang)
             if dash["last_offset"]:
-                dash = store.dashboard(period, dash["last_offset"])
+                dash = store.dashboard(period, dash["last_offset"], lang=lang)
         else:
-            dash = store.dashboard(period, max(0, min(offset or 0, 10000)))
-        return page(request, "dashboard.html", dash=dash)
+            dash = store.dashboard(period, max(0, min(offset or 0, 10000)), lang=lang)
+        return page(request, "dashboard.html", dash=dash, lang=lang)
 
     @app.get("/rides", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def rides_page(request: Request):

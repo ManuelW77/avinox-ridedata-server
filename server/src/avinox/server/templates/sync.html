@@ -1,22 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Sync – Avinox Ride Data{% endblock %}
+{% block title %}{{ t('sync.title') }} – Avinox Ride Data{% endblock %}
 {% block main %}
-{% set kinds = {'manifest': 'Abgleich', 'upload_chunk_error': 'Upload-Fehler', 'file_new': 'Datei neu', 'file_known': 'Datei bekannt', 'auth_error': 'Token abgelehnt', 'report': 'Sync-Bericht', 'heartbeat': 'Lebenszeichen', 'firmware_check': 'Firmware-Abfrage', 'firmware_download': 'Firmware-Download', 'ota': 'Firmware-Update'} %}
 {% set bad = ['upload_chunk_error', 'auth_error'] %}
+{% macro span(m) -%}
+{%- if m < 1 -%}{{ t('sync.ago.now') }}{%- elif m < 60 -%}{{ t('sync.span.min', n=m) }}{%- elif m < 2880 -%}{{ t('sync.span.h', n=(m / 60) | round | int) }}{%- else -%}{{ t('sync.span.d', n=(m / 1440) | round | int) }}{%- endif -%}
+{%- endmacro %}
 {% macro ago(m) -%}
-{%- if m is none -%}–{%- elif m < 1 -%}gerade eben{%- elif m < 60 -%}vor {{ m }} min{%- elif m < 2880 -%}vor {{ (m / 60) | round | int }} h{%- else -%}vor {{ (m / 1440) | round | int }} Tagen{%- endif -%}
+{%- if m is none -%}–{%- elif m < 1 -%}{{ t('sync.ago.now') }}{%- else -%}{{ t('sync.ago', span=span(m)) }}{%- endif -%}
 {%- endmacro %}
 <div class="lead">
   <div>
-    <h1>Sync</h1>
-    <p>Wann sich der ESP32 gemeldet hat, was er gesendet hat und ob es geklappt hat.</p>
+    <h1>{{ t('sync.title') }}</h1>
+    <p>{{ t('sync.sub') }}</p>
   </div>
 </div>
 
 {% if not snap.devices and not snap.events %}
 <section class="card empty">
-  <p>Noch keine Einsendungen. Sobald sich der ESP32 meldet, erscheint er hier.</p>
-  <p><a href="/settings">Einrichtung: Adresse und Upload-Token in den Einstellungen</a></p>
+  <p>{{ t('sync.empty') }}</p>
+  <p><a href="/settings">{{ t('sync.setup') }}</a></p>
 </section>
 {% else %}
 <div class="grid cols-2" style="margin-bottom:1rem">
@@ -26,58 +28,58 @@
   <section class="card">
     <div class="dev-head">
       <h2>{{ d.device_id }}</h2>
-      {% if d.offline %}<span class="pill">offline seit {{ d.last_seen | localtime('%d.%m. %H:%M') }}</span>{% else %}<span class="pill ok">online</span>{% endif %}
+      {% if d.offline %}<span class="pill">{{ t('sync.offline_since', t=d.last_seen | localtime('%d.%m. %H:%M')) }}</span>{% else %}<span class="pill ok">{{ t('sync.online') }}</span>{% endif %}
     </div>
     <dl class="kv">
-      <dt>Zuletzt gesehen</dt><dd>{{ d.last_seen | localtime('%d.%m.%Y %H:%M') }} ({{ ago(d.age_min) }})</dd>
-      <dt>IP</dt><dd class="mono">{{ d.last_ip or '–' }}</dd>
-      <dt>Firmware</dt><dd class="mono">{{ d.firmware or '–' }}{% if fw_latest and d.firmware %}{% if fw_latest.version != d.firmware %} – verfügbar {{ fw_latest.version }}{% else %} – aktuell{% endif %}{% endif %}</dd>
-      <dt>WLAN-Signal</dt><dd>{% if r.rssi is defined and r.rssi is not none %}{{ r.rssi | num }} dBm ({{ 'gut' if r.rssi >= -60 else ('mittel' if r.rssi >= -75 else 'schwach') }}){% else %}–{% endif %}</dd>
-      <dt>Laufzeit</dt><dd>{{ (r.uptime_s | duration) if r.uptime_s is defined and r.uptime_s is not none else '–' }}</dd>
-      <dt>Freier Speicher</dt><dd>{% if r.free_heap is defined and r.free_heap is not none %}{{ (r.free_heap / 1024) | num }} KB{% else %}–{% endif %}</dd>
-      <dt>Laufwerk</dt><dd>
-        {% if r.drive == 'present' %}erkannt
-        {% elif r.drive == 'absent' %}<span class="pill warn">nicht erkannt</span> <span class="muted small">Display an? Richtige (native) Buchse?</span>
-        {% elif r.drive == 'error' %}<span class="pill warn">Fehler</span>
+      <dt>{{ t('sync.last_seen') }}</dt><dd>{{ d.last_seen | localtime('%d.%m.%Y %H:%M') }} ({{ ago(d.age_min) }})</dd>
+      <dt>{{ t('sync.ip') }}</dt><dd class="mono">{{ d.last_ip or '–' }}</dd>
+      <dt>{{ t('sync.firmware') }}</dt><dd class="mono">{{ d.firmware or '–' }}{% if fw_latest and d.firmware %}{% if fw_latest.version != d.firmware %}{{ t('sync.fw_available', v=fw_latest.version) }}{% else %}{{ t('sync.fw_current') }}{% endif %}{% endif %}</dd>
+      <dt>{{ t('sync.wifi') }}</dt><dd>{% if r.rssi is defined and r.rssi is not none %}{{ r.rssi | num }} dBm ({{ t('sync.rssi.good') if r.rssi >= -60 else (t('sync.rssi.mid') if r.rssi >= -75 else t('sync.rssi.weak')) }}){% else %}–{% endif %}</dd>
+      <dt>{{ t('sync.uptime') }}</dt><dd>{{ (r.uptime_s | duration) if r.uptime_s is defined and r.uptime_s is not none else '–' }}</dd>
+      <dt>{{ t('sync.heap') }}</dt><dd>{% if r.free_heap is defined and r.free_heap is not none %}{{ (r.free_heap / 1024) | num }} KB{% else %}–{% endif %}</dd>
+      <dt>{{ t('sync.drive') }}</dt><dd>
+        {% if r.drive == 'present' %}{{ t('sync.drive.present') }}
+        {% elif r.drive == 'absent' %}<span class="pill warn">{{ t('sync.drive.absent') }}</span> <span class="muted small">{{ t('sync.drive.absent_hint') }}</span>
+        {% elif r.drive == 'error' %}<span class="pill warn">{{ t('sync.drive.error') }}</span>
         {% else %}–{% endif %}
       </dd>
     </dl>
-    <h3 style="margin:1rem 0 0.4rem">Letzter Sync</h3>
+    <h3 style="margin:1rem 0 0.4rem">{{ t('sync.last_sync') }}</h3>
     {% if s %}
     <dl class="kv">
-      <dt>Zeit</dt><dd>{{ d.last_sync_at | localtime('%d.%m.%Y %H:%M') }}</dd>
-      <dt>Ergebnis</dt><dd>
-        {% if s.result == 'ok' %}<span class="pill ok">OK</span>
-        {% elif s.result == 'warn' %}<span class="pill warn">Warnung</span>
-        {% elif s.result == 'error' %}<span class="pill warn">Fehler</span>{% else %}–{% endif %}
+      <dt>{{ t('sync.time') }}</dt><dd>{{ d.last_sync_at | localtime('%d.%m.%Y %H:%M') }}</dd>
+      <dt>{{ t('sync.result') }}</dt><dd>
+        {% if s.result == 'ok' %}<span class="pill ok">{{ t('sync.res.ok') }}</span>
+        {% elif s.result == 'warn' %}<span class="pill warn">{{ t('sync.res.warn') }}</span>
+        {% elif s.result == 'error' %}<span class="pill warn">{{ t('sync.res.error') }}</span>{% else %}–{% endif %}
       </dd>
-      <dt>Dateien</dt><dd>{{ s.get('new') | num }} neu, {{ s.get('skipped') | num }} übersprungen, {{ s.get('failed') | num }} fehlerhaft{% if s.get('checked') is not none %} (von {{ s.get('checked') | num }}){% endif %}</dd>
-      <dt>Datenmenge</dt><dd>{{ ((s.bytes or 0) / 1048576) | num(2) }} MB</dd>
-      <dt>Dauer</dt><dd>{{ ((s.duration_ms or 0) / 1000) | num(1) }} s</dd>
+      <dt>{{ t('sync.files') }}</dt><dd>{{ t('sync.files_val', new=s.get('new') | num, skipped=s.get('skipped') | num, failed=s.get('failed') | num) }}{% if s.get('checked') is not none %}{{ t('sync.files_of', n=s.get('checked') | num) }}{% endif %}</dd>
+      <dt>{{ t('sync.volume') }}</dt><dd>{{ ((s.bytes or 0) / 1048576) | num(2) }} MB</dd>
+      <dt>{{ t('sync.duration') }}</dt><dd>{{ ((s.duration_ms or 0) / 1000) | num(1) }} s</dd>
     </dl>
     {% if s.error %}<p class="sync-note warn small">{{ s.error }}</p>{% endif %}
     {% else %}
-    <p class="muted small">Noch kein Sync gemeldet.</p>
+    <p class="muted small">{{ t('sync.no_sync') }}</p>
     {% endif %}
     {% if d.offline %}
-    <p class="sync-note notice small">Seit {{ ago(d.age_min) | replace('vor ', '') }} kein Lebenszeichen (zuletzt {{ d.last_seen | localtime('%d.%m. %H:%M') }}). Das Bike kann einfach aus sein.</p>
+    <p class="sync-note notice small">{{ t('sync.silent', span=span(d.age_min), t=d.last_seen | localtime('%d.%m. %H:%M')) }}</p>
     {% endif %}
   </section>
   {% endfor %}
 </div>
 
 <section class="card">
-  <h2>Letzte Ereignisse</h2>
+  <h2>{{ t('sync.events') }}</h2>
   <div style="overflow-x:auto">
   <table class="plain sync">
-    <thead><tr><th>Zeit</th><th>IP</th><th>Gerät</th><th>Art</th><th>Datei</th><th class="n">Größe</th><th>Status / Detail</th></tr></thead>
+    <thead><tr><th>{{ t('sync.th.time') }}</th><th>{{ t('sync.th.ip') }}</th><th>{{ t('sync.th.device') }}</th><th>{{ t('sync.th.kind') }}</th><th>{{ t('sync.th.file') }}</th><th class="n">{{ t('sync.th.size') }}</th><th>{{ t('sync.th.detail') }}</th></tr></thead>
     <tbody>
     {% for e in snap.events %}
     <tr class="{{ 'ev-err' if e.kind in bad }}">
       <td>{{ e.ts | localtime('%d.%m. %H:%M:%S') }}</td>
       <td class="mono">{{ e.client_ip or '–' }}</td>
       <td>{{ e.device_id or '–' }}</td>
-      <td>{% if e.kind in bad %}<span class="pill warn">{{ kinds.get(e.kind, e.kind) }}</span>{% else %}{{ kinds.get(e.kind, e.kind) }}{% endif %}</td>
+      <td>{% if e.kind in bad %}<span class="pill warn">{{ t('sync.kind.' ~ e.kind, _default=e.kind) }}</span>{% else %}{{ t('sync.kind.' ~ e.kind, _default=e.kind) }}{% endif %}</td>
       <td class="mono">{{ e.path or '' }}</td>
       <td class="n">{% set n = e.size if e.size is not none else e.bytes %}{% if n is not none %}{% if n >= 1048576 %}{{ (n / 1048576) | num(2) }} MB{% elif n >= 1024 %}{{ (n / 1024) | num(1) }} KB{% else %}{{ n }} B{% endif %}{% endif %}</td>
       <td>{% if e.status and e.status >= 400 %}<span class="pill warn">{{ e.status }}</span> {% endif %}{{ e.detail or '' }}</td>
