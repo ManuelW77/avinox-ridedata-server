@@ -129,6 +129,58 @@
     const span = tr("span." + dash.period);
     $("sum-distance").textContent = tr("sum_in", { v: fmt(sum("distance_km"), 0), unit: "km", span });
     $("sum-ascent").textContent = tr("sum_in", { v: fmt(sum("ascent_m"), 0), unit: "m", span });
+    renderMix();
+  }
+
+  /* --------------------------------------------------------- Verteilung */
+
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // wie Jinja-Filter „duration“: m:ss bzw. h:mm:ss
+  function dur(sec) {
+    if (sec == null || !isFinite(sec)) return "–";
+    const s = Math.round(sec), h = Math.floor(s / 3600), rest = s % 3600;
+    const mm = Math.floor(rest / 60), ss = rest % 60;
+    return h ? h + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0") : mm + ":" + String(ss).padStart(2, "0");
+  }
+
+  function barsHtml(data, cls) {
+    const entries = Object.entries(data || {}).filter(([, v]) => typeof v === "number");
+    const total = entries.reduce((a, [, v]) => a + v, 0);
+    const peak = entries.reduce((a, [, v]) => Math.max(a, v), 0);
+    const rows = entries.filter(([, v]) => v).map(([k, v]) =>
+      `<div class="bar"><span class="label" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
+    return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+  }
+
+  function renderMix() {
+    const section = $("mix-section"), box = $("mix");
+    const m = dash.mix;
+    if (!section || !box) return;
+    if (!m || !m.rides) { section.hidden = true; box.innerHTML = ""; return; }
+    section.hidden = false;
+    const a = m.assist || {}, g = m.gears || {}, d = m.distributions || {};
+    const modeRows = Object.entries(a.per_mode || {}).map(([name, x]) =>
+      `<tr><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
+    const card = (title, sub, data, cls) =>
+      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls)}</section>`;
+    const cards = [
+      card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider"),
+      card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor"),
+      card(tr("mix.d.cadence"), tr("mix.cadence_unit"), d.cadence_s, "rider"),
+      card(tr("mix.d.speed"), "km/h", d.speed_s, ""),
+      card(tr("mix.d.gradient"), "%", d.gradient_s, ""),
+    ];
+    if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
+    box.innerHTML =
+      `<div class="grid cols-2" style="margin-bottom:1rem">
+        <section class="card"><h2>${esc(tr("mix.modes"))}</h2>${barsHtml(a.seconds_per_mode, "motor")}
+          <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table>
+          <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</p></section>
+        <section class="card"><h2>${esc(tr("mix.gears"))}</h2>${barsHtml(g.seconds_per_gear, "")}
+          <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
+      </div>
+      <div class="grid cols-3" style="margin-bottom:1rem">${cards.join("")}</div>`;
   }
 
   /* --------------------------------------------------------- Diagramme */
