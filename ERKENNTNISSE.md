@@ -20,8 +20,11 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 | `ride_rec/<konto-id>/ride_rec_<id>.proto` | Fahrten nach der Kopplung mit der App, Unterordner = ID im Header (Offset 128, vermutlich Konto). Zeiten als Unix-Zeit. |
 | `ride_rec/ride_rec_<id>.proto` (Hauptordner) | Erste Fahrten vor der Kopplung. Zeiten = Sekunden seit Geräte-Start, **keine Uhrzeit**. |
 | `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
-| `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Anderes Format (kein `0xA5A5A5A5`), Inhalt unbekannt. Für die Auswertung vorerst nicht nötig. |
-| `hms_rec/`, `buried_rec/buried_file_cur.json`, `System/` | Wartungs-/Diagnosedaten, Index, Kartenvorschau. Noch nicht untersucht. |
+| `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Kennung `DGS_EB100` / `DJI_LOG_V3`. Inhalt **verschlüsselt** (Entropie 7,5–7,8 Bit/Byte, sich wiederholende 8-Byte-Blöcke). Ohne DJI-Schlüssel nicht lesbar, wird nicht verfolgt. |
+| `buried_rec/buried_file_cur.json` | **Nutzungsstatistik** („buried point“ = Analytics), JSON-Zeilen mit `event_id`, ca. 1000 Zeilen, siehe unten. Lesbar. |
+| `hms_rec/hms_current_storage.proto` | 48 Byte, Magic `0xA5A5A5A5`, Seriennummer, ein Frame Typ `0x01EB` mit Protobuf. Vermutlich Fehler-/Gesundheitsmeldungen (DJI „HMS“). Noch nicht dekodiert. |
+| `System/ebike_log_index.dat` | 12 Byte, uint32 = Anzahl der `ebike_log`-Dateien (2482). |
+| `System/map/tracks/<hash>/` | Nur eine leere `thumbnail.jpg.tmp`. |
 
 Hinweis: Die Dateizeiten auf dem Laufwerk sind unbrauchbar (Jahr 2098). Neue Dateien also über Name + Größe erkennen, nicht über Änderungszeit.
 
@@ -77,6 +80,24 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 75 | Ereignis | roh (bisher 0 und 2) |
 
 Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`.
+
+## 3a. Nutzungsstatistik `buried_rec/buried_file_cur.json`
+
+JSON pro Zeile, Zeitstempel `time_now` als `J-M-T-h:m:s` (vor Uhrzeit-Sync 1970). Werte als Strings. Mehrere Blöcke pro Fahrt bzw. Einschaltvorgang (`boot_times`). Gefundene `event_id` (Auswahl):
+
+| event_id | Inhalt |
+|---|---|
+| `Firmware_version` | Versionen Paket, Display, Motor, BLE, Akku |
+| `single_ride` / `single_power` | Distanz, Akku, Starthöhe / Distanz, Dauer |
+| `rider_cadence`, `rider_torque`, `rider_heart_rate` | Ø / max (= Header-Werte der Fahrt) |
+| `ride_power`, `motor_torque` | Histogramme: Sekunden je Leistungs- bzw. Drehmomentstufe (`power_700`, `torque_110` …) |
+| `gear_shift` | Schaltvorgänge je Gang |
+| `assist_mode_usage`, `assist_mode_order`, `boost_mode`, `ass_mode_para` | Dauer je Unterstützungsmodus, Wechsel, Boost, Modus-Parameter |
+| `battery_usage`, `battery_temperture`, `battery_circle` | max. Zellspannungsdifferenz, min. Gesamtspannung, Temperaturgrenzen, Ladezyklen |
+| `mos_ntc_temperture`, `bike_pitch_attitude`, `bike_horizontal_attitude` | Temperaturbegrenzung Motor-Elektronik, Zeit mit > 40° Neigung / Schräglage |
+| `wireless_controller_usage` / `_customize` | Tastendrücke an der Fernbedienung, Belegung |
+
+Zuordnung zu einzelnen Fahrten: über Zeitstempel bzw. Distanz (`single_ride.distance` = Fahrtdistanz).
 
 ## 4. Bestehende Community-Projekte
 
