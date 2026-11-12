@@ -139,9 +139,8 @@
   }
 
   // ---- Server-URL kopieren
-  const urlEl = document.getElementById("server-url");
-  const urlCopy = document.getElementById("server-url-copy");
-  if (urlEl && urlCopy) {
+  document.querySelectorAll(".server-url-copy").forEach((urlCopy) => {
+    const urlEl = urlCopy.parentElement.querySelector(".server-url");
     urlCopy.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(urlEl.value);
@@ -151,7 +150,7 @@
       urlCopy.textContent = tr("copied");
       setTimeout(() => { urlCopy.textContent = tr("copy"); }, 1500);
     });
-  }
+  });
 
   // ---- Firmware
   const fwForm = document.getElementById("fw-form");

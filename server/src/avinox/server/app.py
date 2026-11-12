@@ -61,6 +61,77 @@ def _host_unreachable(host: str) -> bool:
     return ip.is_loopback or ip.is_unspecified or ip in ipaddress.ip_network("172.16.0.0/12")
 
 
+def _in_docker() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
+def _lan_ip() -> str | None:
+    """LAN-IP dieses Rechners per UDP-Socket-Trick (es wird nichts gesendet)."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
+
+def _host_parts(host: str) -> tuple[str, str]:
+    """Zerlegt einen Host-Header in (Name, Port); Port ggf. leer."""
+    host = host.strip()
+    if host.startswith("["):
+        end = host.find("]")
+        name = host[: end + 1] if end > 0 else host
+        rest = host[end + 1 :] if end > 0 else ""
+        return name, rest[1:] if rest.startswith(":") else ""
+    if host.count(":") == 1:
+        name, port = host.split(":")
+        return name, port
+    return host, ""
+
+
+def _server_url_suggestions(request: Request, public_url: str | None):
+    """Adressvorschläge für den ESP32: (Liste aus (Beschriftungs-Key, URL, Hinweis-Key), unreachable, docker_hint).
+
+    Reine Anzeige-Hilfe, keine Sicherheitsentscheidung: X-Forwarded-* wird hier nur zum Anzeigen
+    ausgewertet, uvicorn vertraut den Proxy-Headern bewusst nur von 127.0.0.1.
+    """
+    items: list[tuple[str, str, str]] = []
+    if public_url:
+        items += [("set.url_cfg", u.strip().rstrip("/"), "") for u in public_url.split(",") if u.strip()]
+    headers = request.headers
+    host = (headers.get("x-forwarded-host") or headers.get("host") or "").split(",")[0].strip()
+    proto = (headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    scheme = proto if proto in ("http", "https") else request.url.scheme
+    if host:
+        items.append(("set.url_called", f"{scheme}://{host}", "set.url_https_hint" if scheme == "https" else ""))
+    # IP-Adressen im LAN
+    docker = _in_docker()
+    own_host = headers.get("host", "").strip()
+    name, port = _host_parts(own_host) if own_host else ("", "")
+    # Port, auf dem der Server selbst lauscht (hinter einem Proxy fehlt er im Host-Header)
+    server_port = str((request.scope.get("server") or (None, None))[1] or request.url.port or 8000)
+    lan: list[str] = []
+    try:
+        if name and ipaddress.ip_address(name.strip("[]")):
+            lan.append(f"http://{name}:{port or server_port}")
+    except ValueError:
+        pass
+    if not docker and (ip := _lan_ip()):
+        lan.append(f"http://{ip}:{server_port}")
+    items += [("set.url_lan", url, "") for url in lan]
+    seen: set[str] = set()
+    unique = []
+    for it in items:
+        if it[1] not in seen:
+            seen.add(it[1])
+            unique.append(it)
+    usable = [it for it in unique if not _host_unreachable(it[1].split("://", 1)[1])]
+    docker_hint = docker and not any(it[0] == "set.url_lan" for it in unique) and not public_url
+    return unique, not usable, docker_hint
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     store = Store(settings)
@@ -459,13 +530,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/settings", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def settings_page(request: Request):
-        # Adresse für den ESP32: fest konfiguriert oder die, unter der der Browser den Server gerade erreicht.
-        host = request.headers.get("host", "")
-        if settings.public_url:
-            server_url, unreachable = settings.public_url, False
-        else:
-            server_url = f"{request.url.scheme}://{host}" if host else ""
-            unreachable = not host or _host_unreachable(host)
+        server_urls, unreachable, docker_hint = _server_url_suggestions(request, settings.public_url)
         return page(
             request,
             "settings.html",
@@ -475,8 +540,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             has_web_login=bool(settings.web_user),
             fw_admin=bool(settings.web_user),
             fw_admin_hint=FW_ADMIN_HINT,
-            server_url=server_url,
+            server_urls=server_urls,
             server_url_unreachable=unreachable,
+            server_url_docker_hint=docker_hint,
             token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),
             patterns=[p.pattern for p in PATTERNS.values()],
             firmware=store.list_firmware(),
