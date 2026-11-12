@@ -33,3 +33,6 @@ PLAN.md
 
 # Server-Datenordner (Rohdateien, Datenbank, Upload-Token)
 data/
+
+# Claude-Worktrees (lokal)
+.claude/
