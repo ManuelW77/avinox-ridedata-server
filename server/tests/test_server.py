@@ -427,3 +427,11 @@ def test_version_in_footer_and_openapi(client, settings):
     html = client.get("/", auth=("a", "b")).text if client.get("/").status_code == 401 else client.get("/").text
     assert f"v{v}" in html
     assert client.get("/api/openapi.json", auth=("a", "b")).json()["info"]["version"] == v
+
+
+def test_settings_language_select(client):
+    r = client.get("/settings?lang=en")
+    assert r.status_code == 200
+    assert 'id="lang-select"' in r.text
+    assert '<option value="en" selected' in r.text
+    assert client.cookies.get("lang") == "en" or "lang=en" in r.headers.get("set-cookie", "")

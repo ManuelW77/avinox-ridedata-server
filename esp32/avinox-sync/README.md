@@ -76,7 +76,37 @@ Einrichtungs-WLANs wird gelöscht, Neustart, offenes Einrichtungs-WLAN. Zum Neus
 Nicht schon beim Einschalten drücken, sonst startet der ESP32 im Download-Modus (BOOT = GPIO 0 ist ein Strapping-Pin).
 „Ohne Änderung neu starten“ verlässt den Einrichtungsmodus wieder.
 
+**Verbindung prüfen:** Der Knopf im Formular (benötigt JavaScript) ruft `POST /check` auf und prüft, ohne zu speichern,
+`GET <Server>/api/v1/manifest` mit Token und Geräte-Header. Ergebnis: Server nicht erreichbar, Token falsch (401/403) oder in Ordnung.
+Im Einrichtungsportal verbindet sich der ESP32 dafür kurz mit dem eingetragenen WLAN (bis 15 s, Fehler: Netz nicht gefunden,
+Passwort falsch) und trennt danach wieder; die Verbindung zum Portal kann dabei abreißen. Ein leeres Token-Feld nutzt den gespeicherten
+Token, im Notfallmodus ist die Eingabe Pflicht. Im Betrieb liegt `/check` hinter Login und CSRF-Schutz. Es läuft nur eine Prüfung gleichzeitig.
+
 Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`, `token`, `ap_pass`.
+
+## Weboberfläche im Betrieb
+
+Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgeschützte Weboberfläche an.
+
+- **Adresse:** `http://<IP des Geräts>/`. Die IP steht in der Geräteliste des Routers oder auf der Geräteseite des Servers.
+- **Login:** Benutzer `avinox` (fest), Passwort = Zugangspasswort = Passwort des Einrichtungs-WLANs. Ohne gesetztes
+  Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen werden
+  alle Anfragen dieser Client-IP 30 s lang mit 429 abgewiesen (auch mit richtigen Daten, andere Geräte sind nicht betroffen). Gesperrte Einträge werden nie verdrängt (8 Plätze, alle belegt = neuer Client gesperrt). Mehr als 20 Fehlversuche in 60 s sperren zusätzlich alle ungültigen Anmeldungen 60 s lang; richtige Daten nicht gesperrter Adressen gehen weiter durch.
+  Abgewiesene Anmeldungen stehen mit Grund, Benutzername und Passwortlänge (nie dem Passwort) im Log.
+- **CSRF-Schutz:** Änderungen (POST) werden nur angenommen, wenn `Origin` oder ersatzweise `Referer` zum Host passt;
+  fehlen beide Header, wird abgelehnt (403).
+  Die Verbindung ist unverschlüsselt (HTTP): nur im vertrauten Heimnetz benutzen.
+- **Anzeige:** Firmware-Version, Geräte-ID, WLAN (Name, Signal), IP, Laufzeit, freier Speicher, USB-Laufwerk, letzter Sync,
+  Server-URL.
+- **Ändern:** WLAN (Name, Passwort), Server-URL, Upload-Token und Zugangspasswort. Gesetzte Passwörter und der Token werden
+  nie angezeigt; leer lassen = behalten. Speichern startet das Gerät neu. Außerdem „Neu starten“ und „Einrichtungsmodus starten“.
+- **Notfall:** Bei falschem WLAN-Namen oder -Passwort ist das Gerät danach nicht mehr erreichbar. Dann BOOT-Taste 3 s halten
+  (Einrichtungsmodus) und neu einrichten.
+- **Passwort vergessen (Notfallmodus):** Wird der Einrichtungsmodus per BOOT-Taste ausgelöst (Taste beim Start halten oder
+  im Betrieb ≥ 3 s halten und loslassen), startet das Einrichtungs-WLAN **ohne Passwort**. Die Seite zeigt oben einen
+  Hinweis, und beim Speichern ist ein neues Zugangspasswort (min. 8 Zeichen, wiederholt) Pflicht. Der Upload-Token muss immer neu eingegeben werden (gespeicherter wird nie übernommen), bei geändertem WLAN-Namen (nicht offen) auch das WLAN-Passwort. Nach 15 min ohne Speichern
+  startet das Gerät in den Normalbetrieb neu (nur bei vollständiger Konfiguration). Über die Weboberfläche oder wegen
+  unvollständiger Konfiguration gestarteter Einrichtungsmodus bleibt wie gehabt passwortgeschützt.
 
 ## LED
 
@@ -165,6 +195,9 @@ Danach:
 | `main/main.c` | Ablauf, BOOT-Taste, Sync-Schleife, LED-Zustand |
 | `main/config.c/.h` | Konfiguration im NVS |
 | `main/portal.c/.h` | SoftAP, HTTP-Server mit Einrichtungs- und Statusseite, Captive-Portal-DNS |
+| `main/web_common.c/.h` | gemeinsamer Teil von Portal und Weboberfläche: Texte DE/EN, Formular, Speichern |
+| `main/webui.c/.h` | Weboberfläche im Betrieb (Basic Auth, Status, Einstellungen) |
+| `main/web_auth.c/.h` | Basic-Auth-Prüfung und Origin-Vergleich (Host-Test) |
 | `main/wifi_sta.c/.h` | WLAN-Station mit 30-s-Fenster / 60-s-Pause |
 | `main/usb_drive.c/.h` | USB-Host + MSC (aus usb-probe), Einhängen unter `/usb` |
 | `main/sync.c/.h` | Manifest, Upload-Status, Upload in Stücken, Ergebnis im NVS |
@@ -172,12 +205,14 @@ Danach:
 | `main/led.c/.h` | Status-LED |
 | `main/ota.c/.h` | Firmware-Update per WLAN, Bestätigung/Rollback |
 | `test/host/test_paths.c` | Host-Test für `sync_paths.c` |
+| `test/host/test_auth.c` | Host-Test für `web_auth.c` (mit base64-Shim) |
 
 Host-Test (ohne ESP-IDF):
 
 ```sh
 cd esp32/avinox-sync/test/host
 cc -Wall -Wextra -I../../main ../../main/sync_paths.c test_paths.c -o test_paths && ./test_paths
+cc -Wall -Wextra -Ishim -I../../main ../../main/web_auth.c test_auth.c -o test_auth && ./test_auth
 ```
 
 ## Bekannte Grenzen
@@ -194,4 +229,4 @@ cc -Wall -Wextra -I../../main ../../main/sync_paths.c test_paths.c -o test_paths
 - Die WLAN-Suche im Einrichtungsmodus läuft beim Start und über „Netze neu suchen“; dabei kann die Verbindung zum
   Handy kurz abreißen.
 - Leere Dateien (0 Byte) werden übersprungen.
-- Der Einrichtungsmodus bleibt aktiv, bis gespeichert oder neu gestartet wird (kein Timeout).
+- Der Einrichtungsmodus bleibt aktiv, bis gespeichert oder neu gestartet wird (kein Timeout; Ausnahme: Notfallmodus, siehe oben).

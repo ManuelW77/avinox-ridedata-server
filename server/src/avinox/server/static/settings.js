@@ -5,6 +5,9 @@
   try { I = JSON.parse(document.getElementById("i18n").textContent) || {}; } catch (e) { I = {}; }
   const tr = (key, vars) => String(I[key] != null ? I[key] : key).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m));
   const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
+  // ---- Sprache: bei Auswahl sofort abschicken
+  const langSelect = document.getElementById("lang-select");
+  if (langSelect && langSelect.form) langSelect.addEventListener("change", () => langSelect.form.submit());
   // ---- Eigene Modi benennen
   const form = document.getElementById("modes-form");
   if (form) {

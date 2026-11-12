@@ -95,10 +95,15 @@ Danach den ESP32 mit der **nativen Buchse** per USB-C-Kabel ans Display stecken.
 
 1. ESP32 einschalten. Ohne Konfiguration startet der Einrichtungsmodus, die LED blinkt violett.
 2. Mit Handy oder Laptop ins WLAN `Avinox-Sync-XXXX` gehen. Beim ersten Mal ist es offen. Das Portal öffnet sich meist von selbst, sonst `http://192.168.4.1` aufrufen.
-3. Heim-WLAN wählen und Passwort eintragen. Server-URL (z. B. `http://<host>:8000`) und Upload-Token eintragen. Ein eigenes Passwort für das Einrichtungs-WLAN vergeben (mindestens 8 Zeichen).
-4. „Speichern und neu starten“.
+3. Heim-WLAN wählen und Passwort eintragen. Server-URL (z. B. `http://<host>:8000`) und Upload-Token eintragen. Ein **Zugangspasswort** vergeben (mindestens 8 Zeichen, nicht das Heim-WLAN-Passwort). Es schützt das Einrichtungs-WLAN `Avinox-Sync-XXXX` und die Weboberfläche des ESP32.
+4. Optional „Verbindung prüfen“: testet, ohne zu speichern, ob WLAN, Server und Token stimmen (im Einrichtungs-WLAN kann die Verbindung dabei kurz abreißen).
+5. „Speichern und neu starten“.
 
 Neu einrichten: BOOT-Taste 3 s halten. Werkseinstellung: BOOT-Taste 10 s halten.
+
+**Weboberfläche im Betrieb:** Ist der ESP32 im Heim-WLAN, erreichst du ihn unter `http://<IP des ESP32>/` (IP aus dem Router). Login: Benutzer **`avinox`** (fest), Passwort = Zugangspasswort, also dasselbe wie für das Einrichtungs-WLAN. Dort siehst du den Status und änderst WLAN, Server-URL, Token und Passwort.
+
+**Rückfallebene (Passwort vergessen oder WLAN falsch eingetragen):** BOOT-Taste 3 s gedrückt halten und loslassen. Der ESP32 öffnet das Einrichtungs-WLAN dann **ohne Passwort**, und du vergibst beim Speichern ein neues Zugangspasswort und gibst den Upload-Token neu ein (steht auf dem Server unter Einstellungen). Ohne Speichern startet er nach 15 min wieder normal.
 
 ### d) Updates per WLAN (OTA)
 
