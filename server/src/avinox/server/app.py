@@ -10,6 +10,7 @@ import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -132,6 +133,12 @@ def _server_url_suggestions(request: Request, public_url: str | None):
     return unique, not usable, docker_hint
 
 
+try:
+    APP_VERSION = _pkg_version("avinox-ridedata-server")
+except PackageNotFoundError:
+    APP_VERSION = "dev"
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     store = Store(settings)
@@ -147,7 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             store.close()
 
-    app = FastAPI(title="Avinox Ride Data", lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+    app = FastAPI(title="Avinox Ride Data", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.state.store = store
     app.state.synclog = synclog
     app.state.settings = settings
@@ -176,6 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     templates.env.tests["match"] = lambda value, pattern: re.match(pattern, str(value)) is not None
     templates.env.filters["num"] = num_filter
     templates.env.globals["t"] = t_global
+    templates.env.globals["app_version"] = APP_VERSION
 
     def lang_of(request: Request) -> str:
         return i18n.pick_language(request.query_params.get("lang"), request.cookies.get(i18n.COOKIE), request.headers.get("accept-language"))
