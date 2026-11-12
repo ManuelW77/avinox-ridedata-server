@@ -179,7 +179,7 @@ class Store:
             raise UploadError("Ungültige Größe")
         with self._lock:
             if self.has_file(path, size):
-                return {"path": path, "size": size, "received": size, "complete": True, "ride": None}
+                return {"path": path, "size": size, "received": size, "complete": True, "ride": None, "new": False}
             part = self._part_path(path, size)
             received = part.stat().st_size if part.exists() else 0
             if offset != received:
@@ -194,7 +194,7 @@ class Store:
             data = part.read_bytes()
             part.unlink()
             result = self.add_file(path, data)
-            return {"path": path, "size": size, "received": size, "complete": True, "ride": result["ride"]}
+            return {"path": path, "size": size, "received": size, "complete": True, "ride": result["ride"], "new": result["new"]}
 
     # ------------------------------------------------------------------ Fahrten
 

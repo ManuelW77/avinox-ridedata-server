@@ -51,6 +51,30 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sync_events (
+    id        INTEGER PRIMARY KEY,
+    ts        TEXT NOT NULL,
+    client_ip TEXT,
+    device_id TEXT,
+    kind      TEXT NOT NULL,   -- manifest | upload_chunk_error | file_new | file_known | auth_error | report | heartbeat
+    path      TEXT,
+    size      INTEGER,
+    bytes     INTEGER,
+    status    INTEGER,
+    detail    TEXT
+);
+CREATE INDEX IF NOT EXISTS sync_events_ts ON sync_events(ts);
+
+CREATE TABLE IF NOT EXISTS devices (
+    device_id        TEXT PRIMARY KEY,
+    last_seen        TEXT,
+    last_ip          TEXT,
+    firmware         TEXT,
+    last_report_json TEXT,
+    last_sync_json   TEXT,
+    last_sync_at     TEXT
+);
 """
 
 
