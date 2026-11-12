@@ -152,4 +152,4 @@ GPL-3.0-or-later, see [LICENSE](LICENSE).
 
 ---
 
-© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · [manuelw.de](https://manuelw.de)
+© 2026 Manuel Weiser · Build with ❤️ and a 🚲 by Manuel Weiser in Leipzig · [manuelw.de](https://manuelw.de)

@@ -296,3 +296,5 @@ table.sync td.n { white-space: nowrap; }
 .lang-switch a { text-decoration: none; }
 .lang-switch a[aria-current] { font-weight: 700; color: var(--ink); }
 @media (max-width: 600px) { .site-footer { padding-bottom: 2rem; } }
+.site-footer .ico { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
+.site-footer .ico-heart { color: var(--rider); }

@@ -340,7 +340,7 @@ static const char PAGE_HEAD2[] = "\"><head><meta charset=\"utf-8\">"
     "</style></head><body><main>";
 
 static const char PAGE_TAIL[] =
-    "<footer>© 2026 Manuel Weiser · Build with \"Herz\" and a \"Bike\" by Manuel Weiser in Leipzig · "
+    "<footer>© 2026 Manuel Weiser · Build with <span role=\"img\" aria-label=\"Herz\">❤️</span> and a <span role=\"img\" aria-label=\"Fahrrad\">🚲</span> by Manuel Weiser in Leipzig · "
     "<a href=\"https://manuelw.de\">manuelw.de</a></footer></main></body></html>";
 
 /* Seitenkopf samt Sprachumschalter; path = aktuelle Seite für die ?lang=-Links. */

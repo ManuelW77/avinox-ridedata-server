@@ -19,6 +19,7 @@ services:
       # AVINOX_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       # AVINOX_TILE_ATTRIBUTION: "© OpenStreetMap-Mitwirkende"
       # AVINOX_MAX_UPLOAD_MB: "64"
+      # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP des Reverse-Proxys (für echte Client-IPs im Sync-Log)
 
 volumes:
   avinox-data:
