@@ -1,7 +1,7 @@
 services:
   avinox:
     build: .
-    image: avinox-ridedata-server
+    image: ghcr.io/manuelw77/avinox-ridedata-server:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
