@@ -1,5 +1,6 @@
 """Tests für Server-API, Weboberfläche und ``avinox import`` – nur synthetische Daten."""
 
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -289,7 +290,9 @@ def test_settings_server_url(tmp_path, monkeypatch):
 
 # ------------------------------------------------------------ Sprache und Fußzeile
 
-FOOTER = '© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · '
+FOOTER_START = "© 2026 Manuel Weiser · Build with "
+FOOTER_END = " by Manuel Weiser in Leipzig · "
+ICON_LABELS = {"de": ("Herz", "Fahrrad"), "en": ("heart", "bike")}
 PAGES = ("/", "/rides", "/device", "/sync", "/settings")
 
 
@@ -297,7 +300,9 @@ PAGES = ("/", "/rides", "/device", "/sync", "/settings")
 @pytest.mark.parametrize("lang", ["de", "en"])
 def test_footer_on_every_page(client, path, lang):
     html = client.get(path, params={"lang": lang}).text
-    assert FOOTER in html
+    assert FOOTER_START in html and FOOTER_END in html
+    for label in ICON_LABELS[lang]:
+        assert f'role="img" aria-label="{label}"' in html
     assert '<a href="https://manuelw.de" rel="noopener">manuelw.de</a>' in html
 
 
@@ -385,3 +390,9 @@ def test_used_keys_exist():
     for path in base.glob("static/*.js"):
         for key in re.findall(r"\btr\(\s*\"([a-z0-9_.]+)\"", path.read_text()):
             assert f"js.{key}" in known or f"js.{key}".startswith("js.span."), (path.name, key)
+
+
+def test_static_urls_are_root_relative(client):
+    html = client.get("/", headers={"host": "example.org", "x-forwarded-proto": "https"}).text
+    assert 'href="/static/app.css"' in html
+    assert not re.search(r'(?:href|src)="https?://[^"]*/static/', html)

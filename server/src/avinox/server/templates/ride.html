@@ -2,8 +2,8 @@
 {% from "_macros.html" import figure, figure_text, bars with context %}
 {% block title %}{{ ride.start_utc | localtime }} – Avinox Ride Data{% endblock %}
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css').path }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
 {% endblock %}
 {% block main %}
 {% set d = a.device_stats %}
@@ -181,7 +181,7 @@
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "tile_url": tile_url, "tile_attribution": tile_attribution, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js') }}"></script>
-<script src="{{ url_for('static', path='ride.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js').path }}"></script>
+<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
+<script src="{{ url_for('static', path='ride.js').path }}"></script>
 {% endblock %}

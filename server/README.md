@@ -46,6 +46,8 @@ docker compose exec avinox cat /data/upload_token
 
 Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen. Auf der Seite „Einstellungen“ stehen Server-URL und Token zum Eintragen im ESP32-Portal. Uploads sind auf `AVINOX_MAX_UPLOAD_MB` je Datei bzw. Anfrage begrenzt.
 
+Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellung (Assets werden wurzelrelativ verlinkt). Damit Sync-Log und Fehlermeldungen die echte Client-IP zeigen, die IP des Proxys als `FORWARDED_ALLOW_IPS` setzen (z. B. `FORWARDED_ALLOW_IPS: "172.18.0.1"`). Nicht `*` verwenden: Dann kann jeder Client seine IP fälschen.
+
 **Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
 
 ### Umgebungsvariablen
