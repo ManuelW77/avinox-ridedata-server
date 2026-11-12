@@ -65,6 +65,14 @@ class SyncLog:
         elif body.get("drive"):
             drive = {"present": "erkannt", "absent": "nicht erkannt", "error": "Fehler"}.get(body["drive"], body["drive"])
             detail = f"Laufwerk: {drive}"
+        ota = body.get("ota") if body["event"] == "ota" else None
+        if ota:
+            result = {"started": "gestartet", "ok": "erfolgreich", "failed": "fehlgeschlagen", "rolled_back": "zurückgesetzt"}.get(ota.get("result"), ota.get("result") or "?")
+            detail = f"Update {ota.get('from') or '?'} → {ota.get('to') or '?'}: {result}"
+            if ota.get("error"):
+                detail += f" – {ota['error']}"
+            self.event("ota", ip, did, detail=detail)
+            return ts
         self.event("report" if sync is not None else "heartbeat", ip, did, bytes_=(sync or {}).get("bytes"), detail=detail)
         return ts
 

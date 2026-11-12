@@ -59,9 +59,10 @@ static void led_task(void *arg)
         case LED_ERROR: led_rgb(32, 0, 0); break;
         case LED_HOLD:  led_rgb(24, 0, 32); break;
         case LED_FACTORY: if (on) led_rgb(32, 0, 0); else led_rgb(0, 0, 0); break;
+        case LED_OTA:   if (on) led_rgb(24, 24, 24); else led_rgb(0, 0, 0); break;
         }
         /* 500 ms Blinktakt; led_set_state() weckt früher auf */
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(cur == LED_FACTORY ? 120 : cur == LED_NO_DRIVE ? 1000 : 500));
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(cur == LED_FACTORY ? 120 : (cur == LED_NO_DRIVE || cur == LED_OTA) ? 1000 : 500));
     }
 }
 

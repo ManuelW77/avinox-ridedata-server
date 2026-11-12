@@ -14,6 +14,7 @@ services:
       # Passwortschutz (Basic Auth) für Webseite und Lese-API. Leer = im LAN offen.
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "bitte-aendern"
+      # AVINOX_PUBLIC_URL: "http://192.168.1.18:8000"  # Adresse für den ESP32 (Einstellungen-Seite)
       # AVINOX_TZ: "Europe/Berlin"
       # AVINOX_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       # AVINOX_TILE_ATTRIBUTION: "© OpenStreetMap-Mitwirkende"

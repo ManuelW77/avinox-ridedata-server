@@ -34,6 +34,8 @@ Einstellungen unter `idf.py menuconfig` → „Avinox-Sync“:
 | `AVX_SYNC_INTERVAL_MIN` | 10 | Abstand zwischen zwei Syncs |
 | `AVX_NO_DRIVE_HINT_S` | 30 | Sekunden ohne Laufwerk bis die LED orange blinkt |
 | `AVX_CHUNK_SIZE` | 32768 | Größe eines Upload-Stücks in Byte |
+| `AVX_OTA_CHECK_S` | 21600 | Abstand der Firmware-Update-Prüfung (zusätzlich nach jedem Sync) |
+| `AVX_OTA_VALIDATE_S` | 300 | Frist, in der eine neue Firmware den Server erreichen muss, sonst Rückkehr zur alten |
 
 Flash-Aufteilung (`partitions.csv`, eingestellt sind 4 MB, das Board hat 16 MB): NVS 64 KB, phy_init, App 3 MB.
 
@@ -87,6 +89,7 @@ Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`
 | blau blinkend | wartet auf Laufwerk und/oder WLAN |
 | orange blinkend | seit 30 s (`AVX_NO_DRIVE_HINT_S`) kein Laufwerk gefunden: Display eingeschaltet? An der nativen USB-Buchse? |
 | cyan | Sync läuft |
+| weiß langsam blinkend | Firmware-Update wird geladen |
 | grün | Sync ok, alles aktuell |
 | gelb | Sync mit Fehlern (Server nicht erreichbar, Token falsch, Datei nicht hochgeladen …) – siehe Log |
 | rot | schwerer Fehler: USB-Host startet nicht, Laufwerk lässt sich nicht anmelden (bis zum Abziehen), NVS kaputt, Einrichtungs-WLAN startet nicht |
@@ -131,6 +134,28 @@ Sendefehler werden nur geloggt (Timeout 10 s, keine Wiederholung). Der Server ze
 
 Der Token wird nie geloggt, das WLAN-Passwort auch nicht. Die Seriennummer des Displays wird nicht geloggt.
 
+## Updates per WLAN (OTA)
+
+**Einmalig per Kabel flashen** (`idf.py -p PORT flash`): Ab 0.3.0 gilt eine neue Partitionstabelle
+(`nvs` 0x9000, `otadata`, `phy_init`, `ota_0`/`ota_1` je 0x1F0000, kein `factory`). `nvs` liegt unverändert, die
+Konfiguration bleibt erhalten.
+
+Danach:
+
+1. `PROJECT_VER` in `CMakeLists.txt` erhöhen (vor **jedem** Update – gleiche Version wird nicht installiert).
+2. `idf.py build` → `esp32/avinox-sync/build/avinox-sync.bin` im Server unter *Einstellungen → Firmware* hochladen
+   (oder `avinox firmware add`).
+3. Der ESP fragt nach jedem abgeschlossenen Sync (nie während eines Uploads) und spätestens alle 6 h
+   (`AVX_OTA_CHECK_S`; erstmals 30 s nach der ersten WLAN-Verbindung)
+   `GET /api/v1/firmware/latest?project=avinox-sync` ab. Andere Version → Bericht `ota`/`started`, Download in die
+   freie OTA-Partition, Prüfung von Größe, SHA-256 und Projektname, Umschalten, Bericht `ok`, Neustart. Fehler →
+   Bericht `failed` mit Text, die laufende Firmware bleibt; dieselbe Version wird erst beim nächsten periodischen
+   Prüfzeitpunkt erneut versucht.
+4. **Automatische Rückkehr:** Die neue Firmware gilt erst als gültig, wenn WLAN verbunden ist und der Server einmal
+   erfolgreich geantwortet hat (Heartbeat/Bericht 2xx oder Manifest 200). Klappt das nicht binnen 5 min
+   (`AVX_OTA_VALIDATE_S`), startet der ESP neu und der Bootloader kehrt zur vorherigen Version zurück; die meldet dann
+   einmal `ota`/`rolled_back`. Ohne Konfiguration (Einrichtungsmodus) wird die neue Firmware sofort bestätigt.
+
 ## Code
 
 | Datei | Inhalt |
@@ -143,6 +168,7 @@ Der Token wird nie geloggt, das WLAN-Passwort auch nicht. Die Seriennummer des D
 | `main/sync.c/.h` | Manifest, Upload-Status, Upload in Stücken, Ergebnis im NVS |
 | `main/sync_paths.c/.h` | Pfadfilter, Manifest-Menge, URL-Kodierung (ohne IDF, Host-Test) |
 | `main/led.c/.h` | Status-LED |
+| `main/ota.c/.h` | Firmware-Update per WLAN, Bestätigung/Rollback |
 | `test/host/test_paths.c` | Host-Test für `sync_paths.c` |
 
 Host-Test (ohne ESP-IDF):

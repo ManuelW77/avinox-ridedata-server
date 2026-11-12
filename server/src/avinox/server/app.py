@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -20,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..analysis import ASSIST_LEVELS
 from .config import Settings, load_settings
+from .firmware import MAX_FIRMWARE_BYTES
 from .dashboard import PERIODS, day_text, emphasize
 from .sync_log import DEVICE_ID, SyncLog
 from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, Store, UploadError
@@ -38,6 +40,23 @@ def _fmt_duration(seconds: int | None) -> str:
         return "–"
     h, rest = divmod(int(seconds), 3600)
     return f"{h}:{rest // 60:02d}:{rest % 60:02d}" if h else f"{rest // 60}:{rest % 60:02d}"
+
+
+def _host_unreachable(host: str) -> bool:
+    """True, wenn der ESP32 diesen Host nicht erreichen kann (Loopback, Docker-intern)."""
+    name = host.strip()
+    if name.startswith("["):
+        name = name[1 : name.find("]")].lstrip("[") if "]" in name else name[1:]
+    elif name.count(":") == 1:
+        name = name.split(":")[0]
+    name = name.lower()
+    if name in ("localhost", "0.0.0.0", "::1", "::"):
+        return True
+    try:
+        ip = ipaddress.ip_address(name)
+    except ValueError:
+        return name.endswith(".localhost")
+    return ip.is_loopback or ip.is_unspecified or ip in ipaddress.ip_network("172.16.0.0/12")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -175,8 +194,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         did = body.get("device_id")
         if not isinstance(did, str) or not DEVICE_ID.match(did):
             raise HTTPException(400, "device_id: höchstens 64 Zeichen aus A-Z a-z 0-9 _ -")
-        if body.get("event") not in ("heartbeat", "sync"):
-            raise HTTPException(400, "event muss 'heartbeat' oder 'sync' sein")
+        if body.get("event") not in ("heartbeat", "sync", "ota"):
+            raise HTTPException(400, "event muss 'heartbeat', 'sync' oder 'ota' sein")
         for key, kinds in (("firmware", str), ("ip", str), ("drive", str), ("uptime_s", (int, float)), ("rssi", (int, float)), ("free_heap", (int, float))):
             if body.get(key) is not None and (not isinstance(body[key], kinds) or isinstance(body[key], bool)):
                 raise HTTPException(400, f"{key}: falscher Typ")
@@ -195,12 +214,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(400, "sync.error: Text erwartet")
         elif body["event"] == "sync":
             raise HTTPException(400, "sync-Ereignis ohne 'sync'")
+        ota = body.get("ota")
+        if body["event"] == "ota":
+            if not isinstance(ota, dict):
+                raise HTTPException(400, "ota-Ereignis ohne 'ota'")
+            for key in ("from", "to", "error"):
+                if ota.get(key) is not None and (not isinstance(ota[key], str) or len(ota[key]) > 200):
+                    raise HTTPException(400, f"ota.{key}: Text erwartet (höchstens 200 Zeichen)")
+            if ota.get("result") not in ("started", "ok", "failed", "rolled_back"):
+                raise HTTPException(400, "ota.result: started, ok, failed oder rolled_back")
         # Nur bekannte Felder speichern
         keep = {k: body[k] for k in ("device_id", "event", "firmware", "uptime_s", "rssi", "ip", "free_heap", "drive") if k in body}
         if isinstance(sync, dict):
             keep["sync"] = {k: sync[k] for k in ("checked", "new", "skipped", "failed", "bytes", "duration_ms", "result", "error") if k in sync}
+        if body["event"] == "ota":
+            keep["ota"] = {k: ota[k] for k in ("from", "to", "result", "error") if k in ota}
         ts = synclog.report(keep, client_ip(request))
         return {"ok": True, "server_time": ts}
+
+    @app.get("/api/v1/firmware/latest", dependencies=[Depends(upload_auth)], tags=["firmware"])
+    def firmware_latest(request: Request, project: str = Query("avinox-sync", max_length=64)):
+        """Aktuelle Firmware für ``project`` (404, wenn keine vorhanden)."""
+        fw = store.current_firmware(project)
+        synclog.event("firmware_check", client_ip(request), device_header(request), status=200 if fw else 404, detail=(fw["version"] if fw else "keine Firmware"))
+        if not fw:
+            raise HTTPException(404, "Keine Firmware vorhanden")
+        return {"version": fw["version"], "size": fw["size"], "sha256": fw["sha256"], "url": f"/api/v1/firmware/{fw['sha256']}.bin"}
+
+    @app.get("/api/v1/firmware/{sha}.bin", dependencies=[Depends(upload_auth)], tags=["firmware"])
+    def firmware_download(request: Request, sha: str):
+        fw = store.firmware_by_sha(sha) if re.fullmatch(r"[0-9a-f]{64}", sha) else None
+        data = store.read_firmware(sha) if fw else None
+        synclog.event("firmware_download", client_ip(request), device_header(request), size=len(data) if data else None, status=200 if data else 404, detail=fw["version"] if fw else sha[:12])
+        if data is None:
+            raise HTTPException(404, "Firmware nicht gefunden")
+        return Response(data, media_type="application/octet-stream", headers={"Content-Length": str(len(data))})
+
+    # ------------------------------------------------------------ Firmware-Verwaltung
+
+    @app.post("/api/v1/firmware", dependencies=[Depends(read_auth)], tags=["firmware"])
+    async def firmware_upload(request: Request):
+        check_length(request, MAX_FIRMWARE_BYTES + 1024 * 1024)
+        form = await request.form(max_files=1, max_fields=5)
+        f = form.get("file")
+        if not isinstance(f, UploadFile):
+            raise HTTPException(400, "Feld 'file' fehlt")
+        data = await f.read(MAX_FIRMWARE_BYTES + 1)
+        try:
+            fw = store.add_firmware(data)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"id": fw["id"], "version": fw["version"], "project": fw["project"], "size": fw["size"], "sha256": fw["sha256"]}
+
+    @app.post("/api/v1/firmware/{fw_id}/current", dependencies=[Depends(read_auth)], tags=["firmware"])
+    def firmware_set_current(fw_id: int):
+        if not store.set_current_firmware(fw_id):
+            raise HTTPException(404, "Firmware nicht gefunden")
+        return {"ok": True}
+
+    @app.delete("/api/v1/firmware/{fw_id}", dependencies=[Depends(read_auth)], tags=["firmware"])
+    def firmware_delete(fw_id: int):
+        result = store.delete_firmware(fw_id)
+        if result == "missing":
+            raise HTTPException(404, "Firmware nicht gefunden")
+        if result == "current":
+            raise HTTPException(409, "Die aktuelle Firmware kann nicht gelöscht werden")
+        return {"ok": True}
 
     # ------------------------------------------------------------ Lese-API
 
@@ -337,19 +416,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             seen = datetime.fromisoformat(d["last_seen"]) if d["last_seen"] else None
             d["age_min"] = int((now - seen).total_seconds() // 60) if seen else None
             d["offline"] = d["age_min"] is None or d["age_min"] > 15
-        return page(request, "sync.html", snap=snap)
+        return page(request, "sync.html", snap=snap, fw_latest=store.current_firmware("avinox-sync"))
 
     @app.get("/settings", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def settings_page(request: Request):
+        # Adresse für den ESP32: fest konfiguriert oder die, unter der der Browser den Server gerade erreicht.
+        host = request.headers.get("host", "")
+        if settings.public_url:
+            server_url, unreachable = settings.public_url, False
+        else:
+            server_url = f"{request.url.scheme}://{host}" if host else ""
+            unreachable = not host or _host_unreachable(host)
         return page(
             request,
             "settings.html",
             levels=store.custom_levels_seen(),
             names=store.mode_names(),
-            # Token nur zeigen, wenn die Seite selbst geschützt ist – sonst sähe es jeder im LAN.
-            token=settings.upload_token if settings.web_user else None,
+            token=settings.upload_token,
+            has_web_login=bool(settings.web_user),
+            server_url=server_url,
+            server_url_unreachable=unreachable,
             token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),
             patterns=[p.pattern for p in PATTERNS.values()],
+            firmware=store.list_firmware(),
             upload_files=UPLOAD_FILES,
             not_uploaded=NOT_UPLOADED,
         )

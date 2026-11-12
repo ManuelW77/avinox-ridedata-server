@@ -40,7 +40,7 @@ Danach läuft die Webseite unter `http://<host>:8000/` (Übersicht mit Zeiträum
 docker compose exec avinox cat /data/upload_token
 ```
 
-Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen. Auf der Seite „Einstellungen“ wird das Token nur angezeigt, wenn ein Web-Passwort gesetzt ist. Uploads sind auf `AVINOX_MAX_UPLOAD_MB` je Datei bzw. Anfrage begrenzt.
+Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen. Auf der Seite „Einstellungen“ stehen Server-URL und Token zum Eintragen im ESP32-Portal. Uploads sind auf `AVINOX_MAX_UPLOAD_MB` je Datei bzw. Anfrage begrenzt.
 
 **Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
 
@@ -51,6 +51,7 @@ Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setz
 | `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
 | `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
 | `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
+| `AVINOX_PUBLIC_URL` | leer | Adresse des Servers für den ESP32, z. B. `http://192.168.1.18:8000`; sonst wird sie aus der Browser-Anfrage übernommen |
 | `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
 | `AVINOX_TILE_URL` | OpenStreetMap | Kachel-URL für die Karte |
 | `AVINOX_TILE_ATTRIBUTION` | © OpenStreetMap | Quellenangabe der Karte |

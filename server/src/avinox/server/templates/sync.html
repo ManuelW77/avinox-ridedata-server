@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sync – Avinox Ride Data{% endblock %}
 {% block main %}
-{% set kinds = {'manifest': 'Abgleich', 'upload_chunk_error': 'Upload-Fehler', 'file_new': 'Datei neu', 'file_known': 'Datei bekannt', 'auth_error': 'Token abgelehnt', 'report': 'Sync-Bericht', 'heartbeat': 'Lebenszeichen'} %}
+{% set kinds = {'manifest': 'Abgleich', 'upload_chunk_error': 'Upload-Fehler', 'file_new': 'Datei neu', 'file_known': 'Datei bekannt', 'auth_error': 'Token abgelehnt', 'report': 'Sync-Bericht', 'heartbeat': 'Lebenszeichen', 'firmware_check': 'Firmware-Abfrage', 'firmware_download': 'Firmware-Download', 'ota': 'Firmware-Update'} %}
 {% set bad = ['upload_chunk_error', 'auth_error'] %}
 {% macro ago(m) -%}
 {%- if m is none -%}–{%- elif m < 1 -%}gerade eben{%- elif m < 60 -%}vor {{ m }} min{%- elif m < 2880 -%}vor {{ (m / 60) | round | int }} h{%- else -%}vor {{ (m / 1440) | round | int }} Tagen{%- endif -%}
@@ -31,7 +31,7 @@
     <dl class="kv">
       <dt>Zuletzt gesehen</dt><dd>{{ d.last_seen | localtime('%d.%m.%Y %H:%M') }} ({{ ago(d.age_min) }})</dd>
       <dt>IP</dt><dd class="mono">{{ d.last_ip or '–' }}</dd>
-      <dt>Firmware</dt><dd class="mono">{{ d.firmware or '–' }}</dd>
+      <dt>Firmware</dt><dd class="mono">{{ d.firmware or '–' }}{% if fw_latest and d.firmware %}{% if fw_latest.version != d.firmware %} – verfügbar {{ fw_latest.version }}{% else %} – aktuell{% endif %}{% endif %}</dd>
       <dt>WLAN-Signal</dt><dd>{% if r.rssi is defined and r.rssi is not none %}{{ r.rssi | num }} dBm ({{ 'gut' if r.rssi >= -60 else ('mittel' if r.rssi >= -75 else 'schwach') }}){% else %}–{% endif %}</dd>
       <dt>Laufzeit</dt><dd>{{ (r.uptime_s | duration) if r.uptime_s is defined and r.uptime_s is not none else '–' }}</dd>
       <dt>Freier Speicher</dt><dd>{% if r.free_heap is defined and r.free_heap is not none %}{{ (r.free_heap / 1024) | num }} KB{% else %}–{% endif %}</dd>

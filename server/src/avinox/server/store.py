@@ -23,6 +23,7 @@ from ..hms import parse_hms
 from ..ride_rec import RideRecError, parse_ride
 from ..track import to_geojson, to_gpx
 from . import dashboard
+from .firmware import read_app_info
 from .config import Settings
 from .db import Database
 
@@ -102,6 +103,78 @@ class Store:
         self.db = Database(settings.db_path)
         self._sessions: list[Session] | None = None
         self._lock = threading.RLock()
+
+    # ------------------------------------------------------------------ Firmware
+
+    @property
+    def firmware_dir(self) -> Path:
+        return self.settings.data_dir / "firmware"
+
+    def _fw_unused_cleanup(self, sha: str) -> None:
+        if self.db.one("SELECT 1 FROM firmware WHERE sha256 = ?", (sha,)) is None:
+            (self.firmware_dir / f"{sha}.bin").unlink(missing_ok=True)
+
+    def add_firmware(self, data: bytes) -> dict:
+        """Speichert ein Image und setzt es als aktuell für sein Projekt (ValueError bei ungültigem Image)."""
+        info = read_app_info(data)
+        sha = hashlib.sha256(data).hexdigest()
+        project, version = info["project_name"], info["version"]
+        self.firmware_dir.mkdir(parents=True, exist_ok=True)
+        tmp = self.firmware_dir / f"{sha}.tmp"
+        tmp.write_bytes(data)
+        tmp.replace(self.firmware_dir / f"{sha}.bin")
+        with self._lock:
+            old = self.db.one("SELECT sha256 FROM firmware WHERE project = ? AND version = ?", (project, version))
+            self.db.execute("UPDATE firmware SET is_current = 0 WHERE project = ?", (project,))
+            self.db.execute(
+                "INSERT INTO firmware(version, project, size, sha256, uploaded_at, is_current) VALUES (?,?,?,?,?,1) "
+                "ON CONFLICT(project, version) DO UPDATE SET size = excluded.size, sha256 = excluded.sha256, "
+                "uploaded_at = excluded.uploaded_at, is_current = 1",
+                (version, project, len(data), sha, _now()),
+            )
+            if old and old["sha256"] != sha:
+                self._fw_unused_cleanup(old["sha256"])
+            row = self.db.one("SELECT * FROM firmware WHERE project = ? AND version = ?", (project, version))
+        return {**dict(row), "build_date": f"{info['date']} {info['time']}".strip(), "idf_ver": info["idf_ver"]}
+
+    def current_firmware(self, project: str) -> dict | None:
+        row = self.db.one("SELECT * FROM firmware WHERE project = ? AND is_current = 1", (project,))
+        return dict(row) if row else None
+
+    def list_firmware(self) -> list[dict]:
+        return [dict(r) for r in self.db.query("SELECT * FROM firmware ORDER BY project, is_current DESC, uploaded_at DESC, id DESC")]
+
+    def get_firmware(self, fw_id: int) -> dict | None:
+        row = self.db.one("SELECT * FROM firmware WHERE id = ?", (fw_id,))
+        return dict(row) if row else None
+
+    def firmware_by_sha(self, sha: str) -> dict | None:
+        row = self.db.one("SELECT * FROM firmware WHERE sha256 = ? LIMIT 1", (sha,))
+        return dict(row) if row else None
+
+    def read_firmware(self, sha: str) -> bytes | None:
+        path = self.firmware_dir / f"{sha}.bin"
+        return path.read_bytes() if path.is_file() else None
+
+    def set_current_firmware(self, fw_id: int) -> bool:
+        with self._lock:
+            row = self.get_firmware(fw_id)
+            if not row:
+                return False
+            self.db.execute("UPDATE firmware SET is_current = (id = ?) WHERE project = ?", (fw_id, row["project"]))
+        return True
+
+    def delete_firmware(self, fw_id: int) -> str:
+        """'ok', 'missing' oder 'current' (die aktuelle Version wird nicht gelöscht)."""
+        with self._lock:
+            row = self.get_firmware(fw_id)
+            if not row:
+                return "missing"
+            if row["is_current"]:
+                return "current"
+            self.db.execute("DELETE FROM firmware WHERE id = ?", (fw_id,))
+            self._fw_unused_cleanup(row["sha256"])
+        return "ok"
 
     # ------------------------------------------------------------------ Dateien
 
