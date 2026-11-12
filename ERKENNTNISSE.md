@@ -61,7 +61,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 |---|---|---|
 | 6 | laufender Zähler | roh |
 | 7 | Geschwindigkeit km/h | ÷100 |
-| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s); 20, 21 unbekannt (21: fährt mit Motor, Ø 147 W) |
+| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s). 21 = weiterer Unterstützungsmodus ohne Namen in den Dateien (Motor/Fahrer ≈ 1,6 wie Auto, wird in `assist_mode_usage` nicht gezählt, vermutlich eigener Modus aus der App). 20 nur einmal (3 min im Stand, ohne Motor). |
 | 9 | Trittfrequenz U/min | ÷100 |
 | 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt Nm | ÷100 |
 | 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt W | ÷100 |
@@ -102,7 +102,8 @@ Gefundene `event_id`:
 | `battery_usage`, `battery_circle` | Akku Start/Ende %, Temperaturen, max. Strom (mA, negativ = Entladen), min./max. Zellspannung und max. Differenz (mV), min. Gesamtspannung; Ladezyklen |
 | `mos_ntc_temperture`, `battery_temperture` | Sekunden je Temperaturbereich Motor-Elektronik / Akku, `limit` = Drosselung |
 | `bike_pitch_attitude`, `bike_horizontal_attitude` | **km je Längsneigung** (Grad, Summe = Distanz) bzw. Seitenneigung (Einheit unsicher) |
-| `ass_mode_para` | Parameter beim Moduswechsel: Modus, max. Leistung W, max. Drehmoment Nm, Unterstützungskoeffizienten |
+| `ass_mode_para` | Beim Wechsel **in** einen Modus (und beim Ausschalten): Name und Parameter des neuen Modus (max. Leistung W, max. Drehmoment Nm, Koeffizienten), `duration` = km seit dem letzten Eintrag. Leerer Name mit lauter 0 = Boost. Leerer Name mit `max_power` 3564–3827 (sinkt mit dem Akkustand, wirkt wie eine Spannung) und `max_torque`/`ass_coeff` 13–14 = Wechsel in Modus 21. |
+| `assist_mode_order` | Platz der Modi in der Auswahlliste. Bis 02.11. 4 Plätze (auto 1, eco 2, trail 3, turbo 4), ab 03.11. 5 Plätze mit einem unbenannten (eco 1, auto 2/3, trail 4, turbo 5) – zeitgleich taucht Modus 21 auf. |
 | `single_power` | Distanz und Einschaltdauer der Session |
 | `wireless_controller_usage` / `_customize` | Tastendrücke an der Fernbedienung, Belegung |
 
