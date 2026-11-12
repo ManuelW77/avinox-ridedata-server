@@ -23,6 +23,19 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 - **Export** as GPX (with power, cadence, heart rate) and GeoJSON.
 - **Sync page** (`/sync`) with the ESP32's status and reports.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/dashboard-en.png" alt="Overview with periods, statistics and personal bests"><br><sub>Overview with periods, statistics and personal bests</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-en.png" alt="Ride details with key figures and charts"><br><sub>Ride details with key figures and charts</sub></td>
+</tr>
+</table>
+
+![Assist modes, gears, distributions and best efforts of a ride](assets/screenshots/stats-en.png)
+
+*Assist modes, gears, distributions and best efforts of a ride*
+
 ## Requirements
 
 - **ESP32-S3 board with two USB ports:** one native (to the display) and one UART port (for flashing).

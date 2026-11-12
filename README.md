@@ -23,6 +23,19 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 - **Export** als GPX (mit Leistung, Trittfrequenz, Puls) und GeoJSON.
 - **Sync-Seite** (`/sync`) mit Zustand und Berichten des ESP32.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/dashboard-de.png" alt="Übersicht mit Zeiträumen, Statistiken und Bestwerten"><br><sub>Übersicht mit Zeiträumen, Statistiken und Bestwerten</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen und Diagrammen"><br><sub>Fahrtdetails mit Kennzahlen und Diagrammen</sub></td>
+</tr>
+</table>
+
+![Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt](assets/screenshots/stats-de.png)
+
+*Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt*
+
 ## Benötigt
 
 - **ESP32-S3-Board mit zwei USB-Buchsen:** eine native (zum Display) und eine UART-Buchse (zum Flashen).
