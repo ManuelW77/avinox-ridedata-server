@@ -202,7 +202,7 @@
     const cadGear = g.avg_cadence_per_gear || {};
     const cadGearCard = Object.keys(cadGear).length ? `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>` : "";
     const hasCad = Object.keys(cadGear).length > 0;
-    const grp = (cls, key, inner) => `<h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}`;
+    const grp = (cls, key, inner, t) => `<div class="${t}"><h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}</div>`;
     box.innerHTML =
       grp("g-motor", "mix.sec.drive", `<div class="grid cols-drive${hasCad ? "" : " two"}">
         <section class="card"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
@@ -211,9 +211,9 @@
         <section class="card"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}
           <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
         ${cadGearCard}
-      </div>`) +
-      grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`) +
-      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}</div>`);
+      </div>`, "t-motor") +
+      grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`, "t-rider") +
+      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}</div>`, "t-hill");
   }
 
   /* --------------------------------------------------------- Diagramme */

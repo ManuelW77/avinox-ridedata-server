@@ -24,7 +24,7 @@
 {% else %}
 
 {# ------------------------------------------------------------ Zeitraum #}
-<div class="block block-first" id="sec-overview" data-jump="{{ t('jump.overview') }}">
+<div class="block block-first t-ride" id="sec-overview" data-jump="{{ t('jump.overview') }}">
 <section class="card period" id="period" aria-live="polite">
   <div class="toolbar">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
@@ -83,7 +83,7 @@
 </div>
 
 {# ------------------------------------------------------------ Verteilung (per JS) #}
-<section class="block mix-section" id="mix-section" data-jump="{{ t('dash.mix.title') }}" hidden>
+<section class="block mix-section t-neutral" id="mix-section" data-jump="{{ t('dash.mix.title') }}" hidden>
   <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
   <div id="mix"></div>
 </section>
@@ -91,11 +91,12 @@
 {# ------------------------------------------------------------ Bestwerte #}
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
-<section class="block bests" id="sec-bests" data-jump="{{ t('bests.title') }}">
+<section class="block bests t-neutral" id="sec-bests" data-jump="{{ t('bests.title') }}">
   <h2 class="section-title">{{ t('bests.title') }}</h2>
   {% for gkey, gname in groups %}
   {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
   {% if items %}
+  <div class="t-{{ {'rider':'rider','motor':'motor','ride':'ride'}.get(gkey,'neutral') }}">
   <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
   <div class="best-grid">
     {% for h in items %}
@@ -111,6 +112,7 @@
     </article>
     {% endfor %}
   </div>
+  </div>
   {% endif %}
   {% endfor %}
   <p class="muted small">{{ t('bests.note') }}</p>
@@ -118,7 +120,7 @@
 {% endif %}
 
 {# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
-<div class="block" id="sec-recent" data-jump="{{ t('dash.sec.recent') }}">
+<div class="block t-ride" id="sec-recent" data-jump="{{ t('dash.sec.recent') }}">
 <h2 class="section-title">{{ t('dash.sec.recent') }}</h2>
 <div class="grid cols-2 bottom">
   <section class="card">

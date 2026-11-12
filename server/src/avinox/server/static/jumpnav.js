@@ -27,6 +27,8 @@
       var a = document.createElement("a");
       a.href = "#" + b.id;
       a.textContent = b.getAttribute("data-jump");
+      var ac = getComputedStyle(b).getPropertyValue("--accent").trim();
+      if (ac) a.style.setProperty("--accent", ac);
       nav.appendChild(a);
       links.push({ a: a, el: b });
     });
