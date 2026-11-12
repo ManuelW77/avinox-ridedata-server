@@ -1,0 +1,28 @@
+# Kopie des Display-Laufwerks: groß, enthält Seriennummer und GPS-Spuren
+Data/
+
+# Ausgewertete Fahrten / Datenbanken
+*.sqlite
+*.db
+exports/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ESP-IDF / PlatformIO
+build/
+.pio/
+sdkconfig.old
+
+# Geheimnisse (WLAN, Server-Token)
+.env
+secrets.h
+
+# macOS
+.DS_Store
+
+# Workbench (lokal)
+.bench/
