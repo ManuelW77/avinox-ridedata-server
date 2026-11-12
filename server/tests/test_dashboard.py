@@ -206,3 +206,65 @@ def test_page_defaults_to_month_of_last_ride(client):
     # explizite Parameter haben Vorrang
     assert '<span id="period-range">Januar 2020</span>' not in client.get("/", params={"period": "month", "offset": 0}).text
     assert 'aria-pressed="true">Woche' in client.get("/", params={"period": "week"}).text
+
+
+# ----------------------------------------------------------------- Verteilung (mix)
+
+
+def _mix_ride(modes, gears=None, changes=0, gear_changes=0, dist=None):
+    return {
+        "assist": {"seconds_per_mode": {k: v["seconds"] for k, v in modes.items()}, "per_mode": modes, "changes": changes},
+        "gears": {"seconds_per_gear": gears or {}, "changes": gear_changes},
+        "dist": dist,
+    }
+
+
+def _mode(seconds, moving, dist, spd, motor, rider):
+    return {"seconds": seconds, "moving_seconds": moving, "distance_m": dist,
+            "avg_moving_speed_kmh": spd, "avg_motor_power_w": motor, "avg_rider_power_w": rider}
+
+
+def test_mix_sums_and_weighted_means():
+    a = _mix_ride({"eco": _mode(100, 50, 1000, 20.0, 100, 50)}, {"2": 60, "1": 40}, changes=2, gear_changes=5,
+                  dist={"speed_s": {"0-10": 10, "10-20": 5}, "heart_rate_s": None})
+    b = _mix_ride({"eco": _mode(300, 150, 3000, 10.0, 200, 150), "turbo": _mode(60, 60, 500, 30.0, 400, 80)},
+                  {"1": 10, "3": 20}, changes=1, gear_changes=1,
+                  dist={"speed_s": {"0-10": 20, "10-20": 1}, "heart_rate_s": {"<100": 7}})
+    m = dash.mix([a, b])
+    assert m["rides"] == 2
+    eco = m["assist"]["per_mode"]["eco"]
+    assert eco["seconds"] == 400 and eco["moving_seconds"] == 200 and eco["distance_m"] == 4000
+    assert eco["avg_moving_speed_kmh"] == 12.5  # (20*50 + 10*150) / 200
+    assert eco["avg_motor_power_w"] == 175 and eco["avg_rider_power_w"] == 125
+    assert list(m["assist"]["seconds_per_mode"]) == ["eco", "turbo"]
+    assert m["assist"]["seconds_per_mode"] == {"eco": 400, "turbo": 60} and m["assist"]["changes"] == 3
+    assert m["gears"]["seconds_per_gear"] == {"1": 50, "2": 60, "3": 20} and m["gears"]["changes"] == 6
+    assert m["distributions"]["speed_s"] == {"0-10": 30, "10-20": 6}
+    assert m["distributions"]["heart_rate_s"] == {"<100": 7}
+    assert m["distributions"]["rider_power_s"] is None
+
+
+def test_mix_missing_fields_and_empty():
+    m = dash.mix([{"assist": None, "gears": None, "dist": None}, {}])
+    assert m["rides"] == 2 and m["assist"]["per_mode"] == {} and m["gears"]["seconds_per_gear"] == {}
+    assert m["assist"]["changes"] == 0 and m["distributions"]["heart_rate_s"] is None
+    assert dash.mix([])["rides"] == 0
+    m = dash.mix([_mix_ride({"eco": _mode(10, 0, 0, None, None, None)})])
+    assert m["assist"]["per_mode"]["eco"]["avg_moving_speed_kmh"] is None
+
+
+def test_mix_period_filter_and_api(store, filled):
+    week = store.dashboard("week", 0, today=TODAY)["mix"]
+    assert week["rides"] == 3  # Mo, Mi und die Testfahrt vom Di; Fahrt der Vorwoche zählt nicht
+    last = store.dashboard("week", 1, today=TODAY)["mix"]
+    assert last["rides"] == 1
+    assert week["assist"]["seconds_per_mode"] and week["distributions"]["rider_power_s"]
+    assert store.dashboard("day", 0, today=date(2026, 11, 1))["mix"]["rides"] == 0
+
+
+def test_mix_in_api(client):
+    add(client.app.state.store, 1, ride_at(datetime(2026, 11, 9, 10), km=10, ride_id=1))
+    j = client.get("/api/v1/dashboard", params={"period": "year", "offset": 0}).json()
+    assert "mix" in j and j["mix"]["rides"] >= 0 and "seconds_per_mode" in j["mix"]["assist"]
+    page = client.get("/", params={"period": "year"})
+    assert 'id="mix"' in page.text

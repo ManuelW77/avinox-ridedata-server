@@ -423,7 +423,11 @@ class Store:
     def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None, lang: str = "de") -> dict:
         """Übersicht für die Startseite (siehe ``dashboard.build``). ``today`` nur für Tests."""
         today = today or datetime.now(self.settings.tz).date()
-        return dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today, lang)
+        dash = dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today, lang)
+        names = self.mode_names()
+        if names:
+            apply_mode_names(dash["mix"], names)
+        return dash
 
     def device(self) -> dict:
         sessions = self.sessions()
