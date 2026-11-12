@@ -23,6 +23,7 @@
 #include "nvs.h"
 #include "cJSON.h"
 
+#include "ota.h"
 #include "report.h"
 #include "sync_paths.h"
 #include "usb_drive.h"
@@ -175,6 +176,7 @@ static esp_err_t fetch_manifest(http_ctx_t *ctx, const char *base, avx_manifest_
                  (status == 401 || status == 403) ? " (Token falsch?)" : "");
         return ESP_FAIL;
     }
+    ota_server_ok();
     cJSON *root = cJSON_ParseWithLength(ctx->buf, ctx->len);
     cJSON *files = root ? cJSON_GetObjectItemCaseSensitive(root, "files") : NULL;
     if (!cJSON_IsArray(files)) {

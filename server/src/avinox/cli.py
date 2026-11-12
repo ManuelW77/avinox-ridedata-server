@@ -6,6 +6,7 @@
 * ``avinox device <buried_file_cur.json>`` – Geräte- und Sessiondaten
 * ``avinox serve [--host H] [--port P] [--data-dir DIR]`` – Server starten
 * ``avinox import <laufwerk-ordner> [--data-dir DIR]`` – Laufwerkskopie in den Server-Datenordner übernehmen
+* ``avinox firmware add <datei.bin>`` / ``avinox firmware list [--data-dir DIR]`` – OTA-Firmware verwalten
 """
 
 from __future__ import annotations
@@ -193,6 +194,27 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_firmware(args: argparse.Namespace) -> int:
+    from .server.config import load_settings
+    from .server.store import Store
+
+    store = Store(load_settings(args.data_dir))
+    try:
+        if args.action == "add":
+            try:
+                fw = store.add_firmware(Path(args.path).read_bytes())
+            except (OSError, ValueError) as exc:
+                print(f"{args.path}: {exc}", file=sys.stderr)
+                return 1
+            print(f"{fw['project']} {fw['version']} ({fw['size']} Byte, {fw['sha256'][:12]}) ist jetzt aktuell")
+        else:
+            for f in store.list_firmware():
+                print(f"{'*' if f['is_current'] else ' '} {f['project']} {f['version']}  {f['size']} Byte  {f['sha256'][:12]}  {f['uploaded_at']}")
+    finally:
+        store.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avinox", description="Avinox-Fahrtdaten auswerten")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -234,7 +256,15 @@ def main(argv: list[str] | None = None) -> int:
     p_imp.add_argument("path", help="Laufwerks-Ordner")
     p_imp.add_argument("--data-dir", help="Datenordner (Standard: AVINOX_DATA_DIR oder ./data)")
     p_imp.set_defaults(func=cmd_import)
+
+    p_fw = sub.add_parser("firmware", help="ESP32-Firmware für OTA verwalten")
+    p_fw.add_argument("action", choices=["add", "list"])
+    p_fw.add_argument("path", nargs="?", help="Image (.bin), nur für 'add'")
+    p_fw.add_argument("--data-dir", help="Datenordner (Standard: AVINOX_DATA_DIR oder ./data)")
+    p_fw.set_defaults(func=cmd_firmware)
     args = parser.parse_args(argv)
+    if args.command == "firmware" and (args.action == "add") != bool(args.path):
+        parser.error("'firmware add' braucht eine Datei, 'firmware list' keine")
     return args.func(args)
 
 

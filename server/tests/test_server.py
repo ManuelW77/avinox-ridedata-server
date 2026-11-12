@@ -28,7 +28,7 @@ def buried_ride_bytes() -> bytes:
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for key in ("AVINOX_UPLOAD_TOKEN", "AVINOX_WEB_USER", "AVINOX_WEB_PASSWORD", "AVINOX_DATA_DIR"):
+    for key in ("AVINOX_UPLOAD_TOKEN", "AVINOX_WEB_USER", "AVINOX_WEB_PASSWORD", "AVINOX_DATA_DIR", "AVINOX_PUBLIC_URL"):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -257,9 +257,9 @@ def test_upload_limits_and_token_visibility(tmp_path, monkeypatch):
     # Browser-Upload über dem Limit -> 413
     r = client.post("/api/v1/files", files={"files": (path, b"x" * (3 * 1024 * 1024))})
     assert r.status_code == 413
-    # ohne Web-Passwort kein Token auf der Seite
+    # Token ist auch ohne Web-Passwort sichtbar, mit Hinweis
     page = client.get("/settings").text
-    assert settings.upload_token not in page and "upload_token" in page
+    assert settings.upload_token in page and "ohne Passwort im WLAN offen" in page
 
 
 def test_token_shown_with_web_login(tmp_path, monkeypatch):
@@ -273,3 +273,15 @@ def test_token_shown_with_web_login(tmp_path, monkeypatch):
     settings = load_settings(tmp_path)
     client = TestClient(create_app(settings))
     assert settings.upload_token in client.get("/settings", auth=("u", "p")).text
+
+
+def test_settings_server_url(tmp_path, monkeypatch):
+    client = TestClient(create_app(load_settings(tmp_path)))
+    html = client.get("/settings", headers={"host": "192.168.1.18:8000"}).text
+    assert 'value="http://192.168.1.18:8000"' in html and "erreicht der ESP32 nicht" not in html
+    for host in ("localhost:8000", "127.0.0.1:8000", "172.18.0.2:8000", "[::1]:8000", "0.0.0.0:8000"):
+        assert "erreicht der ESP32 nicht" in client.get("/settings", headers={"host": host}).text, host
+    monkeypatch.setenv("AVINOX_PUBLIC_URL", "http://10.0.0.5:8000/")
+    client = TestClient(create_app(load_settings(tmp_path)))
+    html = client.get("/settings", headers={"host": "localhost:8000"}).text
+    assert 'value="http://10.0.0.5:8000"' in html and "erreicht der ESP32 nicht" not in html

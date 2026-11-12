@@ -5,6 +5,7 @@
 | ``AVINOX_DATA_DIR`` | ``./data`` | Rohdateien, Datenbank, Upload-Token |
 | ``AVINOX_UPLOAD_TOKEN`` | zufällig, in ``<data>/upload_token`` | Bearer-Token für Uploads (ESP32) |
 | ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
+| ``AVINOX_PUBLIC_URL`` | leer | Adresse des Servers für den ESP32, z. B. ``http://192.168.1.18:8000`` (sonst aus der Browser-Anfrage) |
 | ``AVINOX_TZ`` | ``Europe/Berlin`` | Zeitzone für die Anzeige |
 | ``AVINOX_TILE_URL`` | OpenStreetMap | Kachel-URL für die Karte |
 | ``AVINOX_TILE_ATTRIBUTION`` | © OpenStreetMap | Quellenangabe der Karte |
@@ -26,6 +27,7 @@ class Settings:
     upload_token: str
     web_user: str | None
     web_password: str | None
+    public_url: str | None
     tz: ZoneInfo
     tile_url: str
     tile_attribution: str
@@ -67,6 +69,7 @@ def load_settings(data_dir: str | Path | None = None) -> Settings:
         upload_token=_token(base),
         web_user=os.environ.get("AVINOX_WEB_USER") or None,
         web_password=os.environ.get("AVINOX_WEB_PASSWORD") or None,
+        public_url=(os.environ.get("AVINOX_PUBLIC_URL", "").strip().rstrip("/") or None),
         tz=ZoneInfo(os.environ.get("AVINOX_TZ", "Europe/Berlin")),
         tile_url=os.environ.get("AVINOX_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
         tile_attribution=os.environ.get("AVINOX_TILE_ATTRIBUTION", "© OpenStreetMap-Mitwirkende"),

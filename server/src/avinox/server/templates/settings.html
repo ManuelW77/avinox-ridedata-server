@@ -50,9 +50,53 @@
   <script type="application/json" id="upload-patterns">{{ patterns | tojson }}</script>
 </section>
 
+<section class="card" id="firmware" style="margin-bottom:1rem">
+  <h2>Firmware für den ESP32</h2>
+  <p class="muted small">Der ESP32 fragt hier nach neuen Versionen und aktualisiert sich selbst (OTA). Image: <code>esp32/avinox-sync/build/avinox-sync.bin</code>.</p>
+  {% set cur = firmware | selectattr('is_current') | list %}
+  {% if cur %}
+  {% for f in cur %}
+  <dl class="kv">
+    <dt>Aktuell</dt><dd><strong>{{ f.project }} {{ f.version }}</strong></dd>
+    <dt>Hochgeladen</dt><dd>{{ f.uploaded_at | localtime('%d.%m.%Y %H:%M') }}</dd>
+    <dt>Größe</dt><dd>{{ (f.size / 1024) | num(0) }} KB</dd>
+    <dt>SHA-256</dt><dd class="mono">{{ f.sha256[:12] }}</dd>
+  </dl>
+  {% endfor %}
+  {% else %}
+  <p class="notice">Noch keine Firmware hochgeladen.</p>
+  {% endif %}
+  {% set older = firmware | rejectattr('is_current') | list %}
+  {% if older %}
+  <p class="small"><strong>Ältere Versionen</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in older %}
+      <tr><td>{{ f.project }} {{ f.version }}</td><td class="muted">{{ f.uploaded_at | localtime('%d.%m.%Y') }}</td><td class="mono">{{ f.sha256[:8] }}</td>
+        <td class="actions"><button type="button" class="btn ghost" data-fw-current="{{ f.id }}">als aktuell setzen</button> <button type="button" class="btn ghost" data-fw-delete="{{ f.id }}">löschen</button></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <form id="fw-form" class="actions" style="margin-top:0.75rem">
+    <input type="file" id="fw-file" accept=".bin" required>
+    <button type="submit" class="btn">Hochladen</button>
+    <span id="fw-status" class="muted small" role="status"></span>
+  </form>
+</section>
+
 <section class="card">
   <h2>ESP32 / Upload-API</h2>
-  {% if token %}
+  <div class="form-row" style="margin-bottom:0.75rem">
+    <label for="server-url">Server-URL für den ESP32</label>
+    <div class="actions">
+      <input type="text" id="server-url" value="{{ server_url }}" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" id="server-url-copy">kopieren</button>
+    </div>
+    {% if server_url_unreachable %}
+    <p class="notice small" style="margin-top:0.5rem">Diese Adresse erreicht der ESP32 nicht – öffne die Seite über die IP oder den Namen des Servers im WLAN oder setze <code>AVINOX_PUBLIC_URL</code>.</p>
+    {% endif %}
+  </div>
   <div class="form-row" style="margin-bottom:0.75rem">
     <label for="token">Upload-Token</label>
     <div class="actions">
@@ -61,14 +105,18 @@
       <button type="button" class="btn ghost" id="token-copy">kopieren</button>
     </div>
   </div>
-  {% else %}
-  <p class="notice" style="margin-bottom:0.75rem">Das Upload-Token wird hier nur angezeigt, wenn die Seite mit Passwort geschützt ist (<code>AVINOX_WEB_USER</code> / <code>AVINOX_WEB_PASSWORD</code>). Sonst steht es in <code>{{ token_hint }}</code>.</p>
+  {% if not has_web_login %}
+  <p class="muted small" style="margin-bottom:0.75rem">Die Seite ist ohne Passwort im WLAN offen – für den Dauerbetrieb <code>AVINOX_WEB_USER</code>/<code>AVINOX_WEB_PASSWORD</code> setzen.</p>
   {% endif %}
   <p class="muted small">Alle Aufrufe mit Header <code>Authorization: Bearer &lt;Token&gt;</code>.</p>
   <dl class="kv">
     <dt><code>GET /api/v1/manifest</code></dt><dd>Liste der bekannten Dateien (Pfad + Größe) – daran erkennt der ESP32, was neu ist.</dd>
     <dt><code>PUT /api/v1/upload?path=…&amp;size=…&amp;offset=…</code></dt><dd>Neue Datei als rohe Bytes, in Stücken und wiederaufnehmbar. Passt <code>offset</code> nicht, antwortet der Server mit 409 und dem Feld <code>received</code> (bisher empfangene Bytes).</dd>
     <dt><code>GET /api/v1/upload/status?path=…&amp;size=…</code></dt><dd>Aktueller Stand eines Uploads.</dd>
+  </dl>
+  <dl class="kv">
+    <dt><code>GET /api/v1/firmware/latest?project=…</code></dt><dd>Aktuelle Firmware (Version, Größe, SHA-256, URL) oder 404.</dd>
+    <dt><code>GET /api/v1/firmware/&lt;sha256&gt;.bin</code></dt><dd>Firmware-Image.</dd>
   </dl>
   <p class="small">Vollständige Beschreibung: <a href="/api/docs">/api/docs</a></p>
 </section>

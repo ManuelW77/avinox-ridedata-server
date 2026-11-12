@@ -14,6 +14,7 @@
 
 #include "config.h"
 #include "led.h"
+#include "ota.h"
 #include "portal.h"
 #include "report.h"
 #include "sync.h"
@@ -155,7 +156,10 @@ static void sync_task(void *arg)
 
         led_set_state(LED_SYNC);
         sync_result_t res;
+        ota_sync_begin();
         bool ok = sync_run(&s_cfg, &res);
+        ota_sync_end();
+        ota_check_now();
         led_set_state(ok ? LED_OK : LED_WARN);
         next_sync = esp_timer_get_time() + SYNC_INTERVAL_US;
         ESP_LOGI(TAG, "Nächster Sync in %d min (oder sofort nach neuem Anstecken/Verbinden)",
@@ -188,6 +192,9 @@ void app_main(void)
         ESP_LOGW(TAG, "Konfiguration unvollständig (SSID, Server-URL oder Token fehlt)");
         want_portal = true;
     }
+    /* Im Einrichtungsmodus gilt eine neue Firmware sofort als gültig: Das Portal läuft, und ein
+       Rollback nach 5 min würde mitten in die Einrichtung platzen. */
+    ota_boot(config_complete(&s_cfg) && !want_portal);
     if (want_portal) {
         portal_run();       /* kehrt nicht zurück */
     }
@@ -209,6 +216,7 @@ void app_main(void)
         ESP_LOGE(TAG, "WLAN-Start fehlgeschlagen: %s (weiter, Sync nicht möglich)", esp_err_to_name(err));
     }
     report_start_heartbeat(&s_cfg);
+    ota_start(&s_cfg);
     err = usb_drive_start();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "USB-Start fehlgeschlagen: %s", esp_err_to_name(err));

@@ -132,4 +132,50 @@
       setTimeout(() => { copyBtn.textContent = "kopieren"; }, 1500);
     });
   }
+
+  // ---- Server-URL kopieren
+  const urlEl = document.getElementById("server-url");
+  const urlCopy = document.getElementById("server-url-copy");
+  if (urlEl && urlCopy) {
+    urlCopy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(urlEl.value);
+      } catch (e) {
+        urlEl.select(); document.execCommand("copy");
+      }
+      urlCopy.textContent = "kopiert";
+      setTimeout(() => { urlCopy.textContent = "kopieren"; }, 1500);
+    });
+  }
+
+  // ---- Firmware
+  const fwForm = document.getElementById("fw-form");
+  const fwStatus = document.getElementById("fw-status");
+  if (fwForm) {
+    fwForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const file = document.getElementById("fw-file").files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      fwStatus.textContent = "Lade hoch …";
+      try {
+        const res = await fetch("/api/v1/firmware", { method: "POST", body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { fwStatus.textContent = body.detail || `Fehler ${res.status}`; return; }
+        location.reload();
+      } catch (e) {
+        fwStatus.textContent = "Fehler: " + e.message;
+      }
+    });
+  }
+  document.querySelectorAll("[data-fw-current],[data-fw-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const del = btn.hasAttribute("data-fw-delete");
+      if (del && !confirm("Diese Firmware-Version löschen?")) return;
+      const id = del ? btn.dataset.fwDelete : btn.dataset.fwCurrent;
+      const res = await fetch(`/api/v1/firmware/${id}` + (del ? "" : "/current"), { method: del ? "DELETE" : "POST" });
+      if (res.ok) location.reload(); else if (fwStatus) fwStatus.textContent = `Fehler ${res.status}`;
+    });
+  });
 })();

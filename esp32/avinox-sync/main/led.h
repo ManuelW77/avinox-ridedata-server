@@ -13,6 +13,7 @@ typedef enum {
     LED_ERROR,      /* rot: schwerer Fehler (USB/Konfiguration) */
     LED_HOLD,       /* violett dauerhaft: BOOT >= 3 s, Loslassen = Einrichtungsmodus */
     LED_FACTORY,    /* rot schnell blinkend: BOOT >= 10 s, Werkseinstellung */
+    LED_OTA,        /* weiß langsam blinkend: Firmware-Update wird geladen (als Override) */
 } led_state_t;
 
 void led_init(void);

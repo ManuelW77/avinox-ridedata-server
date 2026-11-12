@@ -75,6 +75,17 @@ CREATE TABLE IF NOT EXISTS devices (
     last_sync_json   TEXT,
     last_sync_at     TEXT
 );
+
+CREATE TABLE IF NOT EXISTS firmware (
+    id          INTEGER PRIMARY KEY,
+    version     TEXT NOT NULL,
+    project     TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    sha256      TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    is_current  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (project, version)
+);
 """
 
 
