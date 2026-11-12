@@ -22,8 +22,8 @@
   </div>
 </div>
 
-<section class="card" id="sec-overview" data-jump="{{ t('jump.overview') }}">
-  <h3 class="group-title g-ride">{{ t('ride.grp.ride') }}</h3>
+<section class="card t-neutral" id="sec-overview" data-jump="{{ t('jump.overview') }}">
+  <h3 class="group-title g-ride t-ride">{{ t('ride.grp.ride') }}</h3>
   <div class="figures">
     {{ figure(s.distance_km, t('ride.f.distance'), 'km', 2) }}
     {{ figure_text(s.duration_s | duration, t('ride.f.duration')) }}
@@ -34,7 +34,7 @@
     {{ figure(s.max_speed_kmh, t('ride.f.max_speed'), 'km/h', 1) }}
     {{ figure(s.calories_kcal, t('ride.f.calories'), 'kcal') }}
   </div>
-  <h3 class="group-title g-rider">{{ t('ride.grp.rider') }}</h3>
+  <h3 class="group-title g-rider t-rider">{{ t('ride.grp.rider') }}</h3>
   <div class="figures">
     {{ figure(s.avg_rider_power_w, t('ride.f.avg_rider'), 'W', 0, 'rider') }}
     {{ figure(s.avg_pedaling_power_w, t('ride.f.avg_pedaling'), 'W', 0, 'rider') }}
@@ -43,7 +43,7 @@
     {{ figure(s.max_rider_torque_nm, t('ride.f.torque'), 'Nm', 0, 'rider') }}
     {% if s.avg_heart_rate_bpm %}{{ figure(s.avg_heart_rate_bpm, t('ride.f.hr'), 'bpm') }}{% endif %}
   </div>
-  <h3 class="group-title g-motor">{{ t('ride.grp.motor') }}</h3>
+  <h3 class="group-title g-motor t-motor">{{ t('ride.grp.motor') }}</h3>
   <div class="figures">
     {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}
     {{ figure(s.avg_motor_assist_power_w, t('ride.f.avg_motor_assist'), 'W', 0, 'motor') }}
@@ -53,7 +53,7 @@
   </div>
 </section>
 
-<div class="block" id="sec-course" data-jump="{{ t('ride.sec.course') }}">
+<div class="block t-ride" id="sec-course" data-jump="{{ t('ride.sec.course') }}">
   <h2 class="section-title">{{ t('ride.sec.course') }}</h2>
 <section class="card">
   <div class="toolbar">
@@ -89,7 +89,7 @@
 </section>
 </div>
 
-<div class="block" id="sec-drive" data-jump="{{ t('ride.sec.drive') }}">
+<div class="block t-motor" id="sec-drive" data-jump="{{ t('ride.sec.drive') }}">
   <h2 class="section-title">{{ t('ride.sec.drive') }}</h2>
 {% set cad_gear = {} %}{% for g, m in (a.gears.per_gear or {}).items() %}{% if m.avg_cadence_rpm and (m.moving_seconds or 0) >= 30 %}{% set _ = cad_gear.update({g: m.avg_cadence_rpm}) %}{% endif %}{% endfor %}
 <div class="grid cols-drive{{ '' if cad_gear else ' two' }}">
@@ -115,7 +115,7 @@
 </div>
 </div>
 
-<div class="block" id="sec-power" data-jump="{{ t('ride.sec.power') }}">
+<div class="block t-rider" id="sec-power" data-jump="{{ t('ride.sec.power') }}">
   <h2 class="section-title">{{ t('ride.sec.power') }}</h2>
 <div class="grid cols-3">
   <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider', drop_zero=true) }}</section>
@@ -126,7 +126,7 @@
 </div>
 </div>
 
-<div class="block" id="sec-hill" data-jump="{{ t('ride.sec.hill') }}">
+<div class="block t-hill" id="sec-hill" data-jump="{{ t('ride.sec.hill') }}">
   <h2 class="section-title">{{ t('ride.sec.hill') }}</h2>
   <p class="muted small block-desc">{{ t('ride.sec.hill_sub') }}</p>
 <div class="grid cols-3">
@@ -139,7 +139,7 @@
 </div>
 </div>
 
-<div class="block" id="sec-stats" data-jump="{{ t('ride.sec.stats') }}">
+<div class="block t-neutral" id="sec-stats" data-jump="{{ t('ride.sec.stats') }}">
   <h2 class="section-title">{{ t('ride.sec.stats') }}</h2>
 <div class="grid cols-3">
   <section class="card">
@@ -176,7 +176,7 @@
 </div>
 </div>
 
-<div class="block" id="sec-display" data-jump="{{ t('ride.sec.display') }}">
+<div class="block t-motor" id="sec-display" data-jump="{{ t('ride.sec.display') }}">
   <h2 class="section-title">{{ t('ride.sec.display') }}</h2>
 <section class="card">
     {% if d %}
