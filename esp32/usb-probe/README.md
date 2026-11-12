@@ -20,7 +20,7 @@ ESP-IDF v6.0.2 (EIM-Installation):
 
 ```sh
 . ~/.espressif/tools/activate_idf_v6.0.2.sh   # oder: . ~/.espressif/v6.0.2/esp-idf/export.sh
-cd firmware/usb-probe
+cd esp32/usb-probe
 idf.py set-target esp32s3
 idf.py build
 idf.py -p <port> flash monitor
