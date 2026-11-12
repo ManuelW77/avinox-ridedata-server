@@ -145,6 +145,8 @@ _DE: dict[str, str] = {
     "ride.nostats_html": "Zu dieser Fahrt gibt es keine Nutzungsstatistik (<code>buried_rec</code>).",
     # --- Einstellungen
     "set.title": "Einstellungen",
+    "set.lang": "Sprache",
+    "set.lang_text": "Sprache der Weboberfläche. Wird im Browser gespeichert.",
     "set.modes": "Eigene Modi benennen",
     "set.modes_text_html": "Die Nummer eines eigenen Modus findest du mit einer kurzen Testfahrt im jeweiligen Modus heraus: Sie steht danach in der Fahrt unter „Unterstützungsmodi“ als <code>eigen_&lt;nr&gt;</code>. Leeres Feld = Name entfernen.",
     "set.mode_n": "Modus {n}", "set.save": "Speichern",
@@ -322,6 +324,8 @@ _EN: dict[str, str] = {
     "ride.session_note": "Battery and incline values apply to the whole power-on session ({n} rides).",
     "ride.nostats_html": "There are no usage statistics for this ride (<code>buried_rec</code>).",
     "set.title": "Settings",
+    "set.lang": "Language",
+    "set.lang_text": "Language of the web interface. Stored in your browser.",
     "set.modes": "Name custom modes",
     "set.modes_text_html": "You can find the number of a custom mode with a short test ride in that mode: afterwards it appears in the ride under “Assist modes” as <code>eigen_&lt;nr&gt;</code>. Empty field = remove name.",
     "set.mode_n": "Mode {n}", "set.save": "Save",
