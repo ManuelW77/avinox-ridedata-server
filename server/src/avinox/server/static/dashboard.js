@@ -48,8 +48,13 @@
   // Prozentpunkte statt Prozent bei Anteilen
   const POINTS = { motor_share_pct: true };
 
-  function deltaHtml(key, c, judge) {
+  // Vergleichsbasis mit weniger Fahrten ist zu klein für ein farbiges Delta
+  const MIN_COMPARE_RIDES = 3;
+  const prevTiny = () => ((dash.comparison.rides || {}).previous || 0) < MIN_COMPARE_RIDES;
+
+  function deltaHtml(key, c, judge, fmtPrev) {
     if (!c || c.current == null || c.previous == null) return '<span class="d none">' + tr("no_compare") + '</span>';
+    if (c.previous && prevTiny() && fmtPrev) return '<span class="d none">' + tr("prev_value", { v: fmtPrev(c.previous) }) + '</span>';
     if (POINTS[key]) {
       const d = c.current - c.previous;
       if (Math.abs(d) < 0.5) return '<span class="d same">' + tr("same") + '</span>';
@@ -85,6 +90,8 @@
     let delta = "";
     if (d.previous && !cur.rides) {
       delta = tr("hero_prev", { versus: dash.versus.replace(tr("versus_prefix"), ""), km: fmt(d.previous, 1) });
+    } else if (d.previous && prevTiny()) {
+      delta = `<span class="d none">${tr("prev_value", { v: fmt(d.previous, 1) + " km" })}</span>`;
     } else if (d.previous) {
       const p = d.delta_pct || 0;
       const cls = p > 0 ? "up" : p < 0 ? "down" : "same";
@@ -122,11 +129,11 @@
     $("kpis").hidden = !cur.rides;
     $("kpis").innerHTML = KPIS.map(([key, label, f, cls, judge]) => {
       const v = cur[key];
-      return `<div class="kpi ${cls}"><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge)}</div>`;
+      return `<div class="kpi ${cls}"><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge, (pv) => f(pv))}</div>`;
     }).join("");
 
     const sum = (k) => dash.series.reduce((a, s) => a + (s[k] || 0), 0);
-    const span = tr("span." + dash.period);
+    const span = tr("span." + dash.period, { n: dash.series.length });
     $("sum-distance").textContent = tr("sum_in", { v: fmt(sum("distance_km"), 0), unit: "km", span });
     $("sum-ascent").textContent = tr("sum_in", { v: fmt(sum("ascent_m"), 0), unit: "m", span });
     renderMix();
@@ -172,7 +179,7 @@
     section.hidden = false;
     const a = m.assist || {}, g = m.gears || {}, d = m.distributions || {};
     const modeRows = Object.entries(a.per_mode || {}).map(([name, x]) =>
-      `<tr><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
+      `<tr${(x.distance_m || 0) < 500 ? ' class="muted"' : ""}><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
     const card = (title, sub, data, cls, dropZero, labels) =>
       `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, dropZero, labels)}</section>`;
     // Steigungsbereiche lesbar: ↓ bergab, ↑ bergauf

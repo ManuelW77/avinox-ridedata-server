@@ -100,7 +100,7 @@
     <table class="plain" style="margin-top:0.9rem">
       <tr><th>{{ t('ride.th.mode') }}</th><th class="n">{{ t('ride.th.distance') }}</th><th class="n">{{ t('ride.th.avg_kmh') }}</th><th class="n">{{ t('ride.th.avg_motor') }}</th><th class="n">{{ t('ride.th.avg_rider') }}</th></tr>
       {% for name, m in a.assist.per_mode.items() %}
-      <tr><td>{{ name }}</td><td class="n">{{ (m.distance_m / 1000) | num(1) }} km</td><td class="n">{{ m.avg_moving_speed_kmh | num(1) }}</td><td class="n">{{ m.avg_motor_power_w | num }} W</td><td class="n">{{ m.avg_rider_power_w | num }} W</td></tr>
+      <tr{% if m.distance_m < 500 %} class="muted"{% endif %}><td>{{ name }}</td><td class="n">{{ (m.distance_m / 1000) | num(1) }} km</td><td class="n">{{ m.avg_moving_speed_kmh | num(1) }}</td><td class="n">{{ m.avg_motor_power_w | num }} W</td><td class="n">{{ m.avg_rider_power_w | num }} W</td></tr>
       {% endfor %}
     </table>
     <p class="muted small" style="margin-top:0.6rem">{{ t('ride.changes', n=a.assist.changes) }}{% if a.assist.seconds_per_mode.keys() | select('match', 'eigen_') | list %}{{ t('ride.custom_modes_html') }}{% endif %}</p>
