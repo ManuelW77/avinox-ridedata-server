@@ -99,9 +99,10 @@
   <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
   <div class="best-grid">
     {% for h in items %}
-    <article class="best g-{{ gkey }}">
+    <article class="best g-{{ gkey }}" title="{{ h.sentence }}">
       <div class="best-k">{{ h.title }}</div>
-      <p class="best-s">{{ h.sentence | emph(h.value_text) }}</p>
+      <div class="best-v">{{ h.value_text }}</div>
+      <p class="best-w">{{ h.when_text }}</p>
       {% if h.ride %}
       <a class="best-link" href="/rides/{{ h.ride }}">{{ t('best.to_ride') }} <span aria-hidden="true">→</span></a>
       {% else %}

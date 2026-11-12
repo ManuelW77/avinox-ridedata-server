@@ -243,13 +243,14 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 .group-title.g-rider::before { background: var(--rider); }
 .group-title.g-motor::before { background: var(--motor); }
 .group-title.g-ride::before { background: var(--alt); }
-.best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.75rem; }
+.best-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }
 .best { background: var(--surface); border-radius: 12px; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; }
 .best-k { font-size: 0.78rem; color: var(--ink-3); font-weight: 600; letter-spacing: 0.01em; }
-.best-s { margin: 0; font-size: 0.98rem; line-height: 1.45; flex: 1; }
-.best-s strong { font-weight: 680; white-space: nowrap; }
-.best.g-rider strong { color: var(--rider); }
-.best.g-motor strong { color: var(--motor); }
+.best-v { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.best-w { margin: 0; font-size: 0.8rem; color: var(--ink-2); line-height: 1.4; flex: 1; }
+.best.g-rider .best-v { color: var(--rider); }
+.best.g-motor .best-v { color: var(--motor); }
+tr.muted td { color: var(--ink-3); }
 .best-link { font-size: 0.85rem; color: var(--ink-2); text-decoration: none; margin-top: 0.2rem; }
 .best-link:hover { color: var(--ink); text-decoration: underline; }
 .bests { margin-bottom: 0; }

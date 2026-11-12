@@ -17,6 +17,8 @@ from . import i18n
 from .i18n import t
 
 PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5}
+# Mindestanzahl Balken in den Diagrammen, damit eine einzelne Fahrt nicht die ganze Breite füllt
+MIN_BUCKETS: dict[str, int] = {"day": 6, "week": 6, "month": 6, "year": 2}
 """Zeitraum -> Anzahl der Balken in der Zeitreihe."""
 
 MIN_KM_BEST = 1.0
@@ -247,7 +249,7 @@ def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
         out.append({
             "key": key, "group": group, "title": t(f"best.{key}.title", lang), "ride": best["id"],
             "date": best["_local"].isoformat() if best["_local"] else None,
-            "value": best[field], "unit": unit, "value_text": vt,
+            "value": best[field], "unit": unit, "value_text": vt, "when_text": _when(best, lang),
             "sentence": t(f"best.{key}.s", lang, when=_when(best, lang), v=vt),
         })
     return out
@@ -283,7 +285,9 @@ def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
             when = {"day": t("when.on", lang, d=day_text(start, lang)),
                     "week": t("when.week", lang, w=start.isocalendar()[1], y=start.isocalendar()[0]),
                     "month": t("when.month", lang, m=i18n.MONTHS[i18n.norm(lang)][start.month - 1], y=start.year)}[period]
+            when_text = when if period == "day" else when + " · " + t("bestp.rides", lang, n=s["rides"])
             out.append({
+                "when_text": when_text,
                 "key": f"{period}_{field}", "group": "period", "period": period,
                 "title": t(f"bestp.title.{field}", lang, t=t(f"bestp.title.{period}", lang)),
                 "offset": steps_between(period_start(today, period), start, period),
@@ -434,6 +438,9 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
     offset = min(max(0, int(offset)), oldest)
     n = PERIODS[period]
     current = shift(period_start(today, period), period, -offset)
+    # Diagramm beginnt im Zeitraum der ersten Fahrt (höchstens n, mindestens MIN_BUCKETS Zeiträume)
+    back = steps_between(current, period_start(min(dated), period), period) if dated else 0
+    n = min(n, max(back + 1, MIN_BUCKETS[period]))
     starts = [shift(current, period, i - n + 1) for i in range(n)]
     index = {s: i for i, s in enumerate(starts)}
     accs = [_empty() for _ in starts]

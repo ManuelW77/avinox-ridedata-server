@@ -82,7 +82,7 @@ def test_avg_power_time_weighted():
 def test_empty_db(store):
     for period in dash.PERIODS:
         d = store.dashboard(period, today=TODAY)
-        assert len(d["series"]) == dash.PERIODS[period]
+        assert len(d["series"]) == dash.MIN_BUCKETS[period]  # ohne Fahrt: Mindestbreite
         assert d["total"]["rides"] == 0 and d["highlights"] == [] and d["recent"] == []
         assert d["current"]["rides"] == 0 and d["max_offset"] == 0 and d["last_offset"] is None
 
@@ -94,7 +94,7 @@ def test_unknown_period(store):
 
 def test_week_series_and_comparison(store, filled):
     d = store.dashboard("week", today=TODAY)
-    assert len(d["series"]) == 26
+    assert len(d["series"]) == 6  # erste Fahrt KW 42 -> 5 Wochen, Minimum 6
     cur, prev = d["series"][-1], d["series"][-2]
     assert cur["key"] == "2026-W46" and cur["rides"] == 3  # inkl. Testfahrt
     assert prev["key"] == "2026-W45" and prev["rides"] == 1
@@ -123,13 +123,13 @@ def test_offset_and_other_periods(store, filled):
     assert far["current"]["key"] == "2026-W42"
 
     m = store.dashboard("month", today=TODAY)
-    assert len(m["series"]) == 24
+    assert len(m["series"]) == 6
     assert m["series"][-1]["key"] == "2026-11" and m["series"][-1]["rides"] == 4
     assert m["series"][-2]["key"] == "2026-10" and m["series"][-2]["distance_km"] == pytest.approx(30)
     y = store.dashboard("year", today=TODAY)
-    assert [s["key"] for s in y["series"]] == ["2022", "2023", "2024", "2025", "2026"]
+    assert [s["key"] for s in y["series"]] == ["2025", "2026"]  # erste Fahrt 2025, Minimum 2
     day = store.dashboard("day", today=TODAY)
-    assert len(day["series"]) == 30 and day["series"][-2]["key"] == "2026-11-11"
+    assert len(day["series"]) == 29 and day["series"][-2]["key"] == "2026-11-11"
     assert day["current"]["rides"] == 0 and day["last_offset"] == 1
 
 
@@ -190,7 +190,7 @@ def test_api_and_pages(client):
     assert client.get("/api/v1/dashboard", params={"offset": -1}).status_code == 422
     page = client.get("/", params={"period": "year"})
     assert page.status_code == 200 and "Bestwerte" in page.text and "dashboard.js" in page.text
-    assert "<strong>" in page.text
+    assert "best-v" in page.text and "best-w" in page.text
     assert client.get("/", params={"period": "unsinn", "offset": "5"}).status_code == 200
     rides = client.get("/rides")
     assert rides.status_code == 200 and "/rides/" in rides.text
@@ -301,3 +301,12 @@ def test_mix_by_gradient_and_cadence_per_gear():
     b["gears"]["per_gear"]["2"]["moving_seconds"] = 5
     a["gears"]["per_gear"]["2"]["moving_seconds"] = 5
     assert "2" not in dash.mix([a, b])["gears"]["avg_cadence_per_gear"]
+
+
+def test_series_range_starts_at_first_ride(store):
+    add(store, 1, ride_at(datetime(2026, 3, 9, 10), km=10, ride_id=1))
+    m = store.dashboard("month", today=TODAY)
+    assert len(m["series"]) == 9 and m["series"][0]["key"] == "2026-03" and m["series"][-1]["key"] == "2026-11"
+    add(store, 2, ride_at(datetime(2020, 3, 9, 10), km=10, ride_id=2))
+    assert len(store.dashboard("month", today=TODAY)["series"]) == 24
+    assert all(b["when_text"] for b in store.dashboard("month", today=TODAY)["highlights"])
