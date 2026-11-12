@@ -1,0 +1,24 @@
+services:
+  avinox:
+    build: .
+    image: ghcr.io/manuelw77/avinox-ridedata-server:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - avinox-data:/data
+    environment:
+      AVINOX_DATA_DIR: /data
+      # Upload-Token für den ESP32. Ohne Angabe wird eines erzeugt und in /data/upload_token abgelegt.
+      # AVINOX_UPLOAD_TOKEN: "hier-ein-langes-zufaelliges-token"
+      # Passwortschutz (Basic Auth) für Webseite und Lese-API. Leer = im LAN offen.
+      # AVINOX_WEB_USER: "avinox"
+      # AVINOX_WEB_PASSWORD: "bitte-aendern"
+      # AVINOX_PUBLIC_URL: "http://192.168.1.18:8000"  # Adresse für den ESP32 (Einstellungen-Seite)
+      # AVINOX_TZ: "Europe/Berlin"
+      # AVINOX_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      # AVINOX_TILE_ATTRIBUTION: "© OpenStreetMap-Mitwirkende"
+      # AVINOX_MAX_UPLOAD_MB: "64"
+
+volumes:
+  avinox-data:

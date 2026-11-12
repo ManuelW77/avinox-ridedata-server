@@ -1,0 +1,50 @@
+menu "Avinox-Sync"
+    config AVX_LED_GPIO
+        int "GPIO der RGB-Status-LED (WS2812), -1 = aus"
+        range -1 48
+        default 48
+        help
+            ESP32-S3-DevKitC-1: GPIO 48 (je nach Board-Revision auch 38).
+
+    config AVX_BOOT_GPIO
+        int "GPIO der BOOT-Taste (low-aktiv)"
+        range 0 48
+        default 0
+        help
+            3 s gedrückt halten (im Betrieb): Einrichtungsmodus. 10 s: Werkseinstellung (Konfiguration löschen).
+
+    config AVX_SYNC_INTERVAL_MIN
+        int "Abstand zwischen zwei Syncs (Minuten)"
+        range 1 1440
+        default 10
+
+    config AVX_HEARTBEAT_S
+        int "Abstand der Heartbeat-Meldungen an den Server (Sekunden)"
+        range 30 86400
+        default 300
+
+    config AVX_NO_DRIVE_HINT_S
+        int "Sekunden ohne Laufwerk bis zum Hinweis (orange blinkend)"
+        range 5 3600
+        default 30
+
+    config AVX_CHUNK_SIZE
+        int "Größe eines Upload-Stücks (Byte)"
+        range 4096 262144
+        default 32768
+
+    config AVX_OTA_CHECK_S
+        int "Abstand der Firmware-Update-Prüfung (Sekunden)"
+        range 300 604800
+        default 21600
+        help
+            Zusätzlich wird nach jedem abgeschlossenen Sync geprüft.
+
+    config AVX_OTA_VALIDATE_S
+        int "Frist für neue Firmware, den Server zu erreichen (Sekunden)"
+        range 60 3600
+        default 300
+        help
+            Erreicht eine frisch installierte Firmware den Server in dieser Zeit nicht, startet der ESP neu
+            und der Bootloader kehrt zur vorherigen Firmware zurück.
+endmenu

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ t('set.title') }} – Avinox Ride Data{% endblock %}
+{% block main %}
+<div class="lead"><div><h1>{{ t('set.title') }}</h1></div></div>
+
+<section class="card" style="margin-bottom:1rem">
+  <h2>{{ t('set.modes') }}</h2>
+  <p class="muted small">{{ t('set.modes_text_html') }}</p>
+  {% if levels %}
+  <form id="modes-form" class="stack">
+    {% for lvl in levels %}
+    <div class="form-row">
+      <label for="mode-{{ lvl }}">{{ t('set.mode_n', n=lvl) }}</label>
+      <input type="text" id="mode-{{ lvl }}" data-level="{{ lvl }}" value="{{ names.get(lvl, '') }}" maxlength="40">
+    </div>
+    {% endfor %}
+    <div class="actions"><button type="submit" class="btn">{{ t('set.save') }}</button><span id="modes-status" class="muted small" role="status"></span></div>
+  </form>
+  {% else %}
+  <p class="notice">{{ t('set.nomodes') }}</p>
+  {% endif %}
+</section>
+
+<section class="card" id="upload" style="margin-bottom:1rem">
+  <h2>{{ t('set.upload') }}</h2>
+  <p class="muted small">{{ t('set.upload_text_html') }}</p>
+  <p class="small"><strong>{{ t('set.accepted') }}</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in upload_files %}
+      <tr><td><code>{{ f.paths }}</code></td><td class="muted">{{ t('upload.kind.' ~ f.kind, _default=f.label) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small"><strong>{{ t('set.rejected') }}</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in not_uploaded %}
+      <tr><td><code>{{ t('notup.path3') if loop.last else f.paths }}</code></td><td class="muted">{{ t('notup.' ~ loop.index, _default=f.label) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">{{ t('set.esp_same') }}</p>
+  <div class="dropzone" id="dropzone">
+    <p>{{ t('set.drop') }}</p>
+    <label class="btn ghost">{{ t('set.choose') }}<input type="file" id="folder-input" webkitdirectory multiple hidden></label>
+  </div>
+  <p id="upload-status" class="small" role="status" style="margin-top:0.75rem"></p>
+  <p id="upload-done" hidden><a class="btn" href="/rides">{{ t('set.to_rides') }}</a></p>
+  <script type="application/json" id="upload-patterns">{{ patterns | tojson }}</script>
+</section>
+
+<section class="card" id="firmware" style="margin-bottom:1rem">
+  <h2>{{ t('set.fw') }}</h2>
+  <p class="muted small">{{ t('set.fw_text_html') }}</p>
+  {% set cur = firmware | selectattr('is_current') | list %}
+  {% if cur %}
+  {% for f in cur %}
+  <dl class="kv">
+    <dt>{{ t('set.fw_current') }}</dt><dd><strong>{{ f.project }} {{ f.version }}</strong></dd>
+    <dt>{{ t('set.fw_uploaded') }}</dt><dd>{{ f.uploaded_at | localtime('%d.%m.%Y %H:%M') }}</dd>
+    <dt>{{ t('set.fw_size') }}</dt><dd>{{ (f.size / 1024) | num(0) }} KB</dd>
+    <dt>SHA-256</dt><dd class="mono">{{ f.sha256[:12] }}</dd>
+  </dl>
+  {% endfor %}
+  {% else %}
+  <p class="notice">{{ t('set.fw_none') }}</p>
+  {% endif %}
+  {% if not fw_admin %}
+  <p class="notice small">{{ t('set.fw_admin_hint') }}.</p>
+  {% endif %}
+  {% set older = firmware | rejectattr('is_current') | list %}
+  {% if older %}
+  <p class="small"><strong>{{ t('set.fw_older') }}</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in older %}
+      <tr><td>{{ f.project }} {{ f.version }}</td><td class="muted">{{ f.uploaded_at | localtime('%d.%m.%Y') }}</td><td class="mono">{{ f.sha256[:8] }}</td>
+        <td class="actions">{% if fw_admin %}<button type="button" class="btn ghost" data-fw-current="{{ f.id }}">{{ t('set.fw_make_current') }}</button> <button type="button" class="btn ghost" data-fw-delete="{{ f.id }}">{{ t('set.fw_delete') }}</button>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if fw_admin %}
+  <form id="fw-form" class="actions" style="margin-top:0.75rem">
+    <input type="file" id="fw-file" accept=".bin" required>
+    <button type="submit" class="btn">{{ t('set.fw_upload_btn') }}</button>
+    <span id="fw-status" class="muted small" role="status"></span>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>{{ t('set.api') }}</h2>
+  <div class="form-row" style="margin-bottom:0.75rem">
+    <label for="server-url">{{ t('set.server_url') }}</label>
+    <div class="actions">
+      <input type="text" id="server-url" value="{{ server_url }}" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" id="server-url-copy">{{ t('set.copy') }}</button>
+    </div>
+    {% if server_url_unreachable %}
+    <p class="notice small" style="margin-top:0.5rem">{{ t('set.url_unreachable_html') }}</p>
+    {% endif %}
+  </div>
+  <div class="form-row" style="margin-bottom:0.75rem">
+    <label for="token">{{ t('set.token') }}</label>
+    <div class="actions">
+      <input type="password" id="token" value="{{ token }}" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" id="token-show">{{ t('set.show') }}</button>
+      <button type="button" class="btn ghost" id="token-copy">{{ t('set.copy') }}</button>
+    </div>
+  </div>
+  {% if not has_web_login %}
+  <p class="muted small" style="margin-bottom:0.75rem">{{ t('set.noauth_html') }}</p>
+  {% endif %}
+  <p class="muted small">{{ t('set.bearer_html') }}</p>
+  <dl class="kv">
+    <dt><code>GET /api/v1/manifest</code></dt><dd>{{ t('set.api.manifest') }}</dd>
+    <dt><code>PUT /api/v1/upload?path=…&amp;size=…&amp;offset=…</code></dt><dd>{{ t('set.api.upload_html') }}</dd>
+    <dt><code>GET /api/v1/upload/status?path=…&amp;size=…</code></dt><dd>{{ t('set.api.status') }}</dd>
+  </dl>
+  <dl class="kv">
+    <dt><code>GET /api/v1/firmware/latest?project=…</code></dt><dd>{{ t('set.api.fw_latest') }}</dd>
+    <dt><code>GET /api/v1/firmware/&lt;sha256&gt;.bin</code></dt><dd>{{ t('set.api.fw_bin') }}</dd>
+  </dl>
+  <p class="small">{{ t('set.api.full') }} <a href="/api/docs">/api/docs</a></p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='settings.js') }}" defer></script>{% endblock %}

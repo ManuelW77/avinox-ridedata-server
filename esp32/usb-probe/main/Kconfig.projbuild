@@ -1,0 +1,15 @@
+menu "USB-Probe"
+    config PROBE_LED_GPIO
+        int "GPIO der RGB-Status-LED (WS2812), -1 = aus"
+        range -1 48
+        default 48
+        help
+            ESP32-S3-DevKitC-1: GPIO 48 (je nach Board-Revision auch 38).
+
+    config PROBE_BOOT_GPIO
+        int "GPIO der BOOT-Taste (low-aktiv)"
+        range 0 48
+        default 0
+        help
+            Beim Start 10 s lang gedrückt halten: Log-Modus, USB-Host wird nicht gestartet.
+endmenu

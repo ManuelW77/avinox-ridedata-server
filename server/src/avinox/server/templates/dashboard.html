@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% from "_macros.html" import figure, figure_text with context %}
+{% block title %}{{ t('dash.title') }} – Avinox Ride Data{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css') }}">
+{% endblock %}
+{% block main %}
+{% set tot = dash.total %}
+<div class="lead">
+  <div>
+    <h1>{{ t('dash.title') }}</h1>
+    {% if tot.rides %}
+    <p>{{ t('dash.count', n=tot.rides) }}{% if tot.first_date %}{{ t('dash.since', d=tot.first_date | day) }}{% endif %}{% if tot.last_date %}{{ t('dash.last', d=tot.last_date | day) }}{% endif %}</p>
+    {% endif %}
+  </div>
+  <a class="btn ghost" href="/settings#upload">{{ t('btn.upload') }}</a>
+</div>
+
+{% if not tot.rides %}
+<div class="card empty">
+  <p>{{ t('empty.none') }}</p>
+  <p class="small">{{ t('empty.hint_html') }}</p>
+</div>
+{% else %}
+
+{# ------------------------------------------------------------ Zeitraum #}
+<section class="card period" id="period" aria-live="polite">
+  <div class="toolbar">
+    <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
+      {% for key, name in (('day', t('period.day')), ('week', t('period.week')), ('month', t('period.month')), ('year', t('period.year'))) %}
+      <button type="button" data-key="{{ key }}" aria-pressed="{{ 'true' if dash.period == key else 'false' }}">{{ name }}</button>
+      {% endfor %}
+    </div>
+    <div class="stepper">
+      <button type="button" id="period-prev" aria-label="{{ t('dash.prev') }}">‹</button>
+      <span id="period-range">{{ dash.current.title }}</span>
+      <button type="button" id="period-next" aria-label="{{ t('dash.next') }}">›</button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-main">
+      <div class="hero-k" id="hero-name">{{ dash.current.name }}</div>
+      <div class="hero-v"><span id="hero-km">{{ dash.current.distance_km | num(1) }}</span><small>km</small></div>
+      <div class="delta" id="hero-delta"></div>
+      <div class="split" id="hero-split" hidden>
+        <div class="split-bar"><span class="rider"></span><span class="motor"></span></div>
+        <div class="split-legend"><span id="split-rider"></span><span id="split-motor"></span></div>
+      </div>
+      <p class="muted small" id="hero-empty" hidden></p>
+    </div>
+    <div class="kpis" id="kpis"></div>
+  </div>
+</section>
+
+<div class="grid charts">
+  <section class="card">
+    <div class="chart-head"><h2>{{ t('chart.distance') }}</h2><span class="muted small" id="sum-distance"></span></div>
+    <div class="dchart" id="chart-distance"></div>
+    <div class="readout" id="readout-distance"></div>
+  </section>
+  <section class="card">
+    <div class="chart-head">
+      <h2>{{ t('chart.energy') }}</h2>
+      <div class="legend"><span><i style="background:var(--rider)"></i>{{ t('legend.rider') }}</span><span><i style="background:var(--motor)"></i>{{ t('legend.motor') }}</span></div>
+    </div>
+    <div class="dchart" id="chart-energy"></div>
+    <div class="readout" id="readout-energy"></div>
+  </section>
+  <section class="card">
+    <div class="chart-head"><h2>{{ t('chart.share') }}</h2><span class="muted small">{{ t('chart.share_sub') }}</span></div>
+    <div class="dchart" id="chart-share"></div>
+    <div class="readout" id="readout-share"></div>
+  </section>
+  <section class="card">
+    <div class="chart-head"><h2>{{ t('chart.ascent') }}</h2><span class="muted small" id="sum-ascent"></span></div>
+    <div class="dchart" id="chart-ascent"></div>
+    <div class="readout" id="readout-ascent"></div>
+  </section>
+</div>
+<p class="muted small chart-hint">{{ t('dash.hint') }}</p>
+
+{# ------------------------------------------------------------ Bestwerte #}
+{% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
+{% if dash.highlights %}
+<section class="bests">
+  <h2 class="section-title">{{ t('bests.title') }}</h2>
+  {% for gkey, gname in groups %}
+  {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
+  {% if items %}
+  <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
+  <div class="best-grid">
+    {% for h in items %}
+    <article class="best g-{{ gkey }}">
+      <div class="best-k">{{ h.title }}</div>
+      <p class="best-s">{{ h.sentence | emph(h.value_text) }}</p>
+      {% if h.ride %}
+      <a class="best-link" href="/rides/{{ h.ride }}">{{ t('best.to_ride') }} <span aria-hidden="true">→</span></a>
+      {% else %}
+      <a class="best-link" href="/?period={{ h.period }}&amp;offset={{ h.offset }}" data-period="{{ h.period }}" data-offset="{{ h.offset }}">{{ t('best.to_' ~ h.period) }} <span aria-hidden="true">→</span></a>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
+  <p class="muted small">{{ t('bests.note') }}</p>
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
+<div class="grid cols-2 bottom">
+  <section class="card">
+    <div class="chart-head"><h2>{{ t('recent.title') }}</h2><a class="small" href="/rides">{{ t('recent.all') }}</a></div>
+    <ul class="recent">
+      {% for r in dash.recent %}
+      <li>
+        <a href="/rides/{{ r.id }}">
+          <span class="when">{{ r.start_utc | localtime('%a %d.%m.') if r.start_utc else t('ride_n', n=r.ride_id) }}<span>{{ r.start_utc | localtime('%H:%M Uhr') if r.start_utc else t('no_time') }}</span></span>
+          <span class="n">{{ r.distance_km | num(1) }}<small>km</small></span>
+          <span class="mix" title="{{ t('recent.share_title', v=r.motor_share_pct | num) }}">
+            {% if r.motor_share_pct is not none %}<span class="mini"><span style="width: {{ 100 - r.motor_share_pct }}%"></span></span>{% endif %}
+            <span class="n">{{ r.rider_kj | num }}<small>kJ</small></span>
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>{{ t('total.title') }}</h2>
+    <div class="figures">
+      {{ figure(tot.rides, t('fig.rides')) }}
+      {{ figure(tot.distance_km, t('fig.distance'), 'km', 1) }}
+      {{ figure_text(tot.moving_time_s | duration, t('fig.time')) }}
+      {{ figure(tot.ascent_m, t('fig.ascent'), 'm') }}
+      {{ figure(tot.rider_kj, t('fig.rider_energy'), 'kJ', 0, 'rider') }}
+      {{ figure(tot.motor_wh, t('fig.motor_energy'), 'Wh', 0, 'motor') }}
+      {{ figure(tot.motor_share_pct, t('fig.avg_share'), '%') }}
+      {{ figure(tot.calories_kcal, t('fig.calories'), 'kcal') }}
+    </div>
+    {% if tot.undated_rides %}<p class="muted small" style="margin-bottom:0">{{ t('dash.undated_one' if tot.undated_rides == 1 else 'dash.undated_many', n=tot.undated_rides) }}</p>{% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if dash.total.rides %}
+<script type="application/json" id="dash-data">{{ dash | tojson }}</script>
+<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js') }}"></script>
+<script src="{{ url_for('static', path='dashboard.js') }}"></script>
+{% endif %}
+{% endblock %}

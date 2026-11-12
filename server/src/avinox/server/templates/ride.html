@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% from "_macros.html" import figure, figure_text, bars with context %}
+{% block title %}{{ ride.start_utc | localtime }} – Avinox Ride Data{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css') }}">
+{% endblock %}
+{% block main %}
+{% set d = a.device_stats %}
+<div class="lead">
+  <div>
+    <h1>{{ ride.start_utc | localtime('%a %d.%m.%Y, %H:%M Uhr') if ride.start_utc else t('ride_no_time', n=ride.ride_id) }}</h1>
+    <p>{{ t('ride.sub', n=ride.ride_id) }} · <span class="mono">{{ ride.path.split('/')[-1] }}</span>
+      {% if a.warnings %}<span class="pill warn" title="{{ a.warnings | join('; ') }}">{{ t('ride.warnings', n=a.warnings | length) }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/gpx">GPX</a>
+    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
+    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
+    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>
+  </div>
+</div>
+
+<section class="card" style="margin-bottom:1rem">
+  <div class="figures">
+    {{ figure(s.distance_km, t('ride.f.distance'), 'km', 2) }}
+    {{ figure_text(s.duration_s | duration, t('ride.f.duration')) }}
+    {{ figure_text(s.moving_time_s | duration, t('ride.f.moving')) }}
+    {{ figure(s.ascent_m, t('ride.f.ascent'), 'm') }}
+    {{ figure(s.descent_m, t('ride.f.descent'), 'm') }}
+    {{ figure(s.avg_speed_kmh, t('ride.f.avg_speed'), 'km/h', 1) }}
+    {{ figure(s.max_speed_kmh, t('ride.f.max_speed'), 'km/h', 1) }}
+    {{ figure(s.avg_rider_power_w, t('ride.f.avg_rider'), 'W', 0, 'rider') }}
+    {{ figure(s.max_rider_power_w, t('ride.f.max_rider'), 'W', 0, 'rider') }}
+    {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}
+    {{ figure(s.max_motor_power_w, t('ride.f.max_motor'), 'W', 0, 'motor') }}
+    {{ figure(s.avg_cadence_rpm, t('ride.f.cadence'), t('ride.f.cadence_unit')) }}
+    {{ figure(s.max_rider_torque_nm, t('ride.f.torque'), 'Nm', 0, 'rider') }}
+    {{ figure(a.energy.motor_share_pct, t('ride.f.share'), '%') }}
+    {{ figure(s.calories_kcal, t('ride.f.calories'), 'kcal') }}
+    {% if a.battery.used_pct is not none %}{{ figure_text(a.battery.start_pct ~ ' → ' ~ a.battery.end_pct ~ ' %', t('ride.f.battery')) }}{% endif %}
+    {% if s.avg_heart_rate_bpm %}{{ figure(s.avg_heart_rate_bpm, t('ride.f.hr'), 'bpm') }}{% endif %}
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:1rem">
+  <div class="toolbar">
+    <h2 style="margin:0">{{ t('ride.track') }}</h2>
+    {% if a.gps.points > 1 %}
+    <div class="segmented" id="color-by" role="group" aria-label="{{ t('ride.color_by') }}">
+      <button type="button" data-key="speed" aria-pressed="true">{{ t('ride.c.speed') }}</button>
+      <button type="button" data-key="rider">{{ t('ride.c.rider') }}</button>
+      <button type="button" data-key="motor">{{ t('ride.c.motor') }}</button>
+      <button type="button" data-key="alt">{{ t('ride.c.alt') }}</button>
+      <button type="button" data-key="mode">{{ t('ride.c.mode') }}</button>
+    </div>
+    {% endif %}
+  </div>
+  {% if a.gps.points > 1 or a.gps.preview | length > 1 %}
+  <div class="map-wrap"><div id="map"></div></div>
+  <div class="legend" id="map-legend" style="margin-top:0.6rem"></div>
+  {% if a.gps.points <= 1 %}<p class="muted small">{{ t('ride.nogps_preview') }}</p>{% endif %}
+  {% else %}
+  <div class="map-empty">{{ t('ride.nogps') }}</div>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-bottom:1rem">
+  <div class="toolbar">
+    <h2 style="margin:0">{{ t('ride.course') }}</h2>
+    <div class="segmented" id="x-axis" role="group" aria-label="{{ t('ride.xaxis') }}">
+      <button type="button" data-key="distance" aria-pressed="true">{{ t('ride.x.distance') }}</button>
+      <button type="button" data-key="time">{{ t('ride.x.time') }}</button>
+    </div>
+  </div>
+  <div id="charts"></div>
+</section>
+
+<div class="grid cols-2" style="margin-bottom:1rem">
+  <section class="card">
+    <h2>{{ t('ride.modes') }}</h2>
+    {{ bars(a.assist.seconds_per_mode, 'motor') }}
+    <table class="plain" style="margin-top:0.9rem">
+      <tr><th>{{ t('ride.th.mode') }}</th><th class="n">{{ t('ride.th.distance') }}</th><th class="n">{{ t('ride.th.avg_kmh') }}</th><th class="n">{{ t('ride.th.avg_motor') }}</th><th class="n">{{ t('ride.th.avg_rider') }}</th></tr>
+      {% for name, m in a.assist.per_mode.items() %}
+      <tr><td>{{ name }}</td><td class="n">{{ (m.distance_m / 1000) | num(1) }} km</td><td class="n">{{ m.avg_moving_speed_kmh | num(1) }}</td><td class="n">{{ m.avg_motor_power_w | num }} W</td><td class="n">{{ m.avg_rider_power_w | num }} W</td></tr>
+      {% endfor %}
+    </table>
+    <p class="muted small" style="margin-top:0.6rem">{{ t('ride.changes', n=a.assist.changes) }}{% if a.assist.seconds_per_mode.keys() | select('match', 'eigen_') | list %}{{ t('ride.custom_modes_html') }}{% endif %}</p>
+  </section>
+  <section class="card">
+    <h2>{{ t('ride.gears') }}</h2>
+    {{ bars(a.gears.seconds_per_gear, '', 's', 0, {}) }}
+    <p class="muted small" style="margin-top:0.6rem">{{ t('ride.gear_changes', n=a.gears.changes) }}</p>
+  </section>
+</div>
+
+<div class="grid cols-3" style="margin-bottom:1rem">
+  <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider') }}</section>
+  <section class="card"><h2>{{ t('ride.d.motor') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.motor_power_s, 'motor') }}</section>
+  <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.f.cadence_unit') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider') }}</section>
+  <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">km/h</span></h2>{{ bars(a.distributions.speed_s) }}</section>
+  <section class="card"><h2>{{ t('ride.d.gradient') }} <span class="muted small">%</span></h2>{{ bars(a.distributions.gradient_s) }}</section>
+  {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'rider') }}</section>{% endif %}
+</div>
+
+<div class="grid cols-3" style="margin-bottom:1rem">
+  <section class="card">
+    <h2>{{ t('ride.efforts') }}</h2>
+    <table class="plain">
+      <tr><th>{{ t('ride.th.duration') }}</th><th class="n">{{ t('ride.th.rider') }}</th><th class="n">{{ t('ride.th.motor') }}</th><th class="n">{{ t('ride.th.speed') }}</th></tr>
+      {% for key, v in a.best_efforts.rider_power_w.items() %}
+      <tr><td>{{ key[:-1] | int | duration }}</td><td class="n">{{ v | num }} W</td><td class="n">{{ a.best_efforts.motor_power_w[key] | num }} W</td><td class="n">{{ a.best_efforts.speed_kmh[key] | num(1) }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  <section class="card">
+    <h2>{{ t('ride.energy') }}</h2>
+    <dl class="kv">
+      <dt>{{ t('ride.e.rider') }}</dt><dd>{{ a.energy.rider_kj | num }} kJ</dd>
+      <dt>{{ t('ride.e.motor') }}</dt><dd>{{ a.energy.motor_wh | num(1) }} Wh ({{ a.energy.motor_kj | num }} kJ)</dd>
+      <dt>{{ t('ride.e.used') }}</dt><dd>{{ a.battery.used_pct | num }} %</dd>
+      <dt>{{ t('ride.e.per_km') }}</dt><dd>{{ a.battery.pct_per_km | num(2) }} % · {{ t('ride.e.motor_wh', wh=a.battery.motor_wh_per_km | num(1)) }}</dd>
+      <dt>{{ t('ride.e.km_per_pct') }}</dt><dd>{{ a.battery.km_per_pct | num(2) }} km</dd>
+      <dt>{{ t('ride.e.per_100m') }}</dt><dd>{{ a.battery.pct_per_100m_ascent | num(1) }} %</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>{{ t('ride.env') }}</h2>
+    <dl class="kv">
+      <dt>{{ t('ride.v.temp') }}</dt><dd>{{ a.environment.temperature_min_c | num(1) }} – {{ a.environment.temperature_max_c | num(1) }} °C {{ t('ride.avg_paren', v=a.environment.temperature_avg_c | num(1)) }}</dd>
+      <dt>{{ t('ride.v.pressure') }}</dt><dd>{{ a.environment.pressure_min_kpa | num(1) }} – {{ a.environment.pressure_max_kpa | num(1) }} kPa</dd>
+      <dt>{{ t('ride.v.alt') }}</dt><dd>{{ a.altitude.min_m | num }} – {{ a.altitude.max_m | num }} m</dd>
+      <dt>{{ t('ride.v.alt_sensor') }}</dt><dd>↑ {{ a.altitude.samples_ascent_m | num }} m · ↓ {{ a.altitude.samples_descent_m | num }} m</dd>
+      <dt>{{ t('ride.v.gradient') }}</dt><dd>{{ t('ride.gradient_val', avg=s.avg_gradient_pct | num(1), max=s.max_gradient_pct | num(1)) }}</dd>
+      <dt>{{ t('ride.v.gps') }}</dt><dd>{{ t('ride.gps_val', n=a.gps.points, p=a.gps.coverage_pct | num) }}</dd>
+    </dl>
+  </section>
+</div>
+
+<div class="grid cols-2">
+  <section class="card">
+    <h2>{{ t('ride.stops') }} <span class="muted small">{{ t('ride.stops_sub') }}</span></h2>
+    {% if a.stops %}
+    <table class="plain">
+      <tr><th>{{ t('ride.th.after') }}</th><th class="n">{{ t('ride.th.at_km') }}</th><th class="n">{{ t('ride.th.dur') }}</th></tr>
+      {% for st in a.stops %}<tr><td>{{ st.offset_s | duration }}</td><td class="n">{{ (st.distance_m / 1000) | num(1) }}</td><td class="n">{{ st.duration_s | duration }}</td></tr>{% endfor %}
+    </table>
+    {% else %}<p class="muted small">{{ t('ride.nostops') }}</p>{% endif %}
+  </section>
+  <section class="card">
+    <h2>{{ t('ride.display') }}</h2>
+    {% if d %}
+    {% set b = d.session.battery %}
+    <dl class="kv">
+      {% if b %}
+      <dt>{{ t('ride.cells') }}</dt><dd>{{ t('ride.cells_val', a=b.min_cell_mv | num, b=b.max_cell_mv | num, c=b.max_cell_delta_mv | num) }}</dd>
+      <dt>{{ t('ride.peak_current') }}</dt><dd>{{ b.max_current_a | num(1) }} A</dd>
+      <dt>{{ t('ride.batt_temp') }}</dt><dd>{{ t('ride.batt_temp_val', a=b.start_temp_c | num, b=b.end_temp_c | num, c=b.max_temp_c | num) }}</dd>
+      {% endif %}
+      <dt>{{ t('ride.boost') }}</dt><dd>{{ d.boost_s | num }} s</dd>
+      <dt>{{ t('ride.throttle') }}</dt><dd>{{ t('ride.yes') if d.session.thermal_limit else t('ride.no') }}</dd>
+      <dt>{{ t('fw.title') }}</dt><dd class="small">{{ t('ride.fw_val', m=d.session.firmware.motor, s=d.session.firmware.screen, b=d.session.firmware.bat) }}</dd>
+    </dl>
+    {% if d.session.pitch_km %}
+    <h3 style="margin-top:1rem">{{ t('ride.pitch') }}</h3>
+    {{ bars(d.session.pitch_km, 'motor', 'km', 1) }}
+    {% endif %}
+    {% if d.motor_torque_s %}
+    <h3 style="margin-top:1rem">{{ t('ride.torque_dist') }}</h3>
+    {{ bars(d.motor_torque_s, 'motor') }}
+    {% endif %}
+    {% if d.session.rides_in_session > 1 %}<p class="muted small">{{ t('ride.session_note', n=d.session.rides_in_session) }}</p>{% endif %}
+    {% else %}
+    <p class="muted small">{{ t('ride.nostats_html') }}</p>
+    {% endif %}
+  </section>
+</div>
+
+<script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "tile_url": tile_url, "tile_attribution": tile_attribution, "preview": a.gps.preview} | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js') }}"></script>
+<script src="{{ url_for('static', path='ride.js') }}"></script>
+{% endblock %}

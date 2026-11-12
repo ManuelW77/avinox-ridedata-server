@@ -22,7 +22,7 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 | `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
 | `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Kennung `DGS_EB100` / `DJI_LOG_V3`. Inhalt **verschlüsselt** (Entropie 7,5–7,8 Bit/Byte, sich wiederholende 8-Byte-Blöcke). Ohne DJI-Schlüssel nicht lesbar, wird nicht verfolgt. |
 | `buried_rec/buried_file_cur.json` | **Nutzungsstatistik** („buried point“ = Analytics), JSON-Zeilen mit `event_id`, ca. 1000 Zeilen, siehe unten. Lesbar. |
-| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947, Zeitpunkt des Anschlusses an den Rechner). Codes unbekannt. Parser: `src/avinox/hms.py`. |
+| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947, Zeitpunkt des Anschlusses an den Rechner). Codes unbekannt. Parser: `server/src/avinox/hms.py`. |
 | `System/ebike_log_index.dat` | 12 Byte, uint32 = Anzahl der `ebike_log`-Dateien (2482). |
 | `System/map/tracks/<hash>/` | Nur eine leere `thumbnail.jpg.tmp`. |
 
@@ -79,7 +79,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 73 | Kilometerstand in m | roh |
 | 75 | Ereignis | 2 = letztes Sample der Fahrt, sonst 0 |
 
-Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`, Auswertung: `src/avinox/analysis.py`, GPS: `src/avinox/track.py`, Nutzungsstatistik: `src/avinox/buried.py`.
+Parser: `server/src/avinox/ride_rec.py`, Kennzahlen: `server/src/avinox/summary.py`, Auswertung: `server/src/avinox/analysis.py`, GPS: `server/src/avinox/track.py`, Nutzungsstatistik: `server/src/avinox/buried.py`.
 
 **GPS:** Feld 31/32 nicht in jeder Sekunde neu (Position wiederholt sich), Fahrten ohne Fix haben keine Koordinaten. Für die Karte: Ausreißer > 150 km/h entfernen, Douglas-Peucker mit 3 m → ca. 350 statt 4600 Punkte für 18 km.
 
@@ -108,6 +108,16 @@ Gefundene `event_id`:
 | `wireless_controller_usage` / `_customize` | Tastendrücke an der Fernbedienung, Belegung |
 
 Zuordnung zu einzelnen Fahrten: über Zeitstempel bzw. Distanz (`single_ride.distance` = Fahrtdistanz).
+
+## 3b. USB-Verbindung zum ESP32-S3 (getestet 12.11.2026)
+
+- Display meldet sich als `AVINOX EBIKE` / `MCU MASS STORAGE`, VID `0x2CA3`, PID `0x0020`, USB 2.0. Am ESP32-S3 Full Speed.
+- 4 Interfaces: 0 = Massenspeicher (SCSI, Bulk-Only), 1–3 = herstellereigen (Klasse `ff`). Alle Bulk-Endpunkte melden MPS 512 – auch bei Full Speed (normwidrig; Full Speed erlaubt 64).
+- Speicher: 122 159 103 Sektoren à 512 Byte (ca. 59,6 GB), FAT32.
+- Das Display liefert über USB-C Strom (bis 60 W) und versorgt den ESP32 mit. Am ESP32 hängt das Display an der nativen USB-Buchse, die UART-Buchse (CH343) bleibt frei für Log/Flashen.
+- Ohne Anpassung scheitert der ESP-IDF-USB-Host: „EP MPS (512) exceeds supported limit (408)“. Mit MPS 64 für alle Endpunkte: Anmeldung und READ CAPACITY gehen, READ10 bricht mit Overflow ab – das Display schickt auch bei Full Speed echte 512-Byte-Pakete.
+- **Lösung:** eigene FIFO-Aufteilung (RX 184 / NPTX 16 / PTX 0 Zeilen von 200 → IN bis 728 Byte) und MPS 64 nur für Bulk-OUT (dort gehen nur 31-Byte-Befehle). Damit wird das Laufwerk vollständig gelesen, ca. 845 KB/s. Umsetzung: `esp32/usb-probe/` (gepatchte Komponente `components/usb/`, siehe `PATCH.md`).
+- Dateigrößen auf dem Laufwerk stimmen exakt mit der Kopie in `_demo-data` überein → Abgleich über Name + Größe funktioniert.
 
 ## 4. Bestehende Community-Projekte
 

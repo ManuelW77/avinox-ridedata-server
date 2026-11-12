@@ -1,85 +1,155 @@
 <p align="center"><img src="assets/icon/icon-rounded-512.png" width="128" alt="Icon"></p>
 
+<p align="center"><b>Deutsch</b> · <a href="README.en.md">English</a></p>
+
+[![build](https://github.com/ManuelW77/avinox-ridedata-server/actions/workflows/build.yml/badge.svg)](https://github.com/ManuelW77/avinox-ridedata-server/actions/workflows/build.yml)
+
 # avinox-ridedata-server
 
-Fahrdaten vom DJI-Avinox-E-Bike-Antrieb direkt vom USB-Laufwerk des Displays auslesen und auswerten – ohne Avinox-Cloud und ohne Zugangsdaten.
+Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwerk des Displays auslesen und auswerten – ohne Avinox-Cloud, ohne Zugangsdaten.
 
-Geplant: Ein ESP32-S3 holt neue Fahrten per USB vom Display und lädt sie per WLAN auf einen Server (Docker), der sie auswertet und als Webseite mit Statistiken bereitstellt.
+## So einfach
 
-## Stand
+**ESP32 an den USB-Port des Displays stecken, einmal WLAN einrichten, fertig.** Jede Fahrt landet danach automatisch auf dem eigenen Server.
 
-- Parser für die Fahrtaufzeichnungen `ride_rec/**/ride_rec_<id>.proto` (Header, Frames, Samples mit ca. 1 Hz)
-- Kennzahlen je Fahrt wie in der Avinox-App (vom Display berechnet und im Header gespeichert)
-- Auswertung: Zeit je Unterstützungsmodus und Gang, Verteilungen (Leistung, Trittfrequenz, Tempo, Steigung, Puls), Bestleistungen 5 s – 60 min, Energie und Motoranteil, Akkuverbrauch, Stopps, Zeitreihe für Diagramme
-- GPS-Strecke als GeoJSON (vereinfacht, mit Messwerten je Punkt) und GPX (mit Leistung, Trittfrequenz, Puls)
-- Nutzungsstatistik `buried_rec/buried_file_cur.json`: Firmware, Akku (Zellspannungen, Strom, Temperaturen), Sekunden je Gang/Modus, Neigung, Fernbedienung – automatisch der Fahrt zugeordnet
-- Meldungen `hms_rec/hms_current_storage.proto`
+**Alle Daten bleiben lokal** im eigenen Netz. Kein Cloud-Konto, keine Weitergabe.
 
-## Benutzung
+## Was man bekommt
 
-```sh
-uv sync
-uv run avinox summary /Volumes/<display>/ride_rec                 # Tabelle aller Fahrten
-uv run avinox analyze /Volumes/<display>/ride_rec/<…>.proto       # vollständige Auswertung (JSON)
-uv run avinox gpx     /Volumes/<display>/ride_rec/<…>.proto -o fahrt.gpx
-uv run avinox geojson /Volumes/<display>/ride_rec/<…>.proto -o fahrt.geojson
-uv run avinox device  /Volumes/<display>/buried_rec/buried_file_cur.json
-uv run pytest
+- **Übersicht** mit Zeiträumen (Tag, Woche, Monat, Jahr), Vergleich und Bestwerten; Fahrtenliste unter `/rides`.
+- **Fahrtdetails** mit Karte (GPS-Strecke mit Messwerten) und Diagrammen: Leistung, Trittfrequenz, Tempo, Steigung, Puls.
+- **Statistiken:** Zeit je Unterstützungsmodus und Gang, Verteilungen, Bestleistungen von 5 s bis 60 min, Energie und Motoranteil, Akkuverbrauch, Stopps.
+- **Gerät:** Firmware, Akku (Zellspannungen, Strom, Temperaturen), Nutzungsstatistik, Meldungen des Antriebs.
+- **Export** als GPX (mit Leistung, Trittfrequenz, Puls) und GeoJSON.
+- **Sync-Seite** (`/sync`) mit Zustand und Berichten des ESP32.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="assets/screenshots/dashboard-de.png" alt="Übersicht mit Zeiträumen, Statistiken und Bestwerten"><br><sub>Übersicht mit Zeiträumen, Statistiken und Bestwerten</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen und Diagrammen"><br><sub>Fahrtdetails mit Kennzahlen und Diagrammen</sub></td>
+</tr>
+</table>
+
+![Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt](assets/screenshots/stats-de.png)
+
+*Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt*
+
+## Benötigt
+
+- **ESP32-S3-Board mit zwei USB-Buchsen:** eine native (zum Display) und eine UART-Buchse (zum Flashen).
+- **Rechner oder NAS mit Docker**, im selben WLAN erreichbar.
+
+## Installation
+
+### a) Server per Docker
+
+`docker-compose.yml`:
+
+```yaml
+services:
+  avinox:
+    image: ghcr.io/manuelw77/avinox-ridedata-server:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - avinox-data:/data
+    environment:
+      AVINOX_DATA_DIR: /data
+      # AVINOX_WEB_USER: "avinox"
+      # AVINOX_WEB_PASSWORD: "bitte-aendern"
+
+volumes:
+  avinox-data:
 ```
 
-## Server (Docker)
-
 ```sh
-docker compose up -d --build
+docker compose up -d
 ```
 
-Danach läuft die Webseite unter `http://<host>:8000/`, die API-Doku unter `http://<host>:8000/api/docs`. Alle Daten (Rohdateien, Datenbank, Token) liegen im Volume unter `/data`.
+Die Webseite läuft dann unter `http://<host>:8000/`. Alle Daten liegen im Volume `/data`.
 
-**Upload-Token:** Ohne `AVINOX_UPLOAD_TOKEN` erzeugt der Server beim ersten Start ein zufälliges Token und legt es in `/data/upload_token` ab:
+Das Upload-Token für den ESP32 erzeugt der Server beim ersten Start:
 
 ```sh
 docker compose exec avinox cat /data/upload_token
 ```
 
-Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen. Auf der Seite „Einstellungen“ wird das Token nur angezeigt, wenn ein Web-Passwort gesetzt ist. Uploads sind auf `AVINOX_MAX_UPLOAD_MB` je Datei bzw. Anfrage begrenzt.
+**Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` ist die Webseite für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
 
-**Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
+### b) ESP32 einmalig flashen
 
-### Umgebungsvariablen
-
-| Variable | Standard | Bedeutung |
-|---|---|---|
-| `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
-| `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
-| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
-| `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
-| `AVINOX_TILE_URL` | OpenStreetMap | Kachel-URL für die Karte |
-| `AVINOX_TILE_ATTRIBUTION` | © OpenStreetMap | Quellenangabe der Karte |
-| `AVINOX_MAX_UPLOAD_MB` | `64` | Größte erlaubte Datei |
-
-### Upload-Protokoll (ESP32)
-
-Alle Aufrufe mit `Authorization: Bearer <token>`. `path` ist der Pfad relativ zur Wurzel des Display-Laufwerks (z. B. `ride_rec/ride_rec_12.proto`).
-
-1. `GET /api/v1/manifest` – bekannte Dateien (Pfad + Größe) und die angenommenen Pfadmuster.
-2. `GET /api/v1/upload/status?path=…&size=…` – wie viele Bytes der Datei schon angekommen sind.
-3. `PUT /api/v1/upload?path=…&size=…&offset=…` – rohe Bytes ab `offset` (stückweise möglich). Passt `offset` nicht zum Stand auf dem Server, kommt `409` mit dem tatsächlich empfangenen Stand; dort weitermachen.
+Aus dem [neuesten Release](https://github.com/ManuelW77/avinox-ridedata-server/releases/latest) die Datei `avinox-sync-full.bin` laden. ESP32 an die **UART-Buchse** anschließen und flashen:
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $TOKEN" \
-  --data-binary @ride_rec_12.proto \
-  "http://<host>:8000/api/v1/upload?path=ride_rec/ride_rec_12.proto&size=$(stat -f%z ride_rec_12.proto)&offset=0"
+esptool.py --chip esp32s3 write_flash 0x0 avinox-sync-full.bin
 ```
 
-(`stat -f%z` unter macOS, `stat -c%s` unter Linux.)
+Selbstbau mit ESP-IDF v6.0.2: `idf.py set-target esp32s3 build flash` in `esp32/avinox-sync`, siehe [esp32/avinox-sync/README.md](esp32/avinox-sync/README.md).
 
-Ohne ESP32 lassen sich Dateien auch über die Webseite hochladen: **Einstellungen → Dateien hochladen**, dann den Ordner des Display-Laufwerks wählen. Verschlüsselte `ebike_log_*.dat` werden dabei ignoriert.
+Danach den ESP32 mit der **nativen Buchse** per USB-C-Kabel ans Display stecken. Das Display liefert den Strom.
+
+### c) Ersteinrichtung über das WLAN des ESP32
+
+1. ESP32 einschalten. Ohne Konfiguration startet der Einrichtungsmodus, die LED blinkt violett.
+2. Mit Handy oder Laptop ins WLAN `Avinox-Sync-XXXX` gehen. Beim ersten Mal ist es offen. Das Portal öffnet sich meist von selbst, sonst `http://192.168.4.1` aufrufen.
+3. Heim-WLAN wählen und Passwort eintragen. Server-URL (z. B. `http://<host>:8000`) und Upload-Token eintragen. Ein eigenes Passwort für das Einrichtungs-WLAN vergeben (mindestens 8 Zeichen).
+4. „Speichern und neu starten“.
+
+Neu einrichten: BOOT-Taste 3 s halten. Werkseinstellung: BOOT-Taste 10 s halten.
+
+### d) Updates per WLAN (OTA)
+
+Neue `avinox-sync.bin` (aus dem Release) auf dem Server unter **Einstellungen → Firmware** hochladen und als aktuell setzen. Das geht nur mit gesetztem Web-Passwort. Der ESP32 prüft nach jedem Sync und spätestens alle 6 Stunden, lädt die neue Version und startet neu. Meldet sich die neue Firmware nicht beim Server, kehrt er zur alten zurück.
+
+## Ablauf eines Syncs
+
+```
+Display (USB-Laufwerk) ──lesen──▶ ESP32-S3 ──WLAN──▶ Server (Docker) ──▶ Webseite
+```
+
+1. Der ESP32 wartet auf Laufwerk und WLAN.
+2. Er holt vom Server das Manifest (bekannte Dateien mit Pfad und Größe).
+3. Er hängt das Laufwerk ein (nur lesend) und durchsucht gezielt `ride_rec/`, `buried_rec/` und `hms_rec/`.
+4. Neu ist, was mit Name und Größe nicht im Manifest steht. Dateizeiten zählen nicht, das Display liefert das Jahr 2098.
+5. Neue Dateien lädt er in Stücken hoch. Bei Abbruch geht es dort weiter, wo der Server stehen geblieben ist.
+6. Er hängt das Laufwerk aus und schickt einen Sync-Bericht (Seite `/sync`).
+7. Der nächste Sync folgt nach 10 Minuten, solange Laufwerk und WLAN da sind.
+
+| LED | Bedeutung |
+|---|---|
+| violett blinkend | Einrichtungsmodus |
+| blau blinkend | wartet auf Laufwerk und/oder WLAN |
+| orange blinkend | seit 30 s kein Laufwerk: Display an? Native Buchse? |
+| cyan | Sync läuft |
+| weiß langsam blinkend | Firmware-Update wird geladen |
+| grün | Sync ok, alles aktuell |
+| gelb | Sync mit Fehlern (Server nicht erreichbar, Token falsch …) |
+| rot | schwerer Fehler (USB-Host, Laufwerk, Speicher, Einrichtungs-WLAN) |
+
+Alle Zustände: [esp32/avinox-sync/README.md](esp32/avinox-sync/README.md).
+
+## Ordner
+
+| Ordner / Datei | Inhalt |
+|---|---|
+| [`server/`](server/README.md) | Parser, Auswertung, Server, Docker |
+| [`esp32/`](esp32/avinox-sync/README.md) | Firmware `avinox-sync`; daneben `usb-probe` = Machbarkeitstest |
+| [`ERKENNTNISSE.md`](ERKENNTNISSE.md) | Dateiformat, Datenwege, Feldzuordnung |
+| `assets/` | Icon |
 
 ## Hinweise
 
 - Das Dateiformat ist nicht offiziell dokumentiert. Die Feldzuordnung stammt aus Community-Reverse-Engineering, u. a. [lucad87/avinox-setup-app](https://github.com/lucad87/avinox-setup-app) (MIT), und eigenen Prüfungen. Werte vor dem Vertrauen gegen die Avinox-App prüfen.
 - Fahrtdateien enthalten Seriennummer und GPS-Spur. Eigene Dateien nicht öffentlich teilen.
+- Die ESP32-Firmware ist am Gerät noch wenig getestet. Details: [esp32/avinox-sync/README.md](esp32/avinox-sync/README.md).
 
 ## Lizenz
 
 GPL-3.0-or-later, siehe [LICENSE](LICENSE).
+
+---
+
+© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · [manuelw.de](https://manuelw.de)

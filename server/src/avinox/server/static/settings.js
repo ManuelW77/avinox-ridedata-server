@@ -1,0 +1,186 @@
+"use strict";
+(() => {
+  // Texte aus <script id="i18n"> (siehe base.html), Sprache in I.lang
+  let I = {};
+  try { I = JSON.parse(document.getElementById("i18n").textContent) || {}; } catch (e) { I = {}; }
+  const tr = (key, vars) => String(I[key] != null ? I[key] : key).replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? vars[k] : m));
+  const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
+  // ---- Eigene Modi benennen
+  const form = document.getElementById("modes-form");
+  if (form) {
+    const status = document.getElementById("modes-status");
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const body = {};
+      form.querySelectorAll("input[data-level]").forEach((el) => { body[el.dataset.level] = el.value.trim(); });
+      status.textContent = tr("saving");
+      try {
+        const res = await fetch("/api/v1/settings/modes", {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        status.textContent = res.ok ? tr("saved") : tr("error_n", { n: res.status });
+      } catch (e) {
+        status.textContent = tr("error_msg", { m: e.message });
+      }
+    });
+  }
+
+  // ---- Upload
+  const patEl = document.getElementById("upload-patterns");
+  const patterns = patEl ? JSON.parse(patEl.textContent).map((p) => new RegExp(p)) : [];
+  const statusEl = document.getElementById("upload-status");
+  const doneEl = document.getElementById("upload-done");
+  const zone = document.getElementById("dropzone");
+  const input = document.getElementById("folder-input");
+
+  // Führende Ordner bis zum ersten bekannten Unterordner abschneiden.
+  function cleanPath(p) {
+    const m = /(^|\/)(ride_rec|buried_rec|hms_rec)\//.exec(p);
+    return m ? p.slice(m.index + m[1].length) : null;
+  }
+  const wanted = (path) => path !== null && patterns.some((re) => re.test(path));
+
+  let busy = false;
+  async function upload(items) {
+    // items: [{file, path}] – bereits gefiltert, nichts anderes wird gelesen
+    if (busy) return;
+    busy = true;
+    doneEl.hidden = true;
+    const c = { done: 0, neu: 0, known: 0, err: 0 };
+    const show = () => {
+      statusEl.textContent = tr("upload_progress", { done: c.done, total: items.length, new: c.neu, known: c.known, err: c.err });
+    };
+    show();
+    if (!items.length) {
+      statusEl.textContent = tr("upload_none");
+      busy = false;
+      return;
+    }
+    for (const { file, path } of items) {
+      try {
+        const fd = new FormData();
+        fd.append("files", file, path);
+        const res = await fetch("/api/v1/files", { method: "POST", body: fd });
+        if (!res.ok) throw new Error(res.status);
+        const r = (await res.json()).results[0];
+        if (!r || !r.ok) c.err++; else if (r.new) c.neu++; else c.known++;
+      } catch (e) {
+        c.err++;
+      }
+      c.done++;
+      show();
+    }
+    doneEl.hidden = false;
+    busy = false;
+  }
+
+  function fromFileList(list) {
+    const out = [];
+    for (const file of list) {
+      const path = cleanPath(file.webkitRelativePath || file.name);
+      if (wanted(path)) out.push({ file, path });
+    }
+    return out;
+  }
+
+  // Drag-and-drop: Verzeichnisbaum durchlaufen, nur passende Dateien anfassen.
+  function readEntries(reader) {
+    return new Promise((ok, fail) => reader.readEntries(ok, fail));
+  }
+  async function walk(entry, out) {
+    if (entry.isFile) {
+      const path = cleanPath(entry.fullPath.replace(/^\//, ""));
+      if (wanted(path)) out.push({ file: await new Promise((ok, fail) => entry.file(ok, fail)), path });
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      while ((batch = await readEntries(reader)).length) {
+        for (const e of batch) await walk(e, out);
+      }
+    }
+  }
+
+  if (input) input.addEventListener("change", () => { upload(fromFileList(input.files)); input.value = ""; });
+  if (zone) {
+    zone.addEventListener("dragover", (ev) => { ev.preventDefault(); zone.classList.add("over"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+    zone.addEventListener("drop", async (ev) => {
+      ev.preventDefault();
+      zone.classList.remove("over");
+      const entries = [...ev.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+      const out = [];
+      statusEl.textContent = tr("reading_folder");
+      for (const e of entries) await walk(e, out);
+      upload(out);
+    });
+  }
+
+  // ---- Token
+  const token = document.getElementById("token");
+  const showBtn = document.getElementById("token-show");
+  const copyBtn = document.getElementById("token-copy");
+  if (token && showBtn) {
+    showBtn.addEventListener("click", () => {
+      const hidden = token.type === "password";
+      token.type = hidden ? "text" : "password";
+      showBtn.textContent = hidden ? tr("hide") : tr("show");
+    });
+  }
+  if (token && copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(token.value);
+      } catch (e) {
+        token.type = "text"; token.select(); document.execCommand("copy"); token.type = "password";
+      }
+      copyBtn.textContent = tr("copied");
+      setTimeout(() => { copyBtn.textContent = tr("copy"); }, 1500);
+    });
+  }
+
+  // ---- Server-URL kopieren
+  const urlEl = document.getElementById("server-url");
+  const urlCopy = document.getElementById("server-url-copy");
+  if (urlEl && urlCopy) {
+    urlCopy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(urlEl.value);
+      } catch (e) {
+        urlEl.select(); document.execCommand("copy");
+      }
+      urlCopy.textContent = tr("copied");
+      setTimeout(() => { urlCopy.textContent = tr("copy"); }, 1500);
+    });
+  }
+
+  // ---- Firmware
+  const fwForm = document.getElementById("fw-form");
+  const fwStatus = document.getElementById("fw-status");
+  if (fwForm) {
+    fwForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const file = document.getElementById("fw-file").files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      fwStatus.textContent = tr("fw_uploading");
+      try {
+        const res = await fetch("/api/v1/firmware", { method: "POST", body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { fwStatus.textContent = body.detail || tr("error_n", { n: res.status }); return; }
+        location.reload();
+      } catch (e) {
+        fwStatus.textContent = tr("error_msg", { m: e.message });
+      }
+    });
+  }
+  document.querySelectorAll("[data-fw-current],[data-fw-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const del = btn.hasAttribute("data-fw-delete");
+      if (del && !confirm(tr("fw_confirm_delete"))) return;
+      const id = del ? btn.dataset.fwDelete : btn.dataset.fwCurrent;
+      const res = await fetch(`/api/v1/firmware/${id}` + (del ? "" : "/current"), { method: del ? "DELETE" : "POST" });
+      if (res.ok) location.reload(); else if (fwStatus) fwStatus.textContent = tr("error_n", { n: res.status });
+    });
+  });
+})();
