@@ -143,16 +143,7 @@
   </section>
 </div>
 
-<div class="grid cols-2">
-  <section class="card">
-    <h2>{{ t('ride.stops') }} <span class="muted small">{{ t('ride.stops_sub') }}</span></h2>
-    {% if a.stops %}
-    <table class="plain">
-      <tr><th>{{ t('ride.th.after') }}</th><th class="n">{{ t('ride.th.at_km') }}</th><th class="n">{{ t('ride.th.dur') }}</th></tr>
-      {% for st in a.stops %}<tr><td>{{ st.offset_s | duration }}</td><td class="n">{{ (st.distance_m / 1000) | num(1) }}</td><td class="n">{{ st.duration_s | duration }}</td></tr>{% endfor %}
-    </table>
-    {% else %}<p class="muted small">{{ t('ride.nostops') }}</p>{% endif %}
-  </section>
+<div class="grid">
   <section class="card">
     <h2>{{ t('ride.display') }}</h2>
     {% if d %}
