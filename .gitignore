@@ -30,3 +30,6 @@ secrets.h
 # Lokale Arbeitsnotizen (nicht veröffentlichen)
 CLAUDE.md
 PLAN.md
+
+# Server-Datenordner (Rohdateien, Datenbank, Upload-Token)
+data/

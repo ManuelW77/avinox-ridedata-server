@@ -4,6 +4,8 @@
 * ``avinox analyze <datei> [--buried datei]`` – vollständige Auswertung als JSON
 * ``avinox gpx <datei> [-o ziel]`` / ``avinox geojson <datei> [-o ziel]`` – Strecke
 * ``avinox device <buried_file_cur.json>`` – Geräte- und Sessiondaten
+* ``avinox serve [--host H] [--port P] [--data-dir DIR]`` – Server starten
+* ``avinox import <laufwerk-ordner> [--data-dir DIR]`` – Laufwerkskopie in den Server-Datenordner übernehmen
 """
 
 from __future__ import annotations
@@ -154,6 +156,43 @@ def cmd_device(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    import os
+
+    import uvicorn
+
+    from .server.app import create_app
+    from .server.config import load_settings
+
+    settings = load_settings(args.data_dir)
+    if os.environ.get("AVINOX_UPLOAD_TOKEN", "").strip():
+        print("Upload-Token: aus Umgebungsvariable AVINOX_UPLOAD_TOKEN")
+    else:
+        print(f"Upload-Token: steht in {settings.data_dir / 'upload_token'}")
+    print(f"Datenordner: {settings.data_dir}")
+    uvicorn.run(create_app(settings), host=args.host, port=args.port)
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    from .server.config import load_settings
+    from .server.store import Store
+
+    root = Path(args.path)
+    if not root.is_dir():
+        print(f"{root}: kein Ordner", file=sys.stderr)
+        return 1
+    store = Store(load_settings(args.data_dir))
+    try:
+        counts = store.import_directory(root)
+        rides = len(store.list_rides())
+    finally:
+        store.close()
+    print(f"neu: {counts['new']}, bekannt: {counts['known']}, übersprungen: {counts['skipped']}")
+    print(f"Fahrten: {rides}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="avinox", description="Avinox-Fahrtdaten auswerten")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -184,6 +223,17 @@ def main(argv: list[str] | None = None) -> int:
     p_dev = sub.add_parser("device", help="Geräte- und Sessiondaten aus buried_file_cur.json")
     p_dev.add_argument("path")
     p_dev.set_defaults(func=cmd_device)
+
+    p_srv = sub.add_parser("serve", help="Server (Upload-API und Weboberfläche) starten")
+    p_srv.add_argument("--host", default="127.0.0.1")
+    p_srv.add_argument("--port", type=int, default=8000)
+    p_srv.add_argument("--data-dir", help="Datenordner (Standard: AVINOX_DATA_DIR oder ./data)")
+    p_srv.set_defaults(func=cmd_serve)
+
+    p_imp = sub.add_parser("import", help="Kopie des Display-Laufwerks importieren")
+    p_imp.add_argument("path", help="Laufwerks-Ordner")
+    p_imp.add_argument("--data-dir", help="Datenordner (Standard: AVINOX_DATA_DIR oder ./data)")
+    p_imp.set_defaults(func=cmd_import)
     args = parser.parse_args(argv)
     return args.func(args)
 

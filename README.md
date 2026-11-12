@@ -27,6 +27,54 @@ uv run avinox device  /Volumes/<display>/buried_rec/buried_file_cur.json
 uv run pytest
 ```
 
+## Server (Docker)
+
+```sh
+docker compose up -d --build
+```
+
+Danach läuft die Webseite unter `http://<host>:8000/`, die API-Doku unter `http://<host>:8000/api/docs`. Alle Daten (Rohdateien, Datenbank, Token) liegen im Volume unter `/data`.
+
+**Upload-Token:** Ohne `AVINOX_UPLOAD_TOKEN` erzeugt der Server beim ersten Start ein zufälliges Token und legt es in `/data/upload_token` ab:
+
+```sh
+docker compose exec avinox cat /data/upload_token
+```
+
+Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setzen.
+
+**Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
+
+### Umgebungsvariablen
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
+| `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
+| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
+| `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
+| `AVINOX_TILE_URL` | OpenStreetMap | Kachel-URL für die Karte |
+| `AVINOX_TILE_ATTRIBUTION` | © OpenStreetMap | Quellenangabe der Karte |
+| `AVINOX_MAX_UPLOAD_MB` | `64` | Größte erlaubte Datei |
+
+### Upload-Protokoll (ESP32)
+
+Alle Aufrufe mit `Authorization: Bearer <token>`. `path` ist der Pfad relativ zur Wurzel des Display-Laufwerks (z. B. `ride_rec/ride_rec_12.proto`).
+
+1. `GET /api/v1/manifest` – bekannte Dateien (Pfad + Größe) und die angenommenen Pfadmuster.
+2. `GET /api/v1/upload/status?path=…&size=…` – wie viele Bytes der Datei schon angekommen sind.
+3. `PUT /api/v1/upload?path=…&size=…&offset=…` – rohe Bytes ab `offset` (stückweise möglich). Passt `offset` nicht zum Stand auf dem Server, kommt `409` mit dem tatsächlich empfangenen Stand; dort weitermachen.
+
+```sh
+curl -X PUT -H "Authorization: Bearer $TOKEN" \
+  --data-binary @ride_rec_12.proto \
+  "http://<host>:8000/api/v1/upload?path=ride_rec/ride_rec_12.proto&size=$(stat -f%z ride_rec_12.proto)&offset=0"
+```
+
+(`stat -f%z` unter macOS, `stat -c%s` unter Linux.)
+
+Ohne ESP32 lassen sich Dateien auch über die Webseite hochladen: **Einstellungen → Dateien hochladen**, dann den Ordner des Display-Laufwerks wählen. Verschlüsselte `ebike_log_*.dat` werden dabei ignoriert.
+
 ## Hinweise
 
 - Das Dateiformat ist nicht offiziell dokumentiert. Die Feldzuordnung stammt aus Community-Reverse-Engineering, u. a. [lucad87/avinox-setup-app](https://github.com/lucad87/avinox-setup-app) (MIT), und eigenen Prüfungen. Werte vor dem Vertrauen gegen die Avinox-App prüfen.
