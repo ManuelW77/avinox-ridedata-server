@@ -41,6 +41,42 @@ class RideRecError(ValueError):
 
 
 @dataclass(slots=True)
+class HeaderStats:
+    """Vom Display berechnete Kennzahlen, Offset 161–236 (19 × float32).
+
+    Das sind die Werte, die die Avinox-App anzeigt (geprüft an einer Fahrt,
+    Gesamt = Fahrer + Motor geht in allen Testfahrten exakt auf).
+    """
+
+    avg_gradient_pct: float
+    max_gradient_pct: float
+    avg_speed_kmh: float
+    max_speed_kmh: float
+    avg_total_power_w: float
+    max_total_power_w: float
+    avg_total_torque_nm: float
+    max_total_torque_nm: float
+    avg_motor_power_w: float
+    max_motor_power_w: float
+    avg_motor_torque_nm: float
+    max_motor_torque_nm: float
+    avg_rider_power_w: float
+    max_rider_power_w: float
+    avg_rider_torque_nm: float
+    max_rider_torque_nm: float
+    avg_cadence_rpm: float
+    max_cadence_rpm: float
+    calories_kcal: float
+    """Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter statt neu zu beginnen."""
+
+    @classmethod
+    def from_header(cls, data: bytes) -> HeaderStats:
+        values = list(struct.unpack_from("<19f", data, 161))
+        values[18] /= 1000
+        return cls(*values)
+
+
+@dataclass(slots=True)
 class Header:
     ride_id: int
     format_version: int
@@ -53,14 +89,15 @@ class Header:
     serial: str
     """Seriennummer des Antriebs. Privat: nie ausgeben oder speichern, wo es öffentlich wird."""
     ascent_m: float
-    """Offset 22, laut Community Anstieg. Liegt deutlich unter dem Wert aus den Höhen-Samples; ungeprüft."""
+    """Offset 22, Höhengewinn wie in der App (geprüft). Kleiner als aus den Höhen-Samples."""
     descent_m: float
-    """Offset 26, laut Community Abstieg. Ungeprüft, siehe ``ascent_m``."""
+    """Offset 26, Höhenabnahme wie in der App (geprüft)."""
     owner_id: str
     """Offset 128, ID mit Längenbyte; entspricht dem Unterordner unter ``ride_rec/``
     (vermutlich Konto). Leer bei Fahrten vor der Kopplung. Privat."""
     preview: list[tuple[float, float]]
     """Offset 30–109: bis zu 10 Punkte (Breite, Länge) als int32 × 1e7 für die Kartenvorschau."""
+    stats: HeaderStats
 
     @property
     def has_wallclock(self) -> bool:
@@ -100,8 +137,8 @@ class Sample:
     temperature_c: float | None
     pressure_kpa: float | None
     heart_rate_bpm: int | None
-    rider_energy_kj: float | None
-    """Feld 52; wirkt kumulativ über mehrere Fahrten, für Auswertung nicht verlässlich."""
+    calories_kcal: float | None
+    """Feld 52, Kalorien bisher (÷1000). Letzter Wert = Header ``stats.calories_kcal``."""
     battery_pct: int | None
     odometer_m: int | None
     event: int
@@ -178,7 +215,7 @@ def sample_from_fields(f: dict[int, int | bytes]) -> Sample:
         temperature_c=temp,
         pressure_kpa=pressure,
         heart_rate_bpm=_int(f.get(51)) or None,
-        rider_energy_kj=energy / 1000 if isinstance(energy, int) else None,
+        calories_kcal=energy / 1000 if isinstance(energy, int) else None,
         battery_pct=_int(f.get(71)),
         odometer_m=_int(f.get(73)),
         event=_int(f.get(75)) or 0,
@@ -214,6 +251,7 @@ def parse_header(data: bytes) -> Header:
         descent_m=descent,
         owner_id=owner_id,
         preview=preview,
+        stats=HeaderStats.from_header(data),
     )
 
 

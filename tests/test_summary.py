@@ -5,6 +5,7 @@ from avinox.summary import climb, summarize
 from ridebuilder import ride
 
 T0 = 1_800_000_000
+STATS = [2.5, 5.5, 6.3, 50.6, 75.0, 1800.0, 15.0, 218.0, 46.0, 1250.0, 7.0, 116.0, 29.0, 1113.0, 8.0, 155.0, 13.7, 156.9, 305244.0]
 
 
 def sample(t, speed=0, cadence=0, rider=0, motor=0, alt=None, dist=0, battery=None, hr=None):
@@ -18,15 +19,25 @@ def sample(t, speed=0, cadence=0, rider=0, motor=0, alt=None, dist=0, battery=No
     return {k: v for k, v in f.items() if v}
 
 
-def test_basic_summary():
+def test_app_values_come_from_header():
+    data = ride([sample(0), sample(1)], distance=18363, ascent=73.0, descent=13.0, stats=STATS, start=T0, end=T0 + 7712, count=7643)
+    s = summarize(parse_ride(data))
+    assert s.duration_s == 7643 and s.elapsed_s == 7712
+    assert s.distance_km == 18.363
+    assert (s.ascent_m, s.descent_m) == (73, 13)
+    assert s.avg_speed_kmh == pytest.approx(6.3) and s.max_speed_kmh == pytest.approx(50.6)
+    assert s.avg_rider_power_w == 29 and s.avg_rider_torque_nm == 8 and s.max_rider_torque_nm == 155
+    assert s.avg_motor_power_w == 46 and s.avg_total_power_w == 75
+    assert s.avg_cadence_rpm == pytest.approx(13.7) and s.max_cadence_rpm == pytest.approx(156.9)
+    assert s.calories_kcal == pytest.approx(305.244)
+
+
+def test_sample_values():
     samples = [sample(t, speed=18, cadence=80, rider=150, motor=300, dist=5 * t, battery=90 - t // 5, hr=120 + t) for t in range(10)]
     samples += [sample(10 + t, dist=50) for t in range(5)]  # Stand
     s = summarize(parse_ride(ride(samples)))
-    assert s.samples == 15 and s.duration_s == 15 and s.moving_time_s == 10
-    assert s.distance_km == 0.05
-    assert s.avg_speed_kmh == pytest.approx(18)
-    assert s.avg_rider_power_w == pytest.approx(150) and s.avg_motor_power_w == pytest.approx(300)
-    assert s.avg_cadence_rpm == pytest.approx(80)
+    assert s.duration_s == 15 and s.moving_time_s == 10
+    assert s.samples_avg_moving_speed_kmh == pytest.approx(18)
     assert s.rider_energy_kj == pytest.approx(1.5)
     assert s.motor_energy_wh == pytest.approx(3000 / 3600)
     assert (s.battery_start_pct, s.battery_end_pct) == (90, 89)
@@ -37,7 +48,7 @@ def test_basic_summary():
 def test_pause_gap_is_not_counted():
     samples = [sample(0, speed=20, rider=100), sample(1, speed=20, rider=100), sample(600, speed=20, rider=100)]
     s = summarize(parse_ride(ride(samples)))
-    assert s.duration_s == 2 and s.moving_time_s == 2
+    assert s.moving_time_s == 2
     assert s.rider_energy_kj == pytest.approx(0.2)
 
 
@@ -45,11 +56,11 @@ def test_climb_ignores_noise():
     assert climb([100, 101, 100, 102, 100, 110, 109, 111, 105]) == (11, 6)
 
 
-def test_empty_ride():
-    s = summarize(parse_ride(ride([])))
-    assert s.samples == 0 and s.ascent_m is None and s.avg_speed_kmh is None
-
-
 def test_climb_counts_full_descent_first():
     assert climb([200, 190, 180, 182, 170, 175]) == (5, 30)
     assert climb([100, 101, 102]) == (0, 0)
+
+
+def test_empty_ride():
+    s = summarize(parse_ride(ride([])))
+    assert s.duration_s == 0 and s.samples_ascent_m is None and s.samples_avg_moving_speed_kmh is None

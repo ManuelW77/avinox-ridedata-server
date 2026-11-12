@@ -1,4 +1,10 @@
-"""Kennzahlen einer Fahrt aus den Samples."""
+"""Kennzahlen einer Fahrt.
+
+Hauptwerte kommen aus dem Header: Das Display rechnet sie selbst, und die
+Avinox-App zeigt genau diese Zahlen. Aus den Samples kommen nur Werte, die der
+Header nicht hat (Fahrzeit, Puls, Akku, Energie, Temperatur) sowie eigene
+Vergleichswerte (``samples_*``).
+"""
 
 from __future__ import annotations
 
@@ -12,7 +18,7 @@ MOVING_MIN_KMH = 1.0
 MAX_GAP_S = 5
 """Längere Zeitsprünge zwischen Samples sind Pausen (Aufzeichnung angehalten)."""
 CLIMB_THRESHOLD_M = 3.0
-"""Hysterese für Höhenmeter: kleinere Schwankungen der Barometerhöhe zählen nicht."""
+"""Hysterese für die eigenen Höhenmeter: kleinere Schwankungen der Barometerhöhe zählen nicht."""
 
 
 @dataclass(slots=True)
@@ -20,31 +26,52 @@ class Summary:
     ride_id: int
     start_time: datetime | None
     """UTC; None, wenn das Display beim Fahren noch keine Uhrzeit hatte."""
-    samples: int
     duration_s: int
+    """Aufzeichnungsdauer wie in der App (= Anzahl Samples à 1 s)."""
+    elapsed_s: int
+    """Ende minus Start laut Header, inklusive Lücken."""
     moving_time_s: int
+    """Eigene Berechnung: Samples mit mindestens ``MOVING_MIN_KMH``."""
     distance_km: float
-    ascent_m: float | None
-    descent_m: float | None
-    avg_speed_kmh: float | None
-    """Durchschnitt über die Fahrzeit."""
+
+    # --- wie in der App (Header) ---
+    ascent_m: float
+    descent_m: float
+    avg_gradient_pct: float
+    max_gradient_pct: float
+    avg_speed_kmh: float
     max_speed_kmh: float
-    avg_rider_power_w: float | None
-    """Über die Fahrzeit, Nullen beim Rollen eingeschlossen."""
+    avg_rider_power_w: float
     max_rider_power_w: float
-    avg_motor_power_w: float | None
+    avg_rider_torque_nm: float
+    max_rider_torque_nm: float
+    avg_motor_power_w: float
     max_motor_power_w: float
-    avg_cadence_rpm: float | None
-    """Nur Samples mit Trittfrequenz > 0."""
+    avg_motor_torque_nm: float
+    max_motor_torque_nm: float
+    avg_total_power_w: float
+    max_total_power_w: float
+    avg_total_torque_nm: float
+    max_total_torque_nm: float
+    avg_cadence_rpm: float
     max_cadence_rpm: float
+    calories_kcal: float
+
+    # --- aus den Samples ---
     avg_heart_rate_bpm: float | None
     max_heart_rate_bpm: int | None
-    rider_energy_kj: float
-    motor_energy_wh: float
     battery_start_pct: int | None
     battery_end_pct: int | None
     temperature_avg_c: float | None
+    rider_energy_kj: float
+    """Integral der Fahrerleistung."""
+    motor_energy_wh: float
+    """Integral der Motorleistung."""
     gps_points: int
+    samples_avg_moving_speed_kmh: float | None
+    samples_ascent_m: float | None
+    """Eigene Höhenmeter aus den Höhen-Samples, liegen meist deutlich über ``ascent_m``."""
+    samples_descent_m: float | None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -101,23 +128,18 @@ def climb(altitudes: list[float], threshold: float = CLIMB_THRESHOLD_M) -> tuple
 
 def summarize(ride: Ride) -> Summary:
     s = ride.samples
+    header = ride.header
+    st = header.stats
     dts = _intervals(s)
     moving = [(x, dt) for x, dt in zip(s, dts) if x.speed_kmh >= MOVING_MIN_KMH and dt > 0]
     moving_time = sum(dt for _, dt in moving)
-
-    def moving_avg(attr: str) -> float | None:
-        if not moving_time:
-            return None
-        return sum(getattr(x, attr) * dt for x, dt in moving) / moving_time
 
     altitudes = [x.altitude_m for x in s if x.altitude_m is not None]
     up, down = climb(altitudes) if altitudes else (None, None)
     hr = [x.heart_rate_bpm for x in s if x.heart_rate_bpm]
     battery = [x.battery_pct for x in s if x.battery_pct is not None]
     temps = [x.temperature_c for x in s if x.temperature_c is not None]
-    distances = [x.distance_m for x in s]
 
-    header = ride.header
     start = header.start_time
     if start is None and s and s[0].timestamp and s[0].timestamp >= 1_000_000_000:
         start = datetime.fromtimestamp(s[0].timestamp, UTC)
@@ -125,26 +147,40 @@ def summarize(ride: Ride) -> Summary:
     return Summary(
         ride_id=header.ride_id,
         start_time=start,
-        samples=len(s),
-        duration_s=sum(dts),
+        duration_s=header.sample_count or len(s),
+        elapsed_s=header.duration_s,
         moving_time_s=moving_time,
-        distance_km=round(max(distances, default=0) / 1000, 3),
-        ascent_m=up,
-        descent_m=down,
-        avg_speed_kmh=moving_avg("speed_kmh"),
-        max_speed_kmh=max((x.speed_kmh for x in s), default=0.0),
-        avg_rider_power_w=moving_avg("rider_power_w"),
-        max_rider_power_w=max((x.rider_power_w for x in s), default=0.0),
-        avg_motor_power_w=moving_avg("motor_power_w"),
-        max_motor_power_w=max((x.motor_power_w for x in s), default=0.0),
-        avg_cadence_rpm=_mean([x.cadence_rpm for x in s if x.cadence_rpm > 0]),
-        max_cadence_rpm=max((x.cadence_rpm for x in s), default=0.0),
+        distance_km=round(header.distance_m / 1000, 3),
+        ascent_m=header.ascent_m,
+        descent_m=header.descent_m,
+        avg_gradient_pct=st.avg_gradient_pct,
+        max_gradient_pct=st.max_gradient_pct,
+        avg_speed_kmh=st.avg_speed_kmh,
+        max_speed_kmh=st.max_speed_kmh,
+        avg_rider_power_w=st.avg_rider_power_w,
+        max_rider_power_w=st.max_rider_power_w,
+        avg_rider_torque_nm=st.avg_rider_torque_nm,
+        max_rider_torque_nm=st.max_rider_torque_nm,
+        avg_motor_power_w=st.avg_motor_power_w,
+        max_motor_power_w=st.max_motor_power_w,
+        avg_motor_torque_nm=st.avg_motor_torque_nm,
+        max_motor_torque_nm=st.max_motor_torque_nm,
+        avg_total_power_w=st.avg_total_power_w,
+        max_total_power_w=st.max_total_power_w,
+        avg_total_torque_nm=st.avg_total_torque_nm,
+        max_total_torque_nm=st.max_total_torque_nm,
+        avg_cadence_rpm=st.avg_cadence_rpm,
+        max_cadence_rpm=st.max_cadence_rpm,
+        calories_kcal=st.calories_kcal,
         avg_heart_rate_bpm=_mean(hr),
         max_heart_rate_bpm=max(hr, default=None),
-        rider_energy_kj=sum(x.rider_power_w * dt for x, dt in zip(s, dts)) / 1000,
-        motor_energy_wh=sum(x.motor_power_w * dt for x, dt in zip(s, dts)) / 3600,
         battery_start_pct=battery[0] if battery else None,
         battery_end_pct=battery[-1] if battery else None,
         temperature_avg_c=_mean(temps),
+        rider_energy_kj=sum(x.rider_power_w * dt for x, dt in zip(s, dts)) / 1000,
+        motor_energy_wh=sum(x.motor_power_w * dt for x, dt in zip(s, dts)) / 3600,
         gps_points=sum(1 for x in s if x.latitude is not None),
+        samples_avg_moving_speed_kmh=(sum(x.speed_kmh * dt for x, dt in moving) / moving_time) if moving_time else None,
+        samples_ascent_m=up,
+        samples_descent_m=down,
     )
