@@ -418,3 +418,12 @@ def test_static_urls_are_root_relative(client):
     html = client.get("/", headers={"host": "example.org", "x-forwarded-proto": "https"}).text
     assert 'href="/static/app.css"' in html
     assert not re.search(r'(?:href|src)="https?://[^"]*/static/', html)
+
+
+def test_version_in_footer_and_openapi(client, settings):
+    from importlib.metadata import version
+
+    v = version("avinox-ridedata-server")
+    html = client.get("/", auth=("a", "b")).text if client.get("/").status_code == 401 else client.get("/").text
+    assert f"v{v}" in html
+    assert client.get("/api/openapi.json", auth=("a", "b")).json()["info"]["version"] == v
