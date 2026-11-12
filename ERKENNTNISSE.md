@@ -17,8 +17,9 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 | Pfad | Inhalt |
 |---|---|
 | `ride_rec/ride_rec_<id>.proto` | **Fahrtaufzeichnungen.** Das ist die Hauptquelle. |
-| `ride_rec/<nummer>/ride_rec_<id>.proto` | Weitere Fahrten in Unterordner (hier `<konto-id>/`, 9 Fahrten). Header-Startzeit dort als Unix-Zeit. |
-| `ride_rec/ride_rec_index.dat` | 24-Byte-Index (erste/letzte ID u. a.), noch nicht dekodiert. |
+| `ride_rec/<konto-id>/ride_rec_<id>.proto` | Fahrten nach der Kopplung mit der App, Unterordner = ID im Header (Offset 128, vermutlich Konto). Zeiten als Unix-Zeit. |
+| `ride_rec/ride_rec_<id>.proto` (Hauptordner) | Erste Fahrten vor der Kopplung. Zeiten = Sekunden seit Geräte-Start, **keine Uhrzeit**. |
+| `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
 | `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Anderes Format (kein `0xA5A5A5A5`), Inhalt unbekannt. Für die Auswertung vorerst nicht nötig. |
 | `hms_rec/`, `buried_rec/buried_file_cur.json`, `System/` | Wartungs-/Diagnosedaten, Index, Kartenvorschau. Noch nicht untersucht. |
 
@@ -29,38 +30,50 @@ Hinweis: Die Dateizeiten auf dem Laufwerk sind unbrauchbar (Jahr 2098). Neue Dat
 Quelle der Feldzuordnung: Community-Reverse-Engineering, v. a. `lucad87/avinox-setup-app` (MIT), Datei `public/avinox-proto-parser.js`. Nicht offiziell, nicht über alle Firmwarestände verifiziert.
 
 **Header (251 Byte, little-endian)**
-- Offset 0: Magic `0xA5A5A5A5` (bestätigt)
-- Offset 6: rideId (uint32), z. B. 1002
-- Offset 10 / 14: Start / Ende (uint32). Im Hauptordner offenbar Sekunden seit Geräte-Start, im Unterordner Unix-Zeit. Echte Zeit pro Sample steht in Feld 72.
-- Offset 22 / 26: Anstieg / Abstieg (float32)
-- Offset 110–127: Seriennummer (ASCII, nullterminiert)
+- Offset 0: Magic `0xA5A5A5A5` · Offset 4: uint16 = 8 (vermutlich Formatversion)
+- Offset 6: rideId (uint32). **IDs wiederholen sich zwischen Hauptordner und Konto-Ordner**, eindeutig ist nur der Pfad.
+- Offset 10 / 14: Start / Ende (uint32), Unix-Zeit oder Sekunden seit Geräte-Start (siehe oben)
+- Offset 18: Distanz in m (uint32), = letzter Wert von Feld 23
+- Offset 22 / 26: Anstieg / Abstieg (float32). Deutlich kleiner als aus den Höhen-Samples (Fahrt mit ca. 120–165 Hm: Header 73 / 13). Bedeutung offen, gegen App prüfen.
+- Offset 30–109: 10 Vorschaupunkte (int32 Breite, int32 Länge, je × 1e7), liegen exakt auf der GPS-Spur; 0 ohne GPS
+- Offset 110–127: Seriennummer (ASCII, nullterminiert) – privat
+- Offset 128: Konto-ID mit Längenbyte (ASCII), leer im Hauptordner – privat
+- Offset 160–244: float32-Werte, Bedeutung offen
+- Offset 245: Anzahl Samples (uint32). Manchmal ein Frame mehr in der Datei.
+- Offset 249–250: vermutlich Prüfsumme
 
 **Frames ab Offset 251**
-- Byte 0–1: Typ `0x02EB`, Byte 2–3: Länge (uint16), Byte 4–5: unbekannt, danach Protobuf-Nachricht = 1 Sample
-- Geprüft: 1186 Frames bei 1186 s Fahrzeit → **ca. 1 Sample pro Sekunde**, Datei endet exakt auf Frame-Grenze
+- `uint16 typ (0x02EB) | uint16 länge | Protobuf (länge Byte) | 2 Byte Prüfsumme`
+- Prüfsumme: Verfahren offen (CRC-16/0x1021-Varianten passen nur auf einzelne Frames). Zum Lesen nicht nötig.
+- Geprüft an 12 Fahrten / 26 599 Frames: alle Typ `0x02EB`, keine Restbytes, ca. 1 Sample pro Sekunde (Zeitsprünge 0–2 s, Pausen länger)
 
 **Sample-Felder (Protobuf-Feldnummer → Kanal, Skalierung)**
 
+Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe usw. sind dann 0; Höhe, GPS, Temperatur, Druck, Puls dagegen unbekannt.
+
 | Feld | Kanal | Skalierung |
 |---|---|---|
-| 7 | Geschwindigkeit | ÷100 |
-| 8 | Unterstützungsstufe | roh |
-| 9 | Trittfrequenz | ÷100 |
-| 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt | ÷100 |
-| 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt | ÷100 |
-| 22 | Gang | roh |
-| 23 | Distanz km | ÷1000 |
-| 31 / 32 | Breite / Länge | float64 aus Bitmuster |
+| 6 | laufender Zähler | roh |
+| 7 | Geschwindigkeit km/h | ÷100 |
+| 8 | Unterstützungsstufe | roh (Werte 0–5, 20, 21) |
+| 9 | Trittfrequenz U/min | ÷100 |
+| 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt Nm | ÷100 |
+| 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt W | ÷100 |
+| 22 | Gang | roh (1–12) |
+| 23 | Distanz der Fahrt in m | roh (geprüft gegen Kilometerstand, GPS und Geschwindigkeit) |
+| 31 / 32 | Breite / Länge | float64 |
 | 36–38 | IMU x/y/z | float32 |
-| 39 / 40 | Höhe / Steigung | signed ÷100, fehlt → null |
-| 41 | Temperatur | signed ÷100, -99900 → null |
-| 42 | Luftdruck | ÷100, 0 → null |
+| 39 / 40 | Höhe m / Steigung % | signed ÷100 |
+| 41 | Temperatur °C | signed ÷100, -99900 → unbekannt |
+| 42 | Luftdruck **kPa** | ÷100 (z. B. 101,49) |
 | 51 | Puls | roh |
-| 52 | Fahrerenergie kJ | ÷1000 |
+| 52 | Fahrerenergie kJ | ÷1000, wirkt kumulativ über Fahrten hinweg; nicht verlässlich |
 | 71 | Akku % | roh |
-| 72 | Zeitstempel | Unix-Sekunden |
-| 73 | Gesamt-km | ÷1000 |
-| 75 | Ereignis | roh |
+| 72 | Zeitstempel | wie Header-Start |
+| 73 | Kilometerstand in m | roh |
+| 75 | Ereignis | roh (bisher 0 und 2) |
+
+Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`.
 
 ## 4. Bestehende Community-Projekte
 
