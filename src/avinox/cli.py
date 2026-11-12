@@ -103,7 +103,15 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         return 1
     buried = Path(args.buried) if args.buried else find_buried(Path(args.path))
     sessions = parse_buried_file(buried) if buried and buried.is_file() else None
-    _write(json.dumps(analyze(ride, sessions), indent=2 if args.pretty else None, ensure_ascii=False) + "\n", args.output)
+    names = {}
+    for item in args.mode_name or []:
+        level, _, name = item.partition("=")
+        if not level.isdigit() or not name:
+            print(f"--mode-name erwartet NUMMER=NAME, nicht {item!r}", file=sys.stderr)
+            return 2
+        names[int(level)] = name
+    result = analyze(ride, sessions, custom_names=names or None)
+    _write(json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False) + "\n", args.output)
     return 0
 
 
@@ -159,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     p_an.add_argument("--buried", help="buried_file_cur.json (Standard: auf dem Laufwerk suchen)")
     p_an.add_argument("-o", "--output")
     p_an.add_argument("--pretty", action="store_true")
+    p_an.add_argument("--mode-name", action="append", metavar="NUMMER=NAME", help="eigenen Modus benennen, z. B. 21=Tour")
     p_an.set_defaults(func=cmd_analyze)
 
     p_gpx = sub.add_parser("gpx", help="Strecke als GPX")

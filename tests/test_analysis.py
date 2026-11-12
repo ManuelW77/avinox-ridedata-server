@@ -17,7 +17,8 @@ def s(t, speed=18.0, rider=100, motor=200, assist=2, gear=5, battery=80):
 
 def test_histogram_and_names():
     assert histogram([0, 10, 60, 60, 2000], [1, 1, 1, 2, 1], [1, 50, 1000]) == {"<1": 1, "1–50": 1, "50–1000": 3, "≥1000": 1}
-    assert (assist_name(2), assist_name(4), assist_name(21)) == ("trail", "auto", "stufe_21")
+    assert (assist_name(2), assist_name(4), assist_name(21), assist_name(9)) == ("trail", "auto", "eigen_21", "stufe_9")
+    assert assist_name(21, {21: "Tour"}) == "Tour"
 
 
 def test_best_efforts():
@@ -56,3 +57,9 @@ def test_analyze_with_device_stats():
     assert a["device_stats"]["seconds_per_assist_mode"]["trail"] == 4933
     assert a["device_stats"]["session"]["boot_count"] == 7
     json.dumps(a)
+
+
+def test_custom_mode_names():
+    samples = [s(t, assist=21) for t in range(10)] + [s(10 + t, assist=20) for t in range(5)]
+    a = analyze(parse_ride(ride(samples)), custom_names={21: "Tour"})
+    assert a["assist"]["seconds_per_mode"] == {"eigen_20": 5, "Tour": 10}
