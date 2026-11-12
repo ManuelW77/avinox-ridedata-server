@@ -24,7 +24,7 @@
 {% else %}
 
 {# ------------------------------------------------------------ Zeitraum #}
-<div class="block block-first">
+<div class="block block-first" id="sec-overview" data-jump="{{ t('jump.overview') }}">
 <section class="card period" id="period" aria-live="polite">
   <div class="toolbar">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
@@ -83,7 +83,7 @@
 </div>
 
 {# ------------------------------------------------------------ Verteilung (per JS) #}
-<section class="block mix-section" id="mix-section" hidden>
+<section class="block mix-section" id="mix-section" data-jump="{{ t('dash.mix.title') }}" hidden>
   <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
   <div id="mix"></div>
 </section>
@@ -91,7 +91,7 @@
 {# ------------------------------------------------------------ Bestwerte #}
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
-<section class="block bests">
+<section class="block bests" id="sec-bests" data-jump="{{ t('bests.title') }}">
   <h2 class="section-title">{{ t('bests.title') }}</h2>
   {% for gkey, gname in groups %}
   {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
@@ -117,7 +117,7 @@
 {% endif %}
 
 {# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
-<div class="block">
+<div class="block" id="sec-recent" data-jump="{{ t('dash.sec.recent') }}">
 <h2 class="section-title">{{ t('dash.sec.recent') }}</h2>
 <div class="grid cols-2 bottom">
   <section class="card">
@@ -156,6 +156,7 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% if dash.total.rides %}
 <script type="application/json" id="dash-data">{{ dash | tojson }}</script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
