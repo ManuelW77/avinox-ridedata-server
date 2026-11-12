@@ -23,6 +23,9 @@
 #include "usb/usb_host.h"
 #include "usb/msc_host_vfs.h"
 #include "led_strip.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "driver/gpio.h"
 
 static const char *TAG = "usb-probe";
 
@@ -33,7 +36,7 @@ static const char *TAG = "usb-probe";
 
 /* ---------- Status-LED ---------- */
 
-typedef enum { LED_WAIT, LED_DEVICE, LED_OK, LED_ERROR } led_state_t;
+typedef enum { LED_WAIT, LED_DEVICE, LED_OK, LED_ERROR, LED_COUNTDOWN } led_state_t;
 static volatile led_state_t s_led_state = LED_WAIT;
 static led_strip_handle_t s_strip;
 
@@ -55,6 +58,7 @@ static void led_task(void *arg)
         case LED_DEVICE: led_set(32, 24, 0); break;
         case LED_OK:     led_set(0, 32, 0); break;
         case LED_ERROR:  led_set(32, 0, 0); break;
+        case LED_COUNTDOWN: on = !on; if (on) led_set(24, 24, 24); else led_set(0, 0, 32); break;
         }
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -84,6 +88,212 @@ static void led_init(void)
 #else
     ESP_LOGI(TAG, "Status-LED deaktiviert (PROBE_LED_GPIO = -1)");
 #endif
+}
+
+/* ---------- Bericht (RAM-Puffer + NVS) ---------- */
+
+#define REPORT_MAX      (12 * 1024)
+#define NVS_NS          "probe"
+#define NVS_KEY_REPORT  "report"      /* alt, nur noch für die Migration */
+#define NVS_KEY_REP_DEV   "rep_dev"   /* letzter Lauf mit Gerät */
+#define NVS_KEY_RUN_DEV   "run_dev"
+#define NVS_KEY_REP_WAIT  "rep_wait"  /* letzter Lauf ohne Gerät */
+#define NVS_KEY_RUN_WAIT  "run_wait"
+#define NVS_KEY_RUNS    "runs"
+
+static char s_rep[REPORT_MAX];
+static size_t s_rep_len;
+static portMUX_TYPE s_rep_lock = portMUX_INITIALIZER_UNLOCKED;
+static vprintf_like_t s_orig_vprintf;
+static uint32_t s_run_no;
+typedef struct {
+    char *data;
+    size_t len;
+    uint32_t run;
+} saved_report_t;
+
+/* beim Start aus NVS geladen */
+static saved_report_t s_rep_dev, s_rep_wait, s_rep_legacy;
+static bool s_device_seen;      /* in diesem Lauf wurde ein USB-Gerät erkannt (EV_CONNECTED) */
+
+static void rep_append(const char *line, size_t n)
+{
+    if (n > REPORT_MAX) {
+        line += n - REPORT_MAX;
+        n = REPORT_MAX;
+    }
+    portENTER_CRITICAL_SAFE(&s_rep_lock);
+    if (s_rep_len + n > REPORT_MAX) {
+        /* älteste Zeilen verwerfen: mindestens so viel, dass n passt, dann bis Zeilenende */
+        size_t drop = s_rep_len + n - REPORT_MAX;
+        while (drop < s_rep_len && s_rep[drop - 1] != '\n') {
+            drop++;
+        }
+        if (drop > s_rep_len) {
+            drop = s_rep_len;
+        }
+        memmove(s_rep, s_rep + drop, s_rep_len - drop);
+        s_rep_len -= drop;
+    }
+    memcpy(s_rep + s_rep_len, line, n);
+    s_rep_len += n;
+    portEXIT_CRITICAL_SAFE(&s_rep_lock);
+}
+
+static int report_vprintf(const char *fmt, va_list ap)
+{
+    char line[256];
+    va_list ap2;
+    va_copy(ap2, ap);
+    int n = vsnprintf(line, sizeof(line), fmt, ap2);
+    va_end(ap2);
+    if (n > 0) {
+        rep_append(line, (size_t)n < sizeof(line) ? (size_t)n : sizeof(line) - 1);
+    }
+    return s_orig_vprintf ? s_orig_vprintf(fmt, ap) : n;
+}
+
+static void report_save(void)
+{
+    char *copy = malloc(REPORT_MAX);
+    if (!copy) {
+        return;
+    }
+    portENTER_CRITICAL(&s_rep_lock);
+    size_t n = s_rep_len;
+    memcpy(copy, s_rep, n);
+    portEXIT_CRITICAL(&s_rep_lock);
+
+    /* Lauf mit Gerät und Lauf ohne Gerät haben getrennte Plätze: ein Lauf ohne Gerät
+     * überschreibt nie den Bericht vom Display. */
+    const char *key_rep = s_device_seen ? NVS_KEY_REP_DEV : NVS_KEY_REP_WAIT;
+    const char *key_run = s_device_seen ? NVS_KEY_RUN_DEV : NVS_KEY_RUN_WAIT;
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NVS_NS, NVS_READWRITE, &h);
+    if (err == ESP_OK) {
+        err = nvs_set_blob(h, key_rep, copy, n);
+        if (err == ESP_OK) {
+            err = nvs_set_u32(h, key_run, s_run_no);
+        }
+        if (err == ESP_OK) {
+            err = nvs_set_u32(h, NVS_KEY_RUNS, s_run_no);
+        }
+        if (err == ESP_OK) {
+            err = nvs_commit(h);
+        }
+        nvs_close(h);
+    }
+    free(copy);
+    ESP_LOGI(TAG, "Bericht gespeichert (%s, Lauf %" PRIu32 ", %u Byte): %s",
+             s_device_seen ? "mit Gerät" : "ohne Gerät", s_run_no, (unsigned)n, esp_err_to_name(err));
+}
+
+static void slot_load(nvs_handle_t h, const char *key_rep, const char *key_run, saved_report_t *r)
+{
+    uint32_t run = 0;
+    nvs_get_u32(h, key_run, &run);
+    r->run = run;
+    size_t n = 0;
+    if (nvs_get_blob(h, key_rep, NULL, &n) == ESP_OK && n > 0) {
+        r->data = malloc(n);
+        if (r->data && nvs_get_blob(h, key_rep, r->data, &n) == ESP_OK) {
+            r->len = n;
+        } else {
+            free(r->data);
+            r->data = NULL;
+        }
+    }
+}
+
+static void report_load(void)
+{
+    uint32_t runs = 0;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_get_u32(h, NVS_KEY_RUNS, &runs);
+        slot_load(h, NVS_KEY_REP_DEV, NVS_KEY_RUN_DEV, &s_rep_dev);
+        slot_load(h, NVS_KEY_REP_WAIT, NVS_KEY_RUN_WAIT, &s_rep_wait);
+        /* Migration: alter Einzelbericht wird einmal ausgegeben (report_print_old) und dann gelöscht */
+        size_t n = 0;
+        if (nvs_get_blob(h, NVS_KEY_REPORT, NULL, &n) == ESP_OK && n > 0) {
+            s_rep_legacy.data = malloc(n);
+            if (s_rep_legacy.data && nvs_get_blob(h, NVS_KEY_REPORT, s_rep_legacy.data, &n) == ESP_OK) {
+                s_rep_legacy.len = n;
+                s_rep_legacy.run = runs;
+            } else {
+                free(s_rep_legacy.data);
+                s_rep_legacy.data = NULL;
+            }
+        }
+        nvs_close(h);
+    }
+    s_run_no = runs + 1;
+}
+
+static void print_blob(const saved_report_t *r)
+{
+    for (size_t off = 0; off < r->len; off += 128) {
+        size_t c = r->len - off < 128 ? r->len - off : 128;
+        fwrite(r->data + off, 1, c, stdout);
+        fflush(stdout);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+static void report_print_old(void)
+{
+    if (s_rep_legacy.data && s_rep_legacy.len > 0) {
+        printf("\n===== Alter Bericht (Lauf %" PRIu32 ") =====\n", s_rep_legacy.run);
+        fflush(stdout);
+        print_blob(&s_rep_legacy);
+        printf("\n===== Ende des Berichts =====\n");
+    }
+    if (s_rep_dev.data && s_rep_dev.len > 0) {
+        printf("\n===== Letzter Lauf MIT Gerät (Lauf %" PRIu32 ") =====\n", s_rep_dev.run);
+        fflush(stdout);
+        print_blob(&s_rep_dev);
+        printf("\n===== Ende des Berichts =====\n");
+    } else {
+        printf("\nNoch kein Lauf mit Gerät gespeichert.\n");
+    }
+    if (s_rep_wait.data && s_rep_wait.len > 0) {
+        printf("\n===== Letzter Lauf ohne Gerät (Lauf %" PRIu32 ") =====\n", s_rep_wait.run);
+        fflush(stdout);
+        print_blob(&s_rep_wait);
+        printf("\n===== Ende des Berichts =====\n");
+    } else {
+        printf("\nNoch kein Lauf ohne Gerät gespeichert.\n");
+    }
+    fflush(stdout);
+}
+
+/* Alten Schlüssel `report` löschen, nachdem er ausgegeben wurde */
+static void report_drop_legacy(void)
+{
+    if (!s_rep_legacy.data) {
+        return;
+    }
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_erase_key(h, NVS_KEY_REPORT);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    free(s_rep_legacy.data);
+    s_rep_legacy.data = NULL;
+    s_rep_legacy.len = 0;
+}
+
+static bool boot_pressed(void)
+{
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << CONFIG_PROBE_BOOT_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&io);
+    return gpio_get_level(CONFIG_PROBE_BOOT_GPIO) == 0;
 }
 
 /* ---------- USB-Ereignisse ---------- */
@@ -124,6 +334,7 @@ static void usb_task(void *arg)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "usb_host_install fehlgeschlagen: %s", esp_err_to_name(err));
         s_led_state = LED_ERROR;
+        report_save();
         vTaskDelete(NULL);
         return;
     }
@@ -139,6 +350,7 @@ static void usb_task(void *arg)
         ESP_LOGE(TAG, "msc_host_install fehlgeschlagen: %s", esp_err_to_name(err));
         s_led_state = LED_ERROR;
         usb_host_uninstall();
+        report_save();
         vTaskDelete(NULL);
         return;
     }
@@ -326,6 +538,7 @@ static void handle_device(uint8_t addr, msc_host_device_handle_t *out_dev)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Enumeration/msc_host_install_device fehlgeschlagen: %s", esp_err_to_name(err));
         s_led_state = LED_ERROR;
+        report_save();
         return;
     }
     *out_dev = dev;
@@ -335,6 +548,7 @@ static void handle_device(uint8_t addr, msc_host_device_handle_t *out_dev)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "msc_host_get_device_info fehlgeschlagen: %s", esp_err_to_name(err));
         s_led_state = LED_ERROR;
+        report_save();
         return;
     }
     char manu[64], prod[64];
@@ -356,6 +570,7 @@ static void handle_device(uint8_t addr, msc_host_device_handle_t *out_dev)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Mount unter %s fehlgeschlagen: %s", MNT_PATH, esp_err_to_name(err));
         s_led_state = LED_ERROR;
+        report_save();
         return;
     }
     ESP_LOGI(TAG, "Laufwerk unter %s eingehängt (nur lesend benutzt)", MNT_PATH);
@@ -371,19 +586,58 @@ static void handle_device(uint8_t addr, msc_host_device_handle_t *out_dev)
     }
     s_led_state = ok ? LED_OK : LED_ERROR;
     ESP_LOGI(TAG, "Ergebnis: %s. Bitte Display abziehen.", ok ? "LAUFWERK GELESEN" : "FEHLER");
+    report_save();
 }
 
 void app_main(void)
 {
+    esp_err_t nerr = nvs_flash_init();
+    if (nerr == ESP_ERR_NVS_NO_FREE_PAGES || nerr == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        nvs_flash_erase();
+        nvs_flash_init();
+    }
+    report_load();
     led_init();
+
+    ESP_LOGI(TAG, "=== USB-Probe (Lauf %" PRIu32 ") ===", s_run_no);
+    report_print_old();
+    report_drop_legacy();
+    s_orig_vprintf = esp_log_set_vprintf(report_vprintf);
+    ESP_LOGI(TAG, "=== USB-Probe (Lauf %" PRIu32 ") ===", s_run_no);
+
+    s_led_state = LED_COUNTDOWN;
+    bool log_mode = false;
+    for (int i = 10; i > 0 && !log_mode; i--) {
+        ESP_LOGI(TAG, "Host-Modus startet in %d s - BOOT gedrückt halten, um im Log-Modus zu bleiben", i);
+        for (int t = 0; t < 10; t++) {
+            if (boot_pressed()) {
+                log_mode = true;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+    if (log_mode) {
+        s_led_state = LED_WAIT;
+        esp_log_set_vprintf(s_orig_vprintf);   /* Log-Modus: Bericht nicht überschreiben */
+        while (true) {
+            printf("\nLog-Modus (BOOT gedrückt, USB-Host nicht gestartet).\n");
+            report_print_old();
+            vTaskDelay(pdMS_TO_TICKS(30000));
+        }
+    }
+    s_led_state = LED_WAIT;
+
     s_queue = xQueueCreate(5, sizeof(app_msg_t));
     if (!s_queue || xTaskCreate(usb_task, "usb", 4096, NULL, 2, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Initialisierung fehlgeschlagen");
         s_led_state = LED_ERROR;
+        report_save();
         return;
     }
 
     msc_host_device_handle_t current = NULL;
+    bool wait_saved = false;
     int64_t wait_start = esp_timer_get_time();
     ESP_LOGI(TAG, "Warte auf USB-Massenspeicher ...");
 
@@ -395,10 +649,15 @@ void app_main(void)
                 ESP_LOGW(TAG, "Seit 30 s kein Gerät%s. VBUS (5 V am Display?), OTG-Adapter und Kabel prüfen.",
                          s_usb_ok ? "" : " (USB-Host nicht installiert!)");
                 wait_start = esp_timer_get_time();
+                if (!wait_saved) {      /* nur einmal pro Lauf, schont den Flash */
+                    wait_saved = true;
+                    report_save();
+                }
             }
             continue;
         }
         if (msg.id == EV_CONNECTED) {
+            s_device_seen = true;
             if (current != NULL) {
                 ESP_LOGW(TAG, "Weiteres Gerät ignoriert");
                 continue;

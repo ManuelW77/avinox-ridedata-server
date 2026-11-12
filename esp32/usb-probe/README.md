@@ -26,12 +26,39 @@ idf.py build
 idf.py -p <port> flash monitor
 ```
 
-`<port>` ist der **UART-Port** des Boards (beim DevKitC-1 die USB-Buchse mit der Aufschrift „UART“,
-unter macOS etwa `/dev/cu.usbserial-*` oder `/dev/cu.SLAB_USBtoUART`). Der native USB-Port („USB“) wird
-als Host gebraucht. Deshalb läuft die Konsole über UART0 (`CONFIG_ESP_CONSOLE_UART_DEFAULT=y`).
+`<port>` ist der **native USB-Port** (USB-Serial-JTAG), am Mac `/dev/cu.usbmodem*`. Erscheint er nicht,
+das Board im Download-Modus starten: BOOT halten, RESET drücken, BOOT loslassen.
+Die Konsole läuft über USB-Serial-JTAG (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`). Sobald der USB-Host
+installiert ist, schaltet der PHY auf OTG, und die Konsole ist weg. Das ist gewollt.
+
+## Ablauf mit nur einem Datenport
+
+Das Board hat nur einen datenfähigen Port, und der muss beim Test am Display hängen. Deshalb schreibt die
+Firmware ihren Log als Bericht mit und speichert ihn nach jedem Durchlauf im NVS (Namespace `probe`, Blobs `rep_dev` und `rep_wait`,
+Laufnummern `run_dev`/`run_wait`, Zähler `runs`, je höchstens 12 KB, bei Überlauf fallen die ältesten Zeilen weg).
+
+1. **Flashen:** Board an den Mac, `idf.py -p /dev/cu.usbmodem* flash monitor`.
+2. **Test:** Mac-Kabel ab, Board anderweitig mit Strom versorgen (Netzteil/Powerbank an der zweiten Buchse oder am 5V-Pin;
+   vorher prüfen, dass die native Buchse dann 5 V liefert). Display an die native Buchse (OTG-Adapter C auf A + Kabel A auf C).
+   Nach dem Start läuft 10 s ein Countdown (LED weiß/blau blinkend), danach startet der Host (LED wie in der Tabelle unten).
+3. **Auslesen:** Display ab, Board wieder an den Mac, `idf.py -p /dev/cu.usbmodem* monitor`, ggf. RESET drücken.
+   In den ersten 10 s erscheinen zuerst „Letzter Lauf MIT Gerät (Lauf N)“ (der Bericht vom Display, den Text kopieren)
+   und danach kurz „Letzter Lauf ohne Gerät (Lauf M)“. Ist noch kein Lauf mit Gerät gespeichert, steht dort
+   „Noch kein Lauf mit Gerät gespeichert.“
+
+Es gibt zwei getrennte Plätze: `rep_dev` (letzter Lauf, in dem ein USB-Gerät erkannt wurde) und `rep_wait`
+(letzter Lauf ohne Gerät). Der Bericht vom Display bleibt deshalb erhalten, auch wenn das Board danach ohne Display
+am Mac läuft; ein Lauf ohne Gerät überschreibt nur `rep_wait`. Beim Warten ohne Gerät wird nur einmal pro Lauf
+gespeichert (beim ersten 30-s-Hinweis). Ein alter Einzelbericht (Schlüssel `report`) wird beim Start einmal als
+„Alter Bericht“ ausgegeben und dann gelöscht.
+Wer am Mac im Log bleiben will, ohne dass der Host startet, hält beim Start (während des Countdowns) die BOOT-Taste
+(GPIO 0, per `PROBE_BOOT_GPIO` änderbar). Dann werden beide Berichte alle 30 s erneut ausgegeben, der Host startet nicht
+und die gespeicherten Berichte werden nicht überschrieben.
 
 Die Komponenten `espressif/usb_host_msc` und `espressif/led_strip` lädt der Build aus der ESP Component Registry.
 Die festgelegten Versionen stehen in `dependencies.lock`.
+
+Die Partitionstabelle (`partitions.csv`) hat eine 64-KB-NVS für den Bericht.
 
 Die LED-GPIO lässt sich unter `idf.py menuconfig` → „USB-Probe“ → `PROBE_LED_GPIO` ändern (Standard 48, `-1` = aus).
 Manche DevKitC-1-Revisionen haben die LED an GPIO 38.
@@ -49,7 +76,7 @@ nativer USB-Port des Boards → OTG-Adapter (USB-C-Stecker auf USB-A-Buchse)
 Der Adapter bzw. das A-auf-C-Kabel stellt den CC-Pull-up bereit. Ein reines C-auf-C-Kabel direkt am Board reicht meist nicht.
 
 **Vorher prüfen/messen:** Beim ESP32-S3-DevKitC-1 gibt der native USB-Port vermutlich nur dann 5 V
-nach außen ab, wenn das Board über den 5V-Pin oder den UART-Port versorgt wird. Je nach Revision muss dafür
+nach außen ab, wenn das Board über den 5V-Pin oder die zweite Buchse versorgt wird. Je nach Revision muss dafür
 ggf. auch die USB-OTG-Lötbrücke (Jumper) geschlossen werden. Das ist nicht gesichert: Vor dem Anstecken des Displays
 mit dem Multimeter am Ende des Kabels nachmessen, ob dort 5 V anliegen. Siehe auch Schaltplan und Doku
 der eigenen Board-Revision.
@@ -58,6 +85,7 @@ der eigenen Board-Revision.
 
 | Farbe        | Bedeutung |
 |--------------|-----------|
+| weiß/blau blinkend | Countdown vor dem Host-Start (10 s) |
 | blau blinkend | wartet auf Gerät |
 | gelb          | Gerät erkannt, wird gelesen |
 | grün          | Laufwerk vollständig gelesen, kann abgezogen werden |
