@@ -176,6 +176,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def t_global(key: str, **kw) -> str:
         return i18n.t(key, i18n.current(), **kw)
 
+    # Reihenfolge der Keys erhalten (Histogramm-Bereiche, Modi); Jinja sortiert sonst alphabetisch
+    templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
     templates.env.filters["duration"] = _fmt_duration
     templates.env.filters["localtime"] = local_time
     templates.env.filters["emph"] = emphasize

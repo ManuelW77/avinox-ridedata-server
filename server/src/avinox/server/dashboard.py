@@ -6,11 +6,13 @@ Gelesen wird nur aus der Tabelle ``rides`` (plus wenigen Feldern aus
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from markupsafe import Markup, escape
 
+from ..analysis import ASSIST_LEVELS
 from . import i18n
 from .i18n import t
 
@@ -40,7 +42,10 @@ SELECT id, ride_id, start_utc, distance_m, duration_s, moving_time_s, ascent_m, 
        json_extract(analysis_json, '$.summary.max_rider_power_w') AS max_rider_power_w,
        json_extract(analysis_json, '$.summary.max_motor_power_w') AS max_motor_power_w,
        json_extract(analysis_json, '$.best_efforts.rider_power_w."300s"') AS best_5min_w,
-       json_extract(analysis_json, '$.best_efforts.rider_power_w."1200s"') AS best_20min_w
+       json_extract(analysis_json, '$.best_efforts.rider_power_w."1200s"') AS best_20min_w,
+       json_extract(analysis_json, '$.assist') AS assist_json,
+       json_extract(analysis_json, '$.gears') AS gears_json,
+       json_extract(analysis_json, '$.distributions') AS dist_json
 FROM rides
 ORDER BY start_utc IS NULL, start_utc DESC, path DESC
 """
@@ -295,9 +300,90 @@ def load_rows(db, tz: ZoneInfo) -> list[dict]:
     for row in db.query(RIDE_SQL):
         r = dict(row)
         r["distance_km"] = (r["distance_m"] or 0) / 1000
+        for key in ("assist", "gears", "dist"):
+            raw = r.pop(f"{key}_json", None)
+            try:
+                parsed = json.loads(raw) if raw else None
+            except (TypeError, ValueError):
+                parsed = None
+            r[key] = parsed if isinstance(parsed, dict) else None
         r["_local"] = datetime.fromisoformat(r["start_utc"]).astimezone(tz).date() if r["start_utc"] else None
         rows.append(r)
     return rows
+
+
+DIST_KEYS = ("rider_power_s", "motor_power_s", "cadence_s", "speed_s", "gradient_s", "heart_rate_s")
+
+
+def _gear_order(key: str):
+    try:
+        return (0, int(key), key)
+    except ValueError:
+        return (1, 0, key)
+
+
+_LEVEL_OF = {name: level for level, name in ASSIST_LEVELS.items()}
+
+
+def _mode_order(name: str):
+    """Wie auf der Fahrtseite: nach Stufe (aus, eco, …, dann eigen_20, eigen_21, …)."""
+    if name in _LEVEL_OF:
+        return (_LEVEL_OF[name], name)
+    tail = name.rsplit("_", 1)[-1]
+    return (int(tail), name) if tail.isdigit() else (10_000, name)
+
+
+def mix(rows: list[dict]) -> dict:
+    """Verteilungen (Modi, Gänge, Leistung, …) über mehrere Fahrten aufsummiert.
+
+    Fehlende Felder älterer Auswertungen zählen als leer. Mittelwerte je Modus sind
+    zeitgewichtet (Tempo nach Bewegungszeit, Leistung nach Modus-Sekunden).
+    """
+    seconds_per_mode: dict[str, float] = {}
+    acc: dict[str, dict] = {}
+    changes = gear_changes = 0
+    gears: dict[str, float] = {}
+    dists: dict[str, dict[str, float] | None] = {k: None for k in DIST_KEYS}
+    for r in rows:
+        assist = r.get("assist") or {}
+        for name, secs in (assist.get("seconds_per_mode") or {}).items():
+            seconds_per_mode[name] = seconds_per_mode.get(name, 0) + (secs or 0)
+        for name, m in (assist.get("per_mode") or {}).items():
+            a = acc.setdefault(name, {"seconds": 0, "moving_seconds": 0, "distance_m": 0, "spd": 0.0, "spd_t": 0, "mot": 0.0, "mot_t": 0, "rid": 0.0, "rid_t": 0})
+            secs, mv = m.get("seconds") or 0, m.get("moving_seconds") or 0
+            a["seconds"] += secs
+            a["moving_seconds"] += mv
+            a["distance_m"] += m.get("distance_m") or 0
+            for field, v, w in (("spd", m.get("avg_moving_speed_kmh"), mv), ("mot", m.get("avg_motor_power_w"), secs), ("rid", m.get("avg_rider_power_w"), secs)):
+                if v is not None and w:
+                    a[field] += v * w
+                    a[field + "_t"] += w
+        changes += assist.get("changes") or 0
+        g = r.get("gears") or {}
+        for gear, secs in (g.get("seconds_per_gear") or {}).items():
+            gears[gear] = gears.get(gear, 0) + (secs or 0)
+        gear_changes += g.get("changes") or 0
+        d = r.get("dist") or {}
+        for key in DIST_KEYS:
+            if d.get(key):
+                tgt = dists[key] = dists[key] if dists[key] is not None else {}
+                for label, secs in d[key].items():
+                    tgt[label] = tgt.get(label, 0) + (secs or 0)
+    per_mode = {}
+    for name, a in acc.items():
+        per_mode[name] = {
+            "seconds": a["seconds"], "moving_seconds": a["moving_seconds"], "distance_m": round(a["distance_m"]),
+            "avg_moving_speed_kmh": round(a["spd"] / a["spd_t"], 1) if a["spd_t"] else None,
+            "avg_motor_power_w": round(a["mot"] / a["mot_t"]) if a["mot_t"] else None,
+            "avg_rider_power_w": round(a["rid"] / a["rid_t"]) if a["rid_t"] else None,
+        }
+    return {
+        "rides": len(rows),
+        "assist": {"seconds_per_mode": dict(sorted(seconds_per_mode.items(), key=lambda kv: _mode_order(kv[0]))),
+                   "per_mode": dict(sorted(per_mode.items(), key=lambda kv: _mode_order(kv[0]))), "changes": changes},
+        "gears": {"seconds_per_gear": dict(sorted(gears.items(), key=lambda kv: _gear_order(kv[0]))), "changes": gear_changes},
+        "distributions": dists,
+    }
 
 
 def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "de") -> dict:
@@ -348,6 +434,7 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
         "rider_kj": r["rider_kj"], "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
     } for r in rows[:5]]
 
+    in_period = [r for r in rows if r["_local"] and period_start(r["_local"], period) == current]
     cmp = compare(cur, prev)
     d = cmp["distance_km"]
     versus = t(f"versus.{period}", lang)
@@ -368,6 +455,7 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
         "comparison": cmp,
         "headline": headline,
         "series": series,
+        "mix": mix(in_period),
         "highlights": ride_bests(real, lang) + period_bests(real, today, lang),
         "total": total,
         "recent": recent,

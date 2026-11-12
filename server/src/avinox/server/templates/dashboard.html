@@ -80,6 +80,12 @@
 </div>
 <p class="muted small chart-hint">{{ t('dash.hint') }}</p>
 
+{# ------------------------------------------------------------ Verteilung (per JS) #}
+<section class="mix-section" id="mix-section" hidden>
+  <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
+  <div id="mix"></div>
+</section>
+
 {# ------------------------------------------------------------ Bestwerte #}
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
