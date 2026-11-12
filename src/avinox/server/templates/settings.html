@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen – Avinox Ride Data{% endblock %}
+{% block main %}
+<div class="lead"><div><h1>Einstellungen</h1></div></div>
+
+<section class="card" style="margin-bottom:1rem">
+  <h2>Eigene Modi benennen</h2>
+  <p class="muted small">Die Nummer eines eigenen Modus findest du mit einer kurzen Testfahrt im jeweiligen Modus heraus: Sie steht danach in der Fahrt unter „Unterstützungsmodi“ als <code>eigen_&lt;nr&gt;</code>. Leeres Feld = Name entfernen.</p>
+  {% if levels %}
+  <form id="modes-form" class="stack">
+    {% for lvl in levels %}
+    <div class="form-row">
+      <label for="mode-{{ lvl }}">Modus {{ lvl }}</label>
+      <input type="text" id="mode-{{ lvl }}" data-level="{{ lvl }}" value="{{ names.get(lvl, '') }}" maxlength="40">
+    </div>
+    {% endfor %}
+    <div class="actions"><button type="submit" class="btn">Speichern</button><span id="modes-status" class="muted small" role="status"></span></div>
+  </form>
+  {% else %}
+  <p class="notice">In den Fahrten kamen bisher noch keine eigenen Modi vor.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="upload" style="margin-bottom:1rem">
+  <h2>Dateien hochladen</h2>
+  <p class="muted small">Wähle das USB-Laufwerk des Displays (oder eine Kopie davon) aus. Hochgeladen werden nur Fahrten, Nutzungsstatistik und HMS-Meldungen – die großen <code>ebike_log_*.dat</code> werden nie gelesen oder gesendet. Bereits bekannte Dateien werden erkannt.</p>
+  <div class="dropzone" id="dropzone">
+    <p>Ordner hierher ziehen oder</p>
+    <label class="btn ghost">Ordner auswählen<input type="file" id="folder-input" webkitdirectory multiple hidden></label>
+  </div>
+  <p id="upload-status" class="small" role="status" style="margin-top:0.75rem"></p>
+  <p id="upload-done" hidden><a class="btn" href="/">Zur Fahrtenliste</a></p>
+  <script type="application/json" id="upload-patterns">{{ patterns | tojson }}</script>
+</section>
+
+<section class="card">
+  <h2>ESP32 / Upload-API</h2>
+  {% if token %}
+  <div class="form-row" style="margin-bottom:0.75rem">
+    <label for="token">Upload-Token</label>
+    <div class="actions">
+      <input type="password" id="token" value="{{ token }}" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" id="token-show">anzeigen</button>
+      <button type="button" class="btn ghost" id="token-copy">kopieren</button>
+    </div>
+  </div>
+  {% else %}
+  <p class="notice" style="margin-bottom:0.75rem">Das Upload-Token wird hier nur angezeigt, wenn die Seite mit Passwort geschützt ist (<code>AVINOX_WEB_USER</code> / <code>AVINOX_WEB_PASSWORD</code>). Sonst steht es in <code>{{ token_hint }}</code>.</p>
+  {% endif %}
+  <p class="muted small">Alle Aufrufe mit Header <code>Authorization: Bearer &lt;Token&gt;</code>.</p>
+  <dl class="kv">
+    <dt><code>GET /api/v1/manifest</code></dt><dd>Liste der bekannten Dateien (Pfad + Größe) – daran erkennt der ESP32, was neu ist.</dd>
+    <dt><code>PUT /api/v1/upload?path=…&amp;size=…&amp;offset=…</code></dt><dd>Neue Datei als rohe Bytes, in Stücken und wiederaufnehmbar. Passt <code>offset</code> nicht, antwortet der Server mit 409 und dem Feld <code>received</code> (bisher empfangene Bytes).</dd>
+    <dt><code>GET /api/v1/upload/status?path=…&amp;size=…</code></dt><dd>Aktueller Stand eines Uploads.</dd>
+  </dl>
+  <p class="small">Vollständige Beschreibung: <a href="/api/docs">/api/docs</a></p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='settings.js') }}" defer></script>{% endblock %}

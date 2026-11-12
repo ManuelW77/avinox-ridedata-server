@@ -1,0 +1,179 @@
+/* Avinox Ride Data – ruhige, helle Oberfläche; Farben aus dem App-Icon:
+   Orange = Fahrer, Türkis = Motor. */
+:root {
+  --bg: #f4f2ed;
+  --surface: #fffdf9;
+  --surface-2: #ebe8e1;
+  --ink: #1c2226;
+  --ink-2: #57605f;
+  --ink-3: #8a908c;
+  --line: #dcd8cf;
+  --rider: #d9661a;
+  --motor: #13877a;
+  --alt: #6b6f9a;
+  --warn: #b3411b;
+  --radius: 14px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15191d;
+    --surface: #1d2227;
+    --surface-2: #262c32;
+    --ink: #e9ece9;
+    --ink-2: #a9b0ad;
+    --ink-3: #7c8481;
+    --line: #333a40;
+    --rider: #f08a3e;
+    --motor: #35b8a6;
+    --alt: #9da2d6;
+    --warn: #f07b52;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+a { color: inherit; }
+h1, h2, h3 { line-height: 1.2; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+h1 { font-size: 1.7rem; }
+h2 { font-size: 1.05rem; margin-bottom: 0.9rem; }
+h3 { font-size: 0.95rem; color: var(--ink-2); font-weight: 600; margin-bottom: 0.5rem; }
+
+/* Kopf */
+.top {
+  display: flex; align-items: center; gap: 1.5rem;
+  max-width: 1180px; margin: 0 auto; padding: 1rem 1.25rem;
+}
+.brand { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; font-weight: 700; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.top nav { display: flex; gap: 0.25rem; margin-left: auto; flex-wrap: wrap; }
+.top nav a {
+  text-decoration: none; color: var(--ink-2); padding: 0.4rem 0.75rem; border-radius: 999px;
+}
+.top nav a[aria-current="page"], .top nav a:hover { background: var(--surface-2); color: var(--ink); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 4rem; }
+.lead { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0.75rem 0 1.25rem; }
+.lead p { margin: 0.25rem 0 0; color: var(--ink-2); }
+.muted { color: var(--ink-2); }
+.small { font-size: 0.85rem; }
+
+/* Flächen */
+.card { background: var(--surface); border-radius: var(--radius); padding: 1.1rem 1.2rem; }
+.grid { display: grid; gap: 1rem; }
+.cols-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.stack > * + * { margin-top: 1rem; }
+
+/* Kennzahlen */
+.figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem 1rem; }
+.figure { padding: 0.2rem 0; }
+.figure .v { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.02em; }
+.figure .v small { font-size: 0.85rem; font-weight: 500; color: var(--ink-2); margin-left: 0.15rem; }
+.figure .k { color: var(--ink-2); font-size: 0.82rem; }
+.figure.rider .v { color: var(--rider); }
+.figure.motor .v { color: var(--motor); }
+
+/* Fahrtenliste */
+.rides { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.ride-row {
+  display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px;
+  align-items: center; gap: 0.75rem; text-decoration: none;
+  background: var(--surface); border-radius: 12px; padding: 0.8rem 1rem;
+}
+.ride-row:hover { outline: 2px solid var(--line); }
+.ride-row .when { font-weight: 600; }
+.ride-row .when span { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
+.ride-row .n { text-align: right; }
+.ride-row .n small { color: var(--ink-3); margin-left: 0.1rem; }
+.ride-row .flags { color: var(--ink-3); text-align: right; font-size: 0.8rem; }
+.rides-head { display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px; gap: 0.75rem; padding: 0 1rem 0.3rem; color: var(--ink-3); font-size: 0.78rem; }
+.rides-head span:not(:first-child) { text-align: right; }
+@media (max-width: 720px) {
+  .ride-row, .rides-head { grid-template-columns: 1fr repeat(2, auto); }
+  .ride-row .opt, .rides-head .opt { display: none; }
+}
+
+/* Karte und Diagramme */
+#map { height: 460px; border-radius: var(--radius); background: var(--surface-2); z-index: 0; }
+.map-wrap { position: relative; }
+.map-empty { display: grid; place-items: center; height: 220px; border-radius: var(--radius); background: var(--surface-2); color: var(--ink-2); }
+.segmented { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.segmented button {
+  border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 0.85rem;
+  padding: 0.3rem 0.75rem; border-radius: 999px; cursor: pointer;
+}
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.legend { display: flex; gap: 0.75rem; align-items: center; font-size: 0.8rem; color: var(--ink-2); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 0.3rem; vertical-align: -1px; }
+.chart { width: 100%; }
+.chart + .chart { margin-top: 0.5rem; }
+.uplot { font-family: var(--font); }
+.u-legend { font-size: 0.8rem; color: var(--ink-2); }
+
+/* Balken */
+.bars { display: grid; gap: 0.35rem; }
+.bar { display: grid; grid-template-columns: 4.8rem 1fr 3.6rem; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.bar .track { display: block; height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.bar .fill { display: block; height: 100%; min-width: 2px; border-radius: 999px; background: var(--ink-3); }
+.bar .fill.rider { background: var(--rider); }
+.bar .fill.motor { background: var(--motor); }
+.bar .label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .val { text-align: right; }
+
+/* Tabellen */
+table.plain { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.plain th { text-align: left; font-weight: 500; color: var(--ink-2); padding: 0.35rem 0; }
+table.plain td { padding: 0.35rem 0; }
+table.plain td.n, table.plain th.n { text-align: right; }
+table.plain tr + tr td { border-top: 1px solid var(--surface-2); }
+
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1.25rem; margin: 0; font-size: 0.9rem; }
+dl.kv dt { color: var(--ink-2); }
+dl.kv dd { margin: 0; }
+
+.pill { display: inline-block; font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.pill.warn { color: var(--warn); }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; border: 0; cursor: pointer; text-decoration: none;
+  background: var(--ink); color: var(--bg); font: inherit; font-size: 0.9rem; padding: 0.5rem 0.95rem; border-radius: 999px;
+}
+.btn.ghost { background: var(--surface-2); color: var(--ink); }
+.actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+input[type=text], input[type=password] {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0.45rem 0.7rem; width: 100%;
+}
+label.field { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--ink-2); }
+.form-row { display: grid; grid-template-columns: 6rem 1fr; gap: 0.75rem; align-items: center; }
+code, .mono { font-family: var(--mono); font-size: 0.85em; }
+.empty { text-align: center; padding: 3rem 1rem; color: var(--ink-2); }
+.notice { background: var(--surface-2); border-radius: 12px; padding: 0.75rem 1rem; color: var(--ink-2); font-size: 0.9rem; }
+.dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 1.5rem; text-align: center; color: var(--ink-2); }
+.dropzone.over { border-color: var(--motor); color: var(--ink); }
+
+/* Breite Beschriftung für Datums-/Monatsbalken */
+.bars.wide .bar { grid-template-columns: 8.5rem 1fr 5rem; }
+
+/* Schmale Bildschirme: nichts darf breiter als der Bildschirm werden */
+.grid > *, .card, #charts, .chart, .map-wrap { min-width: 0; }
+#charts { overflow: hidden; }
+@media (max-width: 600px) {
+  .top { flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; }
+  .top nav { margin-left: 0; width: 100%; }
+  main { padding: 0.25rem 1rem 3rem; }
+  .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
+  #map { height: 340px; }
+  h1 { font-size: 1.35rem; }
+}

@@ -6,21 +6,25 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 
 | Weg | Ergebnis |
 |---|---|
-| Display per USB-C ans iPhone/Rechner | **Funktioniert.** Display meldet sich als USB-Laufwerk. So liegen die Daten in `Data/`. |
+| Display per USB-C ans iPhone/Rechner | **Funktioniert.** Display meldet sich als USB-Laufwerk. So liegen die Daten in `_demo-data/`. |
 | Strava-Auto-Sync | Offiziell, aber dünn: FIT mit Fahrerleistung, Motorleistung nicht belegt. Auflösung laut Forum 10 s, nach Update evtl. 1 s. |
 | ANT+ / BLE an Garmin | Geht nicht. Display empfängt nur (Pulsgurt), sendet keine E-Bike-Daten (kein ANT+ LEV). |
 | Live-BLE mitlesen | Kein öffentlicher Decoder. BikeBridge (codeberg.org/bg443/BikeBridge) forscht daran. |
 | Avinox-Cloud direkt | **Bewusst nicht verfolgt.** Die API (`api.avinox-ebike.com`) verlangt signierte Anfragen; die Signierung steckt in der nativen DJI-Bibliothek der App. Der Cloud-Import von avinox-beta.avinoxride.workers.dev läuft über den Server des Betreibers, der dabei die Avinox-Zugangsdaten durchreicht. Kein öffentlicher Client vorhanden, wäre instabil und ein Zugangsdaten-Risiko. |
 
-## 2. Inhalt des Display-Laufwerks (`Data/`, ca. 3 GB)
+## 2. Inhalt des Display-Laufwerks (`_demo-data/`, ca. 3 GB)
 
 | Pfad | Inhalt |
 |---|---|
 | `ride_rec/ride_rec_<id>.proto` | **Fahrtaufzeichnungen.** Das ist die Hauptquelle. |
-| `ride_rec/<nummer>/ride_rec_<id>.proto` | Weitere Fahrten in Unterordner (hier `<konto-id>/`, 9 Fahrten). Header-Startzeit dort als Unix-Zeit. |
-| `ride_rec/ride_rec_index.dat` | 24-Byte-Index (erste/letzte ID u. a.), noch nicht dekodiert. |
-| `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Anderes Format (kein `0xA5A5A5A5`), Inhalt unbekannt. Für die Auswertung vorerst nicht nötig. |
-| `hms_rec/`, `buried_rec/buried_file_cur.json`, `System/` | Wartungs-/Diagnosedaten, Index, Kartenvorschau. Noch nicht untersucht. |
+| `ride_rec/<konto-id>/ride_rec_<id>.proto` | Fahrten nach der Kopplung mit der App, Unterordner = ID im Header (Offset 128, vermutlich Konto). Zeiten als Unix-Zeit. |
+| `ride_rec/ride_rec_<id>.proto` (Hauptordner) | Erste Fahrten vor der Kopplung. Zeiten = Sekunden seit Geräte-Start, **keine Uhrzeit**. |
+| `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
+| `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Kennung `DGS_EB100` / `DJI_LOG_V3`. Inhalt **verschlüsselt** (Entropie 7,5–7,8 Bit/Byte, sich wiederholende 8-Byte-Blöcke). Ohne DJI-Schlüssel nicht lesbar, wird nicht verfolgt. |
+| `buried_rec/buried_file_cur.json` | **Nutzungsstatistik** („buried point“ = Analytics), JSON-Zeilen mit `event_id`, ca. 1000 Zeilen, siehe unten. Lesbar. |
+| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947, Zeitpunkt des Anschlusses an den Rechner). Codes unbekannt. Parser: `src/avinox/hms.py`. |
+| `System/ebike_log_index.dat` | 12 Byte, uint32 = Anzahl der `ebike_log`-Dateien (2482). |
+| `System/map/tracks/<hash>/` | Nur eine leere `thumbnail.jpg.tmp`. |
 
 Hinweis: Die Dateizeiten auf dem Laufwerk sind unbrauchbar (Jahr 2098). Neue Dateien also über Name + Größe erkennen, nicht über Änderungszeit.
 
@@ -29,38 +33,81 @@ Hinweis: Die Dateizeiten auf dem Laufwerk sind unbrauchbar (Jahr 2098). Neue Dat
 Quelle der Feldzuordnung: Community-Reverse-Engineering, v. a. `lucad87/avinox-setup-app` (MIT), Datei `public/avinox-proto-parser.js`. Nicht offiziell, nicht über alle Firmwarestände verifiziert.
 
 **Header (251 Byte, little-endian)**
-- Offset 0: Magic `0xA5A5A5A5` (bestätigt)
-- Offset 6: rideId (uint32), z. B. 1002
-- Offset 10 / 14: Start / Ende (uint32). Im Hauptordner offenbar Sekunden seit Geräte-Start, im Unterordner Unix-Zeit. Echte Zeit pro Sample steht in Feld 72.
-- Offset 22 / 26: Anstieg / Abstieg (float32)
-- Offset 110–127: Seriennummer (ASCII, nullterminiert)
+- Offset 0: Magic `0xA5A5A5A5` · Offset 4: uint16 = 8 (vermutlich Formatversion)
+- Offset 6: rideId (uint32). **IDs wiederholen sich zwischen Hauptordner und Konto-Ordner**, eindeutig ist nur der Pfad.
+- Offset 10 / 14: Start / Ende (uint32), Unix-Zeit oder Sekunden seit Geräte-Start (siehe oben)
+- Offset 18: Distanz in m (uint32), = letzter Wert von Feld 23
+- Offset 22 / 26: Höhengewinn / Höhenabnahme (float32), **= App-Werte** (geprüft). Deutlich kleiner als aus den Höhen-Samples (dort ca. 165 / 161 statt 73 / 13).
+- Offset 30–109: 10 Vorschaupunkte (int32 Breite, int32 Länge, je × 1e7), liegen exakt auf der GPS-Spur; 0 ohne GPS
+- Offset 110–127: Seriennummer (ASCII, nullterminiert) – privat
+- Offset 128: Konto-ID mit Längenbyte (ASCII), leer im Hauptordner – privat
+- Offset 161–236: **Kennzahlen, die die App anzeigt** (19 × float32, geprüft an Fahrt vom 05.11.2026 gegen App; Gesamt = Fahrer + Motor geht in allen 12 Fahrten exakt auf):
+  Ø / max Steigung % · Ø / max Tempo km/h · Gesamt Ø / max Leistung W · Gesamt Ø / max Drehmoment Nm · Motor Ø / max Leistung · Motor Ø / max Drehmoment · Fahrer Ø / max Leistung · Fahrer Ø / max Drehmoment · Ø / max Trittfrequenz · Kalorien × 1000
+  Die Durchschnitte rechnet das Display selbst; sie lassen sich aus den Samples nicht nachbilden (Ø Tempo 6,3 km/h, Distanz/Dauer ergäbe 8,6). Die App schneidet Nachkommastellen ab (13,77 → 13 U/min), Steigung zeigt sie in Grad.
+- Offset 237–244: 0
+- Offset 245: Anzahl Samples (uint32) = **Dauer in der App** (Sekunden). Manchmal ein Frame mehr in der Datei.
+- Offset 249–250: vermutlich Prüfsumme
 
 **Frames ab Offset 251**
-- Byte 0–1: Typ `0x02EB`, Byte 2–3: Länge (uint16), Byte 4–5: unbekannt, danach Protobuf-Nachricht = 1 Sample
-- Geprüft: 1186 Frames bei 1186 s Fahrzeit → **ca. 1 Sample pro Sekunde**, Datei endet exakt auf Frame-Grenze
+- `uint16 typ (0x02EB) | uint16 länge | Protobuf (länge Byte) | 2 Byte Prüfsumme`
+- Prüfsumme: Verfahren offen (CRC-16/0x1021-Varianten passen nur auf einzelne Frames). Zum Lesen nicht nötig.
+- Geprüft an 12 Fahrten / 26 599 Frames: alle Typ `0x02EB`, keine Restbytes, ca. 1 Sample pro Sekunde (Zeitsprünge 0–2 s, Pausen länger)
 
 **Sample-Felder (Protobuf-Feldnummer → Kanal, Skalierung)**
 
+Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe usw. sind dann 0; Höhe, GPS, Temperatur, Druck, Puls dagegen unbekannt.
+
 | Feld | Kanal | Skalierung |
 |---|---|---|
-| 7 | Geschwindigkeit | ÷100 |
-| 8 | Unterstützungsstufe | roh |
-| 9 | Trittfrequenz | ÷100 |
-| 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt | ÷100 |
-| 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt | ÷100 |
-| 22 | Gang | roh |
-| 23 | Distanz km | ÷1000 |
-| 31 / 32 | Breite / Länge | float64 aus Bitmuster |
+| 6 | laufender Zähler | roh |
+| 7 | Geschwindigkeit km/h | ÷100 |
+| 8 | Unterstützungsmodus | 0 aus, 1 Eco, 2 Trail, 3 Turbo (vermutet), 4 Auto, 5 Boost (Sekunden je Modus = `assist_mode_usage` ±1 s). **Ab 20 = in der App angelegte eigene Modi** (bestätigt: es gibt mehrere). Namen stehen nicht auf dem Laufwerk; werden in `assist_mode_usage` nicht gezählt. In den Testdaten 20 (3 min im Stand, ohne Motor) und 21 (Motor/Fahrer ≈ 1,6). |
+| 9 | Trittfrequenz U/min | ÷100 |
+| 10 / 11 / 12 | Drehmoment Motor / Fahrer / gesamt Nm | ÷100 |
+| 13 / 14 / 15 | Leistung Fahrer / Motor / gesamt W | ÷100 |
+| 22 | Gang | roh (1–12) |
+| 23 | Distanz der Fahrt in m | roh (geprüft gegen Kilometerstand, GPS und Geschwindigkeit) |
+| 31 / 32 | Breite / Länge | float64 |
 | 36–38 | IMU x/y/z | float32 |
-| 39 / 40 | Höhe / Steigung | signed ÷100, fehlt → null |
-| 41 | Temperatur | signed ÷100, -99900 → null |
-| 42 | Luftdruck | ÷100, 0 → null |
+| 39 / 40 | Höhe m / Steigung % | signed ÷100 |
+| 41 | Temperatur °C | signed ÷100, -99900 → unbekannt |
+| 42 | Luftdruck **kPa** | ÷100 (z. B. 101,49) |
 | 51 | Puls | roh |
-| 52 | Fahrerenergie kJ | ÷1000 |
+| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter |
 | 71 | Akku % | roh |
-| 72 | Zeitstempel | Unix-Sekunden |
-| 73 | Gesamt-km | ÷1000 |
-| 75 | Ereignis | roh |
+| 72 | Zeitstempel | wie Header-Start |
+| 73 | Kilometerstand in m | roh |
+| 75 | Ereignis | 2 = letztes Sample der Fahrt, sonst 0 |
+
+Parser: `src/avinox/ride_rec.py`, Kennzahlen: `src/avinox/summary.py`, Auswertung: `src/avinox/analysis.py`, GPS: `src/avinox/track.py`, Nutzungsstatistik: `src/avinox/buried.py`.
+
+**GPS:** Feld 31/32 nicht in jeder Sekunde neu (Position wiederholt sich), Fahrten ohne Fix haben keine Koordinaten. Für die Karte: Ausreißer > 150 km/h entfernen, Douglas-Peucker mit 3 m → ca. 350 statt 4600 Punkte für 18 km.
+
+## 3a. Nutzungsstatistik `buried_rec/buried_file_cur.json`
+
+JSON pro Zeile. `{"general_msg":{"boot_times":n}}` beginnt einen Einschaltvorgang (Session, kann mehrere Fahrten enthalten). Ein Ereignis ist oft auf mehrere Zeilen mit gleicher `event_id` + `time_now` verteilt. Werte als Strings.
+
+**Zeit:** `time_now` = `J-M-T-h:m:s` in **UTC+8 ohne Tageswechsel** (Stunde bis über 24, z. B. `2026-10-30-30:45:52` = 22:45:52 UTC). Vor Uhrzeit-Sync Jahr 1970. Fahrt-Ereignisse tragen exakt die Endzeit der Fahrt aus dem `ride_rec`-Header → Zuordnung über Endzeit, sonst Dauer + Distanz (11 von 12 Testfahrten zugeordnet, die zwölfte fehlt in der Datei).
+
+Gefundene `event_id`:
+
+| event_id | Inhalt |
+|---|---|
+| `Firmware_version` | Versionen Paket, Display, Motor, BLE, Akku |
+| `single_ride` / `single_power` | Distanz, Akku, Starthöhe / Distanz, Dauer |
+| `rider_cadence`, `rider_torque`, `rider_heart_rate` | Ø / max (= Header-Werte der Fahrt) |
+| `ride_power`, `motor_torque` | Sekunden je Leistungs- (W, `power_less_500` … `power_900`) bzw. Motor-Drehmomentbereich (Nm, `torque_less_50` … `torque_110`); `motor_torque` summiert sich auf die Fahrtdauer |
+| `gear_shift` | **Sekunden je Gang** (`gear_shift_1` … `_12`, Summe = Fahrtdauer), keine Schaltvorgänge |
+| `assist_mode_usage`, `assist_mode_order`, `boost_mode`, `ass_mode_para` | Dauer je Unterstützungsmodus, Wechsel, Boost, Modus-Parameter |
+| `battery_usage`, `battery_circle` | Akku Start/Ende %, Temperaturen, max. Strom (mA, negativ = Entladen), min./max. Zellspannung und max. Differenz (mV), min. Gesamtspannung; Ladezyklen |
+| `mos_ntc_temperture`, `battery_temperture` | Sekunden je Temperaturbereich Motor-Elektronik / Akku, `limit` = Drosselung |
+| `bike_pitch_attitude`, `bike_horizontal_attitude` | **km je Längsneigung** (Grad, Summe = Distanz) bzw. Seitenneigung (Einheit unsicher) |
+| `ass_mode_para` | Beim Wechsel **in** einen Modus (und beim Ausschalten): Name und Parameter des neuen Modus (max. Leistung W, max. Drehmoment Nm, Koeffizienten), `duration` = km seit dem letzten Eintrag. Leerer Name mit lauter 0 = Boost. Leerer Name mit `max_power` 3564–3827 (sinkt mit dem Akkustand, wirkt wie eine Spannung) und `max_torque`/`ass_coeff` 13–14 = Wechsel in Modus 21. |
+| `assist_mode_order` | Platz der Modi in der Auswahlliste. Bis 02.11. 4 Plätze (auto 1, eco 2, trail 3, turbo 4), ab 03.11. 5 Plätze mit einem unbenannten (eco 1, auto 2/3, trail 4, turbo 5) – zeitgleich taucht Modus 21 auf. |
+| `single_power` | Distanz und Einschaltdauer der Session |
+| `wireless_controller_usage` / `_customize` | Tastendrücke an der Fernbedienung, Belegung |
+
+Zuordnung zu einzelnen Fahrten: über Zeitstempel bzw. Distanz (`single_ride.distance` = Fahrtdistanz).
 
 ## 4. Bestehende Community-Projekte
 

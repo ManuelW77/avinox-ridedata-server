@@ -1,5 +1,5 @@
 # Kopie des Display-Laufwerks: groß, enthält Seriennummer und GPS-Spuren
-Data/
+_demo-data/
 
 # Ausgewertete Fahrten / Datenbanken
 *.sqlite
@@ -26,3 +26,10 @@ secrets.h
 
 # Workbench (lokal)
 .bench/
+
+# Lokale Arbeitsnotizen (nicht veröffentlichen)
+CLAUDE.md
+PLAN.md
+
+# Server-Datenordner (Rohdateien, Datenbank, Upload-Token)
+data/
