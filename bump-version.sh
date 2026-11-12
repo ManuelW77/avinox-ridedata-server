@@ -3,20 +3,36 @@
 # setzt die Version in Firmware und Server, testet, mergt devel -> main, setzt Tag vX.Y.Z und pusht.
 # Der Tag startet den GitHub-Workflow: Docker-Image (ghcr) + GitHub-Release mit ESP32-Images.
 #
-#   ./bump-version.sh          # mit Abfrage
-#   ./bump-version.sh --dry    # alles lokal, nichts pushen
+#   ./bump-version.sh                 # mit Abfrage (braucht ein Terminal)
+#   ./bump-version.sh minor           # ohne Abfrage: patch | minor | major | X.Y.Z
+#   ./bump-version.sh minor --dry     # alles lokal, nichts pushen
+# Ohne Terminal (z. B. "!" in Claude Code) muss die Auswahl als Argument kommen.
 set -euo pipefail
 
-DRY="${1:-}"
+DRY="" CHOICE=""
+for a in "$@"; do
+  case "$a" in
+    --dry) DRY="--dry" ;;
+    patch|minor|major) CHOICE="$a" ;;
+    [0-9]*.[0-9]*.[0-9]*) CHOICE="$a" ;;
+    *) echo "❌ Unbekanntes Argument: $a (erlaubt: patch|minor|major|X.Y.Z|--dry)" >&2; exit 1 ;;
+  esac
+done
 FW=esp32/avinox-sync/CMakeLists.txt
 PY=server/pyproject.toml
 
 ask_version() {
-  local current="$1" major minor patch choice custom
+  local current="$1" choice="${2:-}" major minor patch custom
   if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "❌ Unlesbare Version: $current" >&2; return 1
   fi
   IFS='.' read -r major minor patch <<< "$current"
+  if [[ "$choice" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "$choice"; return 0; fi
+  if [[ -z "$choice" ]]; then
+  if ! { exec 3</dev/tty; } 2>/dev/null; then
+    echo "❌ Kein Terminal für die Abfrage. Auswahl als Argument angeben: ./bump-version.sh patch|minor|major|X.Y.Z" >&2
+    return 1
+  fi
   {
     echo ""
     echo "Aktuelle Version: ${current}"
@@ -28,13 +44,15 @@ ask_version() {
     echo "  5) abbrechen"
     echo ""
   } >&2
-  read -r -p "> " choice < /dev/tty
-  case "${choice:-1}" in
+  read -r -p "> " choice <&3 || { echo "❌ Keine Eingabe – abgebrochen." >&2; return 1; }
+  choice="${choice:-1}"
+  fi
+  case "$choice" in
     1|patch) echo "${major}.${minor}.$((patch + 1))" ;;
     2|minor) echo "${major}.$((minor + 1)).0" ;;
     3|major) echo "$((major + 1)).0.0" ;;
     4)
-      read -r -p "Neue Version (X.Y.Z): " custom < /dev/tty
+      read -r -p "Neue Version (X.Y.Z): " custom <&3 || { echo "❌ Keine Eingabe – abgebrochen." >&2; return 1; }
       [[ "$custom" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "❌ Ungültiges Format, erwartet X.Y.Z" >&2; return 1; }
       echo "$custom" ;;
     5|q|abbrechen) echo "Abgebrochen." >&2; return 1 ;;
@@ -55,7 +73,7 @@ if [[ -n "$(git log --oneline --no-merges devel..origin/main)" ]]; then
 fi
 
 CURRENT="$(sed -nE 's/.*set\(PROJECT_VER "([^"]+)"\).*/\1/p' "$FW")"
-NEW="$(ask_version "$CURRENT")"
+NEW="$(ask_version "$CURRENT" "$CHOICE")" || exit 1
 TAG="v$NEW"
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   echo "❌ Tag $TAG gibt es schon." >&2; exit 1
