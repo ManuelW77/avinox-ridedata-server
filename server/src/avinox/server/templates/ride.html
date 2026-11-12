@@ -32,8 +32,10 @@
     {{ figure(s.avg_speed_kmh, t('ride.f.avg_speed'), 'km/h', 1) }}
     {{ figure(s.max_speed_kmh, t('ride.f.max_speed'), 'km/h', 1) }}
     {{ figure(s.avg_rider_power_w, t('ride.f.avg_rider'), 'W', 0, 'rider') }}
+    {{ figure(s.avg_pedaling_power_w, t('ride.f.avg_pedaling'), 'W', 0, 'rider') }}
     {{ figure(s.max_rider_power_w, t('ride.f.max_rider'), 'W', 0, 'rider') }}
     {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}
+    {{ figure(s.avg_motor_assist_power_w, t('ride.f.avg_motor_assist'), 'W', 0, 'motor') }}
     {{ figure(s.max_motor_power_w, t('ride.f.max_motor'), 'W', 0, 'motor') }}
     {{ figure(s.avg_cadence_rpm, t('ride.f.cadence'), t('ride.f.cadence_unit')) }}
     {{ figure(s.max_rider_torque_nm, t('ride.f.torque'), 'Nm', 0, 'rider') }}
