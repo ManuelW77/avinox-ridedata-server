@@ -106,7 +106,6 @@
   <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.cadence_moving') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">{{ t('ride.speed_moving') }}</span></h2>{{ bars(a.distributions.speed_s, drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.gradient') }} <span class="muted small">%</span></h2>{{ bars(a.distributions.gradient_s) }}</section>
-  <section class="card"><h2>{{ t('ride.d.share') }} <span class="muted small">{{ t('ride.d.share_sub') }}</span></h2>{{ bars(a.distributions.motor_share_s, 'motor', 's', 0, {'<1': t('ride.d.share_rider'), '≥99': t('ride.d.share_motor')}) }}</section>
   <section class="card"><h2>{{ t('ride.d.power_grad') }} <span class="muted small">{{ t('ride.d.power_grad_sub') }}</span></h2>{{ bars_pair(a.by_gradient or {}, 'avg_rider_power_w', 'avg_motor_power_w', 'rider', 'motor', 'W') }}
     <p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> {{ t('ride.d.legend_rider') }} &nbsp; <span style="color:var(--motor)">&#9632;</span> {{ t('ride.d.legend_motor') }}</p></section>
   {% set spd_grad = {} %}{% for k, r in (a.by_gradient or {}).items() %}{% set _ = spd_grad.update({k: r.avg_speed_kmh}) %}{% endfor %}
