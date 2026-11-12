@@ -36,7 +36,7 @@ def current() -> str:
 _DE: dict[str, str] = {
     # --- Rahmen
     "nav.overview": "Übersicht", "nav.rides": "Fahrten", "nav.bike": "Bike & Akku", "nav.sync": "Sync", "nav.settings": "Einstellungen",
-    "lang.label": "Sprache",
+    "lang.label": "Sprache", "footer.heart": "Herz", "footer.bike": "Fahrrad",
     # --- gemeinsam
     "btn.upload": "Dateien hochladen",
     "empty.none": "Noch keine Fahrten.",
@@ -217,7 +217,7 @@ _DE: dict[str, str] = {
 
 _EN: dict[str, str] = {
     "nav.overview": "Overview", "nav.rides": "Rides", "nav.bike": "Bike & battery", "nav.sync": "Sync", "nav.settings": "Settings",
-    "lang.label": "Language",
+    "lang.label": "Language", "footer.heart": "heart", "footer.bike": "bike",
     "btn.upload": "Upload files",
     "empty.none": "No rides yet.",
     "empty.hint_html": 'Upload files from the display under <a href="/settings#upload">Settings</a> or import them with <code>avinox import &lt;drive&gt;</code>.',

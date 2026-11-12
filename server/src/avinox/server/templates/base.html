@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Avinox Ride Data{% endblock %}</title>
-  <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', path='apple-touch-icon.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <link rel="icon" href="{{ url_for('static', path='favicon.ico').path }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', path='apple-touch-icon.png').path }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css').path }}">
   {% block head %}{% endblock %}
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="/"><img src="{{ url_for('static', path='icon-192.png') }}" alt=""> Avinox Ride Data</a>
+    <a class="brand" href="/"><img src="{{ url_for('static', path='icon-192.png').path }}" alt=""> Avinox Ride Data</a>
     <nav>
       {% set p = request.url.path %}
       <a href="/" {% if p == '/' %}aria-current="page"{% endif %}>{{ t('nav.overview') }}</a>
@@ -23,7 +23,7 @@
   </header>
   <main>{% block main %}{% endblock %}</main>
   <footer class="site-footer">
-    <p>© 2026 Manuel Weiser · Build with "Herz" and a "Bike" by Manuel Weiser in Leipzig · <a href="https://manuelw.de" rel="noopener">manuelw.de</a></p>
+    <p>© 2026 Manuel Weiser · Build with <svg class="ico ico-heart" viewBox="0 0 24 24" role="img" aria-label="{{ t('footer.heart') }}"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2 0 3.6 1.1 4.4 2.6h2c.8-1.5 2.4-2.6 4.4-2.6 3.6 0 5.7 3.7 4.2 7.2C19.500 16.400 12 21 12 21z"/></svg> and a <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="{{ t('footer.bike') }}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.500" cy="16" r="3.500"/><circle cx="18.500" cy="16" r="3.500"/><path d="M5.500 16 9 8h6l3.500 8M9 8 12 16h-6.500M15 8l-1-3h-2"/></svg> by Manuel Weiser in Leipzig · <a href="https://manuelw.de" rel="noopener">manuelw.de</a></p>
     <p class="lang-switch" aria-label="{{ t('lang.label') }}">
       <a href="{{ lang_links['de'] }}" hreflang="de" lang="de" {% if lang == 'de' %}aria-current="true"{% endif %}>DE</a> | <a href="{{ lang_links['en'] }}" hreflang="en" lang="en" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a>
     </p>
