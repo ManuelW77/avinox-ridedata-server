@@ -120,6 +120,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not ok:
             raise HTTPException(401, "Anmeldung erforderlich", headers={"WWW-Authenticate": 'Basic realm="Avinox"'})
 
+    FW_ADMIN_HINT = "Firmware-Verwaltung nur mit Web-Passwort (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD) – oder per ‚avinox firmware add‘ auf dem Server"
+
+    def firmware_admin_auth(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:
+        """Firmware landet per OTA auf dem ESP32 (Code-Ausführung): nie ohne konfiguriertes Web-Passwort."""
+        if not settings.web_user:
+            raise HTTPException(403, FW_ADMIN_HINT)
+        read_auth(cred)
+
     def check_length(request: Request, limit: int) -> None:
         """Größe vor dem Lesen prüfen: ohne Content-Length 411, zu groß 413."""
         raw = request.headers.get("content-length")
@@ -252,7 +260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ------------------------------------------------------------ Firmware-Verwaltung
 
-    @app.post("/api/v1/firmware", dependencies=[Depends(read_auth)], tags=["firmware"])
+    @app.post("/api/v1/firmware", dependencies=[Depends(firmware_admin_auth)], tags=["firmware"])
     async def firmware_upload(request: Request):
         check_length(request, MAX_FIRMWARE_BYTES + 1024 * 1024)
         form = await request.form(max_files=1, max_fields=5)
@@ -266,13 +274,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         return {"id": fw["id"], "version": fw["version"], "project": fw["project"], "size": fw["size"], "sha256": fw["sha256"]}
 
-    @app.post("/api/v1/firmware/{fw_id}/current", dependencies=[Depends(read_auth)], tags=["firmware"])
+    @app.post("/api/v1/firmware/{fw_id}/current", dependencies=[Depends(firmware_admin_auth)], tags=["firmware"])
     def firmware_set_current(fw_id: int):
         if not store.set_current_firmware(fw_id):
             raise HTTPException(404, "Firmware nicht gefunden")
         return {"ok": True}
 
-    @app.delete("/api/v1/firmware/{fw_id}", dependencies=[Depends(read_auth)], tags=["firmware"])
+    @app.delete("/api/v1/firmware/{fw_id}", dependencies=[Depends(firmware_admin_auth)], tags=["firmware"])
     def firmware_delete(fw_id: int):
         result = store.delete_firmware(fw_id)
         if result == "missing":
@@ -434,6 +442,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             names=store.mode_names(),
             token=settings.upload_token,
             has_web_login=bool(settings.web_user),
+            fw_admin=bool(settings.web_user),
+            fw_admin_hint=FW_ADMIN_HINT,
             server_url=server_url,
             server_url_unreachable=unreachable,
             token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),

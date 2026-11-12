@@ -26,6 +26,10 @@ uv run avinox device  /Volumes/<display>/buried_rec/buried_file_cur.json
 uv run pytest
 ```
 
+## Firmware-Verwaltung
+
+Hochladen, als aktuell setzen und Löschen von ESP32-Firmware (Weboberfläche und `/api/v1/firmware`) ist nur mit gesetztem Web-Passwort (`AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD`) und Anmeldung möglich; sonst antwortet der Server mit 403, denn Firmware läuft per OTA als Code auf dem ESP32. Ohne Web-Passwort geht es lokal auf dem Server mit `avinox firmware add`.
+
 ## Server (Docker)
 
 ```sh

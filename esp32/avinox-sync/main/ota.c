@@ -237,12 +237,21 @@ static esp_err_t download(char *auth, const fw_info_t *fw, char *msg, size_t cap
         snprintf(msg, cap, "Image zu groß (%" PRIu32 " > %" PRIu32 ")", fw->size, part->size);
         return ESP_FAIL;
     }
-    char url[CFG_URL_MAX + OTA_URL_MAX];
-    if (strncmp(fw->url, "http://", 7) == 0 || strncmp(fw->url, "https://", 8) == 0) {
-        strlcpy(url, fw->url, sizeof(url));
-    } else {
-        snprintf(url, sizeof(url), "%s%s", s_cfg.url, fw->url);
+    /* Nur relative Pfade unter /api/v1/firmware/ – sonst ginge das Bearer-Token an einen fremden Host. */
+    static const char prefix[] = "/api/v1/firmware/";
+    bool ok = strncmp(fw->url, prefix, sizeof(prefix) - 1) == 0 && !strstr(fw->url, "..") &&
+              !strstr(fw->url, "://") && !strchr(fw->url, '@');
+    for (const char *p = fw->url; ok && *p; p++) {
+        if ((unsigned char)*p < 0x20 || *p == 0x7f) {
+            ok = false;
+        }
     }
+    if (!ok) {
+        snprintf(msg, cap, "ungültige Download-Adresse");
+        return ESP_FAIL;
+    }
+    char url[CFG_URL_MAX + OTA_URL_MAX];
+    snprintf(url, sizeof(url), "%s%s", s_cfg.url, fw->url);
     esp_http_client_handle_t c = open_get(url, auth);
     if (!c) {
         snprintf(msg, cap, "Download: keine Verbindung");

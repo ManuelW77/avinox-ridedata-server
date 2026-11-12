@@ -66,6 +66,9 @@
   {% else %}
   <p class="notice">Noch keine Firmware hochgeladen.</p>
   {% endif %}
+  {% if not fw_admin %}
+  <p class="notice small">{{ fw_admin_hint }}.</p>
+  {% endif %}
   {% set older = firmware | rejectattr('is_current') | list %}
   {% if older %}
   <p class="small"><strong>Ältere Versionen</strong></p>
@@ -73,16 +76,18 @@
     <tbody>
     {% for f in older %}
       <tr><td>{{ f.project }} {{ f.version }}</td><td class="muted">{{ f.uploaded_at | localtime('%d.%m.%Y') }}</td><td class="mono">{{ f.sha256[:8] }}</td>
-        <td class="actions"><button type="button" class="btn ghost" data-fw-current="{{ f.id }}">als aktuell setzen</button> <button type="button" class="btn ghost" data-fw-delete="{{ f.id }}">löschen</button></td></tr>
+        <td class="actions">{% if fw_admin %}<button type="button" class="btn ghost" data-fw-current="{{ f.id }}">als aktuell setzen</button> <button type="button" class="btn ghost" data-fw-delete="{{ f.id }}">löschen</button>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
   {% endif %}
+  {% if fw_admin %}
   <form id="fw-form" class="actions" style="margin-top:0.75rem">
     <input type="file" id="fw-file" accept=".bin" required>
     <button type="submit" class="btn">Hochladen</button>
     <span id="fw-status" class="muted small" role="status"></span>
   </form>
+  {% endif %}
 </section>
 
 <section class="card">

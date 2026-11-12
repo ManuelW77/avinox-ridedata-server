@@ -1,5 +1,6 @@
 """Tests für OTA-Firmware – synthetische Images."""
 
+import base64
 import hashlib
 import struct
 
@@ -31,7 +32,10 @@ def settings(tmp_path):
 
 @pytest.fixture
 def client(settings):
+    # Firmware-Verwaltung verlangt ein Web-Passwort; der Test-Client meldet sich an.
+    settings.web_user, settings.web_password = "fahrer", "geheim"
     with TestClient(create_app(settings)) as c:
+        c.headers["Authorization"] = "Basic " + base64.b64encode(b"fahrer:geheim").decode()
         yield c
 
 
@@ -117,3 +121,27 @@ def test_cli(tmp_path, capsys):
     bad = tmp_path / "b.bin"
     bad.write_bytes(b"x")
     assert main(["firmware", "add", str(bad), "--data-dir", d]) == 1
+
+
+def test_admin_needs_web_password(settings):
+    with TestClient(create_app(settings)) as c:  # kein Web-Passwort konfiguriert
+        assert upload(c, image()).status_code == 403
+        assert c.post("/api/v1/firmware/1/current").status_code == 403
+        assert c.delete("/api/v1/firmware/1").status_code == 403
+        assert "Web-Passwort" in c.delete("/api/v1/firmware/1").json()["detail"]
+
+
+def test_admin_needs_login(settings):
+    settings.web_user, settings.web_password = "fahrer", "geheim"
+    with TestClient(create_app(settings)) as c:  # Passwort gesetzt, aber nicht angemeldet
+        assert upload(c, image()).status_code == 401
+        assert c.post("/api/v1/firmware/1/current").status_code == 401
+        assert c.delete("/api/v1/firmware/1").status_code == 401
+        assert c.post("/api/v1/firmware/1/current", auth=("fahrer", "falsch")).status_code == 401
+        assert c.post("/api/v1/firmware/1/current", auth=("fahrer", "geheim")).status_code == 404
+
+
+def test_settings_page_hides_admin_without_password(settings):
+    with TestClient(create_app(settings)) as c:
+        html = c.get("/settings").text
+        assert 'id="fw-form"' not in html and "Firmware-Verwaltung nur mit Web-Passwort" in html
