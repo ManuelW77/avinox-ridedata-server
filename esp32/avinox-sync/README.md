@@ -83,7 +83,7 @@ Gespeichert wird im NVS, Namespace `cfg`: `wifi_ssid`, `wifi_pass`, `server_url`
 Läuft das Gerät normal im Heim-WLAN, bietet es auf Port 80 eine passwortgeschützte Weboberfläche an.
 
 - **Adresse:** `http://<IP des Geräts>/`. Die IP steht in der Geräteliste des Routers oder auf der Geräteseite des Servers.
-- **Login:** Benutzer `avinox`, Passwort = das Passwort des Einrichtungs-WLANs (Feld „Zugangspasswort“). Ohne gesetztes
+- **Login:** Benutzer `avinox` (fest), Passwort = Zugangspasswort = Passwort des Einrichtungs-WLANs. Ohne gesetztes
   Passwort (mindestens 8 Zeichen) startet die Oberfläche nicht. Nach 5 falschen Versuchen werden
   alle Anfragen dieser Client-IP 30 s lang mit 429 abgewiesen (auch mit richtigen Daten, andere Geräte sind nicht betroffen).
   Abgewiesene Anmeldungen stehen mit Grund, Benutzername und Passwortlänge (nie dem Passwort) im Log.

@@ -95,10 +95,14 @@ Then connect the ESP32's **native port** to the display with a USB-C cable. The 
 
 1. Power the ESP32. Without a configuration it starts setup mode and the LED blinks purple.
 2. With a phone or laptop, join the Wi-Fi `Avinox-Sync-XXXX`. The first time it is open. The portal usually opens by itself, otherwise browse to `http://192.168.4.1`.
-3. Pick your home Wi-Fi and enter its password. Enter the server URL (e.g. `http://<host>:8000`) and the upload token. Set your own password for the setup Wi-Fi (at least 8 characters).
+3. Pick your home Wi-Fi and enter its password. Enter the server URL (e.g. `http://<host>:8000`) and the upload token. Set an **access password** (at least 8 characters, not your home Wi-Fi password). It protects the setup Wi-Fi `Avinox-Sync-XXXX` and the ESP32 web interface.
 4. "Save and restart".
 
 Set up again: hold the BOOT button for 3 s. Factory reset: hold BOOT for 10 s.
+
+**Web interface in normal operation:** Once the ESP32 is on your home Wi-Fi, open `http://<ESP32 IP>/` (IP from your router). Login: user **`avinox`** (fixed), password = access password, the same as for the setup Wi-Fi. There you see the status and change Wi-Fi, server URL, token and password.
+
+**Fallback (password forgotten or wrong Wi-Fi entered):** Hold the BOOT button for 3 s and release it. The ESP32 then opens the setup Wi-Fi **without a password**, and you set a new access password when saving. Without saving it restarts normally after 15 min.
 
 ### d) Updates over Wi-Fi (OTA)
 
