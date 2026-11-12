@@ -24,6 +24,23 @@
 <section class="card" id="upload" style="margin-bottom:1rem">
   <h2>Dateien hochladen</h2>
   <p class="muted small">Wähle das USB-Laufwerk des Displays (oder eine Kopie davon) aus. Hochgeladen werden nur Fahrten, Nutzungsstatistik und HMS-Meldungen – die großen <code>ebike_log_*.dat</code> werden nie gelesen oder gesendet. Bereits bekannte Dateien werden erkannt.</p>
+  <p class="small"><strong>Diese Dateien werden übernommen:</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in upload_files %}
+      <tr><td><code>{{ f.paths }}</code></td><td class="muted">{{ f.label }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small"><strong>Nicht übernommen:</strong></p>
+  <table class="plain small">
+    <tbody>
+    {% for f in not_uploaded %}
+      <tr><td><code>{{ f.paths }}</code></td><td class="muted">{{ f.label }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Der ESP32 lädt dieselben Dateien hoch.</p>
   <div class="dropzone" id="dropzone">
     <p>Ordner hierher ziehen oder</p>
     <label class="btn ghost">Ordner auswählen<input type="file" id="folder-input" webkitdirectory multiple hidden></label>

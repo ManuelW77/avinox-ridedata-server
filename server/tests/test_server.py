@@ -174,6 +174,15 @@ def test_pages(client, settings):
     assert client.get("/rides/9999").status_code == 404
 
 
+def test_settings_lists_upload_files(client):
+    from avinox.server.store import PATTERNS, UPLOAD_FILES
+
+    page = client.get("/settings").text
+    assert "ride_rec_index.dat" in page
+    assert "ebike_log_" in page
+    assert {f["kind"] for f in UPLOAD_FILES} == set(PATTERNS)
+
+
 def test_pages_empty(client):
     for url in ("/", "/rides", "/device", "/settings"):
         assert client.get(url).status_code == 200, url
