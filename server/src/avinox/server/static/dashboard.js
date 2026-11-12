@@ -144,13 +144,15 @@
     return h ? h + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0") : mm + ":" + String(ss).padStart(2, "0");
   }
 
-  function barsHtml(data, cls) {
-    const entries = Object.entries(data || {}).filter(([, v]) => typeof v === "number");
+  function barsHtml(data, cls, zeroLabel) {
+    const zero = zeroLabel && data ? data["<1"] : 0;
+    const entries = Object.entries(data || {}).filter(([k, v]) => typeof v === "number" && !(zeroLabel && k === "<1"));
     const total = entries.reduce((a, [, v]) => a + v, 0);
     const peak = entries.reduce((a, [, v]) => Math.max(a, v), 0);
     const rows = entries.filter(([, v]) => v).map(([k, v]) =>
       `<div class="bar"><span class="label" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill ${cls || ""}" style="width: ${peak ? 100 * v / peak : 0}%"></span></span><span class="val">${dur(v)}</span></div>`).join("");
-    return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>`;
+    return `<div class="bars">${rows}${total ? "" : '<p class="muted small">' + esc(tr("mix.no_data")) + "</p>"}</div>` +
+      (zero ? `<p class="muted small">${esc(zeroLabel)}: ${dur(zero)}</p>` : "");
   }
 
   function renderMix() {
@@ -162,13 +164,13 @@
     const a = m.assist || {}, g = m.gears || {}, d = m.distributions || {};
     const modeRows = Object.entries(a.per_mode || {}).map(([name, x]) =>
       `<tr><td>${esc(name)}</td><td class="n">${fmt((x.distance_m || 0) / 1000, 1)} km</td><td class="n">${fmt(x.avg_moving_speed_kmh, 1)}</td><td class="n">${fmt(x.avg_motor_power_w, 0)} W</td><td class="n">${fmt(x.avg_rider_power_w, 0)} W</td></tr>`).join("");
-    const card = (title, sub, data, cls) =>
-      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls)}</section>`;
+    const card = (title, sub, data, cls, zeroLabel) =>
+      `<section class="card"><h2>${esc(title)}${sub ? ` <span class="muted small">${esc(sub)}</span>` : ""}</h2>${barsHtml(data, cls, zeroLabel)}</section>`;
     const cards = [
-      card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider"),
-      card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor"),
-      card(tr("mix.d.cadence"), tr("mix.cadence_unit"), d.cadence_s, "rider"),
-      card(tr("mix.d.speed"), "km/h", d.speed_s, ""),
+      card(tr("mix.d.rider"), tr("mix.in_motion"), d.rider_power_s, "rider", tr("mix.zero.rider")),
+      card(tr("mix.d.motor"), tr("mix.in_motion"), d.motor_power_s, "motor", tr("mix.zero.motor")),
+      card(tr("mix.d.cadence"), tr("mix.cadence_moving"), d.cadence_s, "rider", tr("mix.zero.cadence")),
+      card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", tr("mix.zero.speed")),
       card(tr("mix.d.gradient"), "%", d.gradient_s, ""),
     ];
     if (d.heart_rate_s) cards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
