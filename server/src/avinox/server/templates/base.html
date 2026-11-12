@@ -14,7 +14,8 @@
     <a class="brand" href="/"><img src="{{ url_for('static', path='icon-192.png') }}" alt=""> Avinox Ride Data</a>
     <nav>
       {% set p = request.url.path %}
-      <a href="/" {% if p == '/' or p.startswith('/rides') %}aria-current="page"{% endif %}>Fahrten</a>
+      <a href="/" {% if p == '/' %}aria-current="page"{% endif %}>Übersicht</a>
+      <a href="/rides" {% if p.startswith('/rides') %}aria-current="page"{% endif %}>Fahrten</a>
       <a href="/device" {% if p == '/device' %}aria-current="page"{% endif %}>Bike &amp; Akku</a>
       <a href="/settings" {% if p == '/settings' %}aria-current="page"{% endif %}>Einstellungen</a>
     </nav>

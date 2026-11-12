@@ -32,7 +32,7 @@ uv run pytest
 docker compose up -d --build
 ```
 
-Danach läuft die Webseite unter `http://<host>:8000/`, die API-Doku unter `http://<host>:8000/api/docs`. Alle Daten (Rohdateien, Datenbank, Token) liegen im Volume unter `/data`.
+Danach läuft die Webseite unter `http://<host>:8000/` (Übersicht mit Zeiträumen Tag/Woche/Monat/Jahr, Vergleich und Bestwerten; die Fahrtenliste unter `/rides`), die API-Doku unter `http://<host>:8000/api/docs`. Alle Daten (Rohdateien, Datenbank, Token) liegen im Volume unter `/data`.
 
 **Upload-Token:** Ohne `AVINOX_UPLOAD_TOKEN` erzeugt der Server beim ersten Start ein zufälliges Token und legt es in `/data/upload_token` ab:
 

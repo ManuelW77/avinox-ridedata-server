@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from ..analysis import CUSTOM_MODE_MIN, analyze
@@ -22,6 +22,7 @@ from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
 from ..ride_rec import RideRecError, parse_ride
 from ..track import to_geojson, to_gpx
+from . import dashboard
 from .config import Settings
 from .db import Database
 
@@ -330,6 +331,11 @@ class Store:
             m["ascent_m"] = round(m["ascent_m"] + (r["ascent_m"] or 0))
             m["moving_time_s"] += r["moving_time_s"]
         return {"total": total, "months": dict(sorted(months.items()))}
+
+    def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None) -> dict:
+        """Übersicht für die Startseite (siehe ``dashboard.build``). ``today`` nur für Tests."""
+        today = today or datetime.now(self.settings.tz).date()
+        return dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today)
 
     def device(self) -> dict:
         sessions = self.sessions()

@@ -167,7 +167,7 @@ def test_basic_auth_from_env(tmp_path, monkeypatch):
 def test_pages(client, settings):
     pk = put(client, settings, ride_bytes(assist=21)).json()["ride"]
     client.post("/api/v1/files", files=[("files", ("buried_rec/buried_file_cur.json", LINES.encode()))])
-    for url in ("/", f"/rides/{pk}", "/device", "/settings"):
+    for url in ("/", "/rides", f"/rides/{pk}", "/device", "/settings"):
         r = client.get(url)
         assert r.status_code == 200, url
         assert "text/html" in r.headers["content-type"]
@@ -175,7 +175,7 @@ def test_pages(client, settings):
 
 
 def test_pages_empty(client):
-    for url in ("/", "/device", "/settings"):
+    for url in ("/", "/rides", "/device", "/settings"):
         assert client.get(url).status_code == 200, url
 
 

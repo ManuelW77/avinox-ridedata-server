@@ -7,7 +7,7 @@ import os
 import re
 import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..analysis import ASSIST_LEVELS
 from .config import Settings, load_settings
+from .dashboard import PERIODS, day_text, emphasize
 from .store import PATTERNS, Store, UploadError
 
 log = logging.getLogger("avinox.server")
@@ -66,6 +67,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     templates.env.filters["duration"] = _fmt_duration
     templates.env.filters["localtime"] = local_time
+    templates.env.filters["emph"] = emphasize
+    templates.env.filters["day"] = lambda iso: day_text(date.fromisoformat(iso)) if iso else "ohne Datum"
     templates.env.tests["match"] = lambda value, pattern: re.match(pattern, str(value)) is not None
     templates.env.filters["num"] = lambda v, d=0: "–" if v is None else f"{v:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -166,6 +169,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def stats():
         return store.stats()
 
+    @app.get("/api/v1/dashboard", dependencies=[Depends(read_auth)], tags=["statistik"])
+    def dashboard_api(period: str = Query("week", pattern="^(day|week|month|year)$"), offset: int = Query(0, ge=0, le=10000)):
+        """Übersicht: Zeitreihe je Tag/Woche/Monat/Jahr, Vergleich zum Zeitraum davor, Bestwerte, Gesamt."""
+        return store.dashboard(period, offset)
+
     @app.get("/api/v1/device", dependencies=[Depends(read_auth)], tags=["statistik"])
     def device():
         return store.device()
@@ -213,7 +221,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(request, name, {"tile_url": settings.tile_url, "tile_attribution": settings.tile_attribution, **ctx})
 
     @app.get("/", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
-    def index(request: Request):
+    def dashboard_page(request: Request, period: str = "week", offset: int = 0):
+        if period not in PERIODS:
+            period = "week"
+        dash = store.dashboard(period, max(0, min(offset, 10000)))
+        return page(request, "dashboard.html", dash=dash)
+
+    @app.get("/rides", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
+    def rides_page(request: Request):
         return page(request, "index.html", rides=store.list_rides(), stats=store.stats())
 
     @app.get("/rides/{ride_pk}", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
