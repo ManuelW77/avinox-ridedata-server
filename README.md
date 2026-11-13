@@ -68,6 +68,7 @@ services:
       - avinox-data:/data
     environment:
       AVINOX_DATA_DIR: /data
+      # Start-Admin (schaltet den Login ein)
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "bitte-aendern"
 
@@ -87,7 +88,7 @@ Das Upload-Token für den ESP32 erzeugt der Server beim ersten Start:
 docker compose exec avinox cat /data/upload_token
 ```
 
-**Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` ist die Webseite für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
+**Login:** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` legen beim Start einen Administrator an und schalten den Login ein (Anmeldeformular, weitere Benutzer unter Einstellungen). Optional geht die Anmeldung über OpenID Connect (`AVINOX_OIDC_*`, siehe [server/README.md](server/README.md)). **Achtung:** Ohne Benutzer und OIDC ist die Webseite für jeden im LAN offen. Nicht ohne Login ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
 
 ### b) ESP32 einmalig flashen
 
@@ -117,7 +118,7 @@ Neu einrichten: BOOT-Taste 3 s halten. Werkseinstellung: BOOT-Taste 10 s halten.
 
 ### d) Updates per WLAN (OTA)
 
-Neue `avinox-sync.bin` (aus dem Release) auf dem Server unter **Einstellungen → Firmware** hochladen und als aktuell setzen. Das geht nur mit gesetztem Web-Passwort. Der ESP32 prüft nach jedem Sync und spätestens alle 6 Stunden, lädt die neue Version und startet neu. Meldet sich die neue Firmware nicht beim Server, kehrt er zur alten zurück.
+Neue `avinox-sync.bin` (aus dem Release) auf dem Server unter **Einstellungen → Firmware** hochladen und als aktuell setzen. Das geht nur mit eingeschaltetem Login und als Administrator. Der ESP32 prüft nach jedem Sync und spätestens alle 6 Stunden, lädt die neue Version und startet neu. Meldet sich die neue Firmware nicht beim Server, kehrt er zur alten zurück.
 
 ## Ablauf eines Syncs
 

@@ -28,7 +28,17 @@ uv run pytest
 
 ## Firmware-Verwaltung
 
-Hochladen, als aktuell setzen und Löschen von ESP32-Firmware (Weboberfläche und `/api/v1/firmware`) ist nur mit gesetztem Web-Passwort (`AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD`) und Anmeldung möglich; sonst antwortet der Server mit 403, denn Firmware läuft per OTA als Code auf dem ESP32. Ohne Web-Passwort geht es lokal auf dem Server mit `avinox firmware add`.
+Hochladen, als aktuell setzen und Löschen von ESP32-Firmware (Weboberfläche und `/api/v1/firmware`) ist nur mit aktivem Login (siehe unten) und als Administrator möglich; sonst antwortet der Server mit 403, denn Firmware läuft per OTA als Code auf dem ESP32. Ohne Login geht es lokal auf dem Server mit `avinox firmware add`.
+
+## Login und OIDC
+
+Der Login ist aktiv, sobald es mindestens einen Benutzer gibt oder OIDC eingerichtet ist. Sonst bleibt alles im LAN offen wie bisher.
+
+- **Start-Admin:** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` legen beim Start einen Administrator an, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben). Weitere Benutzer, Passwortänderung und Zurücksetzen: Einstellungen, Karte „Anmeldung“.
+- **Webseite:** Anmeldeformular unter `/login`, optional „Angemeldet bleiben“ (30 Tage, sonst 12 Stunden). Sessions liegen serverseitig in SQLite und überleben einen Neustart. Nach 10 Fehlversuchen in 15 Minuten (je IP und Benutzer) wird die Anmeldung kurz gesperrt.
+- **API und Skripte:** `/api/v1/...` antwortet ohne Anmeldung mit 401. Zusätzlich zum Session-Cookie geht Basic Auth (`curl -u benutzer:passwort`) für Passwortbenutzer. Der ESP32 nutzt weiter nur das Upload-Token.
+- **OIDC (optional):** `AVINOX_OIDC_ISSUER` und `AVINOX_OIDC_CLIENT_ID` (dazu meist `AVINOX_OIDC_CLIENT_SECRET`) einrichten, beim Anbieter die Redirect-URI `<Adresse>/auth/oidc/callback` eintragen (Adresse = `AVINOX_PUBLIC_URL` oder die aufgerufene). `AVINOX_OIDC_ALLOWED` begrenzt auf E-Mail-Adressen oder Gruppen (Claim `groups`), `AVINOX_OIDC_ADMIN` bestimmt die Administratoren (leer = alle OIDC-Benutzer), `AVINOX_OIDC_NAME` ist die Beschriftung des Knopfes. Es wird PKCE (S256) mit `state` und `nonce` genutzt. OIDC-Benutzer werden nie automatisch mit einem Passwortbenutzer gleichen Namens verknüpft.
+- Hinter HTTPS-Proxy bekommt das Session-Cookie automatisch `Secure` (Proxy-Header, siehe `FORWARDED_ALLOW_IPS`).
 
 ## Server (Docker)
 
@@ -48,7 +58,7 @@ Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setz
 
 Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellung (Assets werden wurzelrelativ verlinkt). Damit Sync-Log und Fehlermeldungen die echte Client-IP zeigen, die IP des Proxys als `FORWARDED_ALLOW_IPS` setzen (z. B. `FORWARDED_ALLOW_IPS: "172.18.0.1"`). Nicht `*` verwenden: Dann kann jeder Client seine IP fälschen.
 
-**Achtung:** Ohne `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Passwort ins Internet stellen.
+**Achtung:** Ohne Login (kein Benutzer, kein OIDC) sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Login ins Internet stellen.
 
 ### Umgebungsvariablen
 
@@ -56,7 +66,12 @@ Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellun
 |---|---|---|
 | `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
 | `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
-| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
+| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Start-Admin, wird beim Start angelegt, falls es den Benutzer noch nicht gibt; aktiviert den Login |
+| `AVINOX_OIDC_ISSUER` / `AVINOX_OIDC_CLIENT_ID` / `AVINOX_OIDC_CLIENT_SECRET` | leer | Anmeldung über OpenID Connect (Secret optional) |
+| `AVINOX_OIDC_NAME` | `SSO` | Beschriftung des Knopfes „Mit … anmelden“ |
+| `AVINOX_OIDC_SCOPES` | `openid email profile` | Angeforderte Scopes |
+| `AVINOX_OIDC_ALLOWED` | leer | Kommagetrennt: erlaubte E-Mails oder Gruppen; leer = jeder, den der Anbieter durchlässt |
+| `AVINOX_OIDC_ADMIN` | leer | Wer Administrator wird (gleiche Schreibweise); leer = alle OIDC-Benutzer |
 | `AVINOX_PUBLIC_URL` | leer | Adresse(n) des Servers für den ESP32, kommagetrennt, z. B. `https://avinox.example.org,http://192.168.1.18:8000`; die Einstellungsseite bietet zusätzlich die aufgerufene Adresse und die LAN-IP an |
 | `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
 | `AVINOX_MAP_STYLE` | `https://tiles.openfreemap.org/styles/liberty` | Style-URL (MapLibre, Vektorkarte) für Fahrtkarte und 3D-Ansicht; die 3D-Höhen kommen von den AWS Terrain Tiles |

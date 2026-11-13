@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ t('login.title') }} – Avinox Ride Data{% endblock %}
+{% block main %}
+<div class="login-box">
+  <h1>{{ t('login.title') }}</h1>
+  <section class="card stack">
+    {% if error %}<p class="notice login-error" role="alert">{{ t(error) }}</p>{% endif %}
+    <form method="post" action="/login" class="stack">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label class="field">{{ t('login.user') }}
+        <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+      </label>
+      <label class="field">{{ t('login.password') }}
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <label class="switch-row"><input type="checkbox" class="switch" name="remember" value="1"> <span>{{ t('login.remember') }}</span></label>
+      <div class="actions"><button type="submit" class="btn">{{ t('login.submit') }}</button></div>
+    </form>
+    {% if oidc_name %}
+    <div class="actions"><a class="btn ghost" href="/auth/oidc/login?next={{ next | urlencode }}">{{ t('login.oidc', name=oidc_name) }}</a></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

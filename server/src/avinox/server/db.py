@@ -111,6 +111,29 @@ CREATE TABLE IF NOT EXISTS ride_hr (
     fetched_at  TEXT NOT NULL
 );
 
+-- Anmeldung: Passwortbenutzer (password_hash) und OIDC-Benutzer (oidc_issuer + oidc_sub)
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY,
+    username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT,                 -- scrypt$n$r$p$salt$hash; NULL = nur über OIDC
+    oidc_sub      TEXT,
+    oidc_issuer   TEXT,
+    email         TEXT,
+    is_admin      INTEGER NOT NULL DEFAULT 0,
+    created       TEXT NOT NULL,
+    last_login    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_oidc ON users(oidc_issuer, oidc_sub) WHERE oidc_sub IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,        -- SHA-256 des Cookie-Tokens, nie der Klartext
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created    TEXT NOT NULL,
+    expires    TEXT NOT NULL,
+    last_seen  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+
 CREATE TABLE IF NOT EXISTS geocache (
     key        TEXT PRIMARY KEY,    -- "lat,lon" auf 3 Nachkommastellen gerundet
     name       TEXT,                -- NULL = Dienst kannte nichts

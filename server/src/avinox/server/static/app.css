@@ -93,6 +93,13 @@ h3 { font-size: 0.95rem; color: var(--ink-2); font-weight: 600; margin-bottom: 0
   text-decoration: none; color: var(--ink-2); padding: 0.4rem 0.75rem; border-radius: 999px;
 }
 .top nav a[aria-current="page"], .top nav a:hover { background: var(--surface-2); color: var(--ink); }
+.top.bare .theme-toggle { margin-left: auto; }
+.logout-form { margin: 0; flex: none; }
+.login-box { max-width: 24rem; margin: 1.5rem auto; }
+.login-box h1 { margin-bottom: 1rem; }
+.login-error { color: var(--warn); }
+.users-table { width: 100%; }
+.users-table td { vertical-align: middle; }
 .theme-toggle {
   width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
   border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; flex: none;
@@ -247,6 +254,8 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
   .top { flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; }
   .top nav { margin-left: 0; width: 100%; order: 3; }
   .theme-toggle { margin-left: auto; order: 2; }
+  .logout-form { order: 2; margin-left: auto; }
+  .logout-form + .theme-toggle { margin-left: 0; }
   main { padding: 0.25rem 1rem 3rem; }
   .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
   #map { height: 340px; }
