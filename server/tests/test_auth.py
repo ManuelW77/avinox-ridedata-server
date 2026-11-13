@@ -170,8 +170,10 @@ def test_basic_auth_fallback_for_api(login_settings):
         assert c.get("/api/v1/rides", auth=(ADMIN, ADMIN_PW)).status_code == 200
         assert c.get("/api/v1/rides", auth=(ADMIN, "falsch")).status_code == 401
         assert c.get("/api/v1/rides", auth=("niemand", ADMIN_PW)).status_code == 401
-        # Basic braucht keinen CSRF-Schutz
-        assert c.delete("/api/v1/rides/9999", auth=(ADMIN, ADMIN_PW), headers={"Origin": "https://evil.example"}).status_code == 404
+        # Basic ohne Origin (Skript) geht durch, mit fremder Origin (Browser) nicht
+        assert c.delete("/api/v1/rides/9999", auth=(ADMIN, ADMIN_PW)).status_code == 404
+        assert c.delete("/api/v1/rides/9999", auth=(ADMIN, ADMIN_PW), headers={"Origin": "https://evil.example"}).status_code == 403
+        assert c.delete("/api/v1/rides/9999", auth=(ADMIN, ADMIN_PW), headers={"Origin": "http://testserver"}).status_code == 404
         # OIDC-Benutzer ohne Passwort können sich nicht per Basic anmelden
         c.app.state.auth.create_user("sso-user", None, True, oidc_issuer="x", oidc_sub="1")
         assert c.get("/api/v1/rides", auth=("sso-user", "")).status_code == 401
@@ -504,8 +506,12 @@ def test_oidc_allowed_list(oidc_settings, idp):
     with oidc_client(oidc_settings, idp) as c:
         q = start_oidc(c, idp)
         assert c.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]}).headers["location"] == "/rides"
-    idp.claims.update(groups=[], email="chef@example.test", sub="sub-9", preferred_username="chef")
-    with oidc_client(oidc_settings, idp) as c:  # E-Mail passt
+    idp.claims.update(groups=[], email="chef@example.test", sub="sub-8", preferred_username="chef0")
+    with oidc_client(oidc_settings, idp) as c:  # E-Mail ohne email_verified zählt nicht
+        q = start_oidc(c, idp)
+        assert "error=denied" in c.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]}).headers["location"]
+    idp.claims.update(email_verified=True, sub="sub-9", preferred_username="chef")
+    with oidc_client(oidc_settings, idp) as c:  # bestätigte E-Mail passt
         q = start_oidc(c, idp)
         assert c.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]}).headers["location"] == "/rides"
     idp.claims.update(email_verified=False, sub="sub-10", preferred_username="x")  # unbestätigte E-Mail zählt nicht
