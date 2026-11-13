@@ -465,7 +465,7 @@ html { scroll-behavior: smooth; }
 .status-box.good .dot { background: var(--hill); }
 .status-box.watch .dot { background: var(--caution); }
 .status-box.check .dot { background: var(--crit); }
-.bars.mini .bar { grid-template-columns: 8.5rem 1fr 5.5rem; }
+.bars.compact .bar { grid-template-columns: 8.5rem 1fr 5.5rem; }
 
 /* Auswahlfelder (Pill-Look wie die Werkzeugleiste) */
 select {
@@ -561,3 +561,5 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   background: color-mix(in srgb, var(--accent, var(--ink-3)) 16%, var(--surface));
 }
 .page-dash .chart-head > .muted.small:last-child { white-space: nowrap; }
+
+.legend i.dash { width: 14px; height: 0; border-radius: 0; border-top: 2px dashed var(--ink-3); vertical-align: 3px; }
