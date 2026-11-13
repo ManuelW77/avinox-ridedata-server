@@ -235,6 +235,18 @@
 </div>
 {% endif %}
 
+<dialog class="confirm-dialog" id="delete-dialog" aria-labelledby="delete-dialog-title">
+  <form method="dialog">
+    <h2 id="delete-dialog-title">{{ t('ride.delete_title') }}</h2>
+    <p><strong>{{ ride.name }}</strong></p>
+    <p>{{ t('ride.delete_text') }}</p>
+    <div class="actions">
+      <button type="submit" class="btn ghost" value="cancel" autofocus>{{ t('ride.delete_cancel') }}</button>
+      <button type="submit" class="btn btn-danger" value="delete" id="delete-confirm">{{ t('ride.delete') }}</button>
+    </div>
+  </form>
+</dialog>
+
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "map_style": map_style, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
