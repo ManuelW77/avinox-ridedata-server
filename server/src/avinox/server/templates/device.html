@@ -104,10 +104,31 @@
     {% endif %}
   </section>
 
-  <section class="card">
-    <h2>{{ t('bh.balance.title') }}</h2>
+  <div class="grid cols-2 folds">
+  {% set deltas = hist | selectattr('max_cell_delta_mv') | list %}
+  <details class="card fold">
+    <summary><h2>{{ t('cell.title') }}</h2>{% if deltas %}<span class="muted small">{{ deltas[0].max_cell_delta_mv | num }} mV</span>{% endif %}</summary>
+    <p class="muted small">{{ t('cell.text') }}</p>
+    {% if deltas %}
+    {% set peak = deltas | map(attribute='max_cell_delta_mv') | max %}
+    <div class="bars wide">
+      {% for h in deltas[:30] %}
+      <div class="bar">
+        <span class="label">{{ h.time | localtime('%d.%m.%y %H:%M') if h.time else '–' }}</span>
+        <span class="track"><span class="fill" style="width: {{ (100 * h.max_cell_delta_mv / peak) if peak else 0 }}%"></span></span>
+        <span class="val">{{ h.max_cell_delta_mv | num }} mV</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% if deltas | length > 30 %}<p class="muted small">{{ t('cell.shown', n=deltas | length) }}</p>{% endif %}
+    {% else %}
+    <p class="muted">{{ t('dev.nostats') }}</p>
+    {% endif %}
+  </details>
+  {% set rp = bh.rest_balance.points %}
+  <details class="card fold">
+    <summary><h2>{{ t('bh.balance.title') }}</h2>{% if rp %}<span class="muted small">{{ rp[-1].delta_mv | num }} mV</span>{% endif %}</summary>
     <p class="muted small">{{ t('bh.balance.text') }}</p>
-    {% set rp = bh.rest_balance.points %}
     {% if rp %}
     {% set peak = rp | map(attribute='delta_mv') | max %}
     <div class="bars wide">
@@ -122,7 +143,9 @@
     {% else %}
     <p class="muted">{{ t('bh.few') }}</p>
     {% endif %}
-  </section>
+  </details>
+  </div>
+
 
   <section class="card">
     <h2>{{ t('bh.sag.title') }}</h2>
@@ -144,26 +167,6 @@
     {% endif %}
   </section>
 
-  <section class="card">
-    <h2>{{ t('cell.title') }}</h2>
-    <p class="muted small">{{ t('cell.text') }}</p>
-    {% set deltas = hist | selectattr('max_cell_delta_mv') | list %}
-    {% if deltas %}
-    {% set peak = deltas | map(attribute='max_cell_delta_mv') | max %}
-    <div class="bars wide">
-      {% for h in deltas[:30] %}
-      <div class="bar">
-        <span class="label">{{ h.time | localtime('%d.%m.%y %H:%M') if h.time else '–' }}</span>
-        <span class="track"><span class="fill" style="width: {{ (100 * h.max_cell_delta_mv / peak) if peak else 0 }}%"></span></span>
-        <span class="val">{{ h.max_cell_delta_mv | num }} mV</span>
-      </div>
-      {% endfor %}
-    </div>
-    {% if deltas | length > 30 %}<p class="muted small">{{ t('cell.shown', n=deltas | length) }}</p>{% endif %}
-    {% else %}
-    <p class="muted">{{ t('dev.nostats') }}</p>
-    {% endif %}
-  </section>
 </div>
 
 <div class="block t-motor" id="sec-history" data-jump="{{ t('hist.title') }}">
@@ -193,7 +196,7 @@
     {% for h in hist %}
     <tr>
       <td>{{ h.time | localtime('%d.%m.%Y %H:%M') if h.time else '–' }}</td>
-      <td class="n">{{ h.start_pct | num }}</td><td class="n">{{ h.end_pct | num }}</td>
+      <td class="n">{{ '–' if h.start_pct == 0 and h.start_temp_c == 0 else h.start_pct | num }}</td><td class="n">{{ h.end_pct | num }}</td>
       <td class="n">{{ h.min_cell_mv | num }}</td><td class="n">{{ h.max_cell_mv | num }}</td>
       <td class="n">{{ h.max_cell_delta_mv | num }}</td>
       <td class="n">{{ h.max_current_a | num(1) }}</td><td class="n">{{ h.max_temp_c | num }}</td>
