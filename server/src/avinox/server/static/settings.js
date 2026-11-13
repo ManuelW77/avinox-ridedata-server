@@ -96,6 +96,78 @@
     });
   }
 
+  // ---- KI-Auswertung
+  const aiSave = document.getElementById("ai-save");
+  if (aiSave) {
+    const $ = (id) => document.getElementById(id);
+    const jsonHdr = { "Content-Type": "application/json" };
+    let presets = [];
+    const msg = (text) => { $("ai-msg").textContent = text || ""; $("ai-msg").hidden = !text; };
+    const errMsg = (data, res) => (data && (data.message || (data.detail && (data.detail.message || data.detail)))) || tr("error_n", { n: res.status });
+    const showAi = (d) => {
+      presets = d.presets || presets;
+      const sel = $("ai-provider");
+      if (sel.options.length !== presets.length) {
+        sel.textContent = "";
+        presets.forEach((p) => { const o = document.createElement("option"); o.value = p.id; o.textContent = p.name; sel.appendChild(o); });
+      }
+      $("ai-enabled").checked = !!d.enabled;
+      sel.value = d.provider || "";
+      $("ai-url").value = d.base_url || "";
+      $("ai-model").value = d.model || "";
+      $("ai-lang").value = d.lang === "en" ? "en" : "de";
+      $("ai-key").value = "";
+      $("ai-key").placeholder = d.has_key ? (d.key_hint || "…") : "";
+      $("ai-key-clear").hidden = !d.has_key;
+      const c = d.counts || {};
+      $("ai-status").textContent = d.busy ? tr("ai_busy") : tr("ai_counts", { done: c.done || 0, pending: c.pending || 0, errors: c.errors || 0 });
+      $("ai-counts").textContent = d.last_error ? "· " + tr("ai_last_error", { m: d.last_error }) : "";
+    };
+    fetch("/api/v1/settings/ai").then((r) => r.json()).then(showAi).catch(() => {});
+    $("ai-provider").addEventListener("change", () => {
+      const p = presets.find((x) => x.id === $("ai-provider").value);
+      if (p) { $("ai-url").value = p.base_url || ""; $("ai-model").value = p.model || ""; }
+    });
+    const put = async (body, okText) => {
+      msg("");
+      try {
+        const res = await fetch("/api/v1/settings/ai", { method: "PUT", headers: jsonHdr, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(errMsg(data, res), "error"); return false; }
+        showAi(data); toast(okText || tr("autosaved")); return true;
+      } catch (e) { toast(tr("error_msg", { m: e.message }), "error"); return false; }
+    };
+    $("ai-enabled").addEventListener("change", async () => { if (!(await put({ enabled: $("ai-enabled").checked }))) $("ai-enabled").checked = !$("ai-enabled").checked; });
+    const formBody = () => {
+      const b = { provider: $("ai-provider").value, base_url: $("ai-url").value.trim(), model: $("ai-model").value.trim(), lang: $("ai-lang").value, enabled: $("ai-enabled").checked };
+      if ($("ai-key").value) b.api_key = $("ai-key").value;
+      return b;
+    };
+    aiSave.addEventListener("click", () => put(formBody(), tr("saved")));
+    $("ai-key-clear").addEventListener("click", () => put({ api_key: "" }, tr("ai_key_removed")));
+    $("ai-test").addEventListener("click", async () => {
+      msg("");
+      if (!(await put(formBody(), tr("saved")))) return;
+      $("ai-test").disabled = true;
+      try {
+        const res = await fetch("/api/v1/settings/ai/test", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) { msg(tr("ai_test_ok", { model: data.model || "", reply: data.reply || "" })); toast(tr("ai_test_toast")); }
+        else { msg(tr("ai_test_fail", { m: errMsg(data, res) })); toast(tr("ai_test_toast_fail"), "error"); }
+      } catch (e) { msg(tr("ai_test_fail", { m: e.message })); }
+      finally { $("ai-test").disabled = false; }
+    });
+    $("ai-fill").addEventListener("click", async () => {
+      msg("");
+      try {
+        const res = await fetch("/api/v1/settings/ai/fill", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(errMsg(data, res), "error"); return; }
+        showAi(data); msg(tr("ai_queued", { n: data.queued || 0 }));
+      } catch (e) { toast(tr("error_msg", { m: e.message }), "error"); }
+    });
+  }
+
   // ---- Ortsnamen an/aus
   const geoBox = document.getElementById("geo-enabled");
   if (geoBox) {

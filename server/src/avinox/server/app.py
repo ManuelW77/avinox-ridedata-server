@@ -24,6 +24,7 @@ from urllib.parse import urlencode, urlsplit
 
 from ..analysis import ASSIST_LEVELS
 from . import i18n
+from . import ai
 from . import healthlog
 from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next
 from .geocode import Nominatim
@@ -183,11 +184,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.exception("HealthLog-Worker")
             hl_wake.wait(600)
 
+    # KI-Texte: Worker arbeitet die Warteschlange ab (nur bei eingerichteter und eingeschalteter KI)
+    ai_queue = ai.AiQueue()
+    ai_thread: threading.Thread | None = None
+
+    def ai_worker() -> None:
+        while not geo_stop.is_set():
+            ai_queue.wake.clear()
+            try:
+                if app.state.ai_paused:  # Test-Haken: Worker lässt die Warteschlange in Ruhe
+                    pass
+                elif ai.is_active(store.db):
+                    if ai_queue.take_scan():
+                        ai.enqueue_new(store, ai_queue)
+                    while not geo_stop.is_set() and (job := ai_queue.pop()):
+                        try:
+                            ai.process(store, job, call=app.state.ai_call)
+                        except ai.AiError:
+                            ai_queue.clear()  # Schlüssel/Adresse kaputt: nicht weiter hämmern
+                        except Exception:
+                            log.exception("KI-Worker (%s)", job)
+                else:
+                    ai_queue.clear()
+                    ai_queue.take_scan()
+            except Exception:  # Worker darf nie sterben
+                log.exception("KI-Worker")
+            if not geo_stop.is_set() and not ai_queue.wake.is_set():
+                ai_queue.wake.wait(600)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        nonlocal geo_thread, hl_thread
+        nonlocal geo_thread, hl_thread, ai_thread
         hl_thread = threading.Thread(target=hl_worker, name="healthlog", daemon=True)
         hl_thread.start()
+        ai_thread = threading.Thread(target=ai_worker, name="ai", daemon=True)
+        ai_thread.start()
+        ai_queue.request_scan()  # nach dem Start: Fahrten ohne Text nachholen
         if settings.geocode_url:
             geo_thread = threading.Thread(
                 target=geo_worker, args=(Nominatim(settings.geocode_url, f"avinox-ridedata-server/{APP_VERSION}"),), name="geocode", daemon=True
@@ -199,8 +231,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             geo_stop.set()
             geo_wake.set()
             hl_wake.set()
+            ai_queue.wake.set()
             if hl_thread:
                 hl_thread.join(timeout=15)
+            if ai_thread:
+                ai_thread.join(timeout=15)
             if geo_thread:
                 geo_thread.join(timeout=15)
             store.close()
@@ -209,6 +244,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.state.synclog = synclog
     app.state.settings = settings
+    app.state.ai_queue = ai_queue
+    app.state.ai_call = None  # Test-Haken: callable(messages) -> str statt echtem LLM-Aufruf
+    app.state.ai_paused = False
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
     app.state.templates = templates
@@ -430,6 +468,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if result.get("new"):
                 geo_wake.set()
                 hl_wake.set()
+                ai_queue.request_scan()
             synclog.event("file_new" if result.get("new") else "file_known", ip, dev, path=result["path"], size=size, status=200)
         return JSONResponse(result, status_code=409 if result.get("conflict") else 200)
 
@@ -702,6 +741,65 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         healthlog.disconnect(store.db)
         return healthlog_state()
 
+    def ai_state() -> dict:
+        return {**ai.settings_view(store.db), "counts": {**store.ai_counts(), "pending": ai_queue.size()}, "busy": ai_queue.busy()}
+
+    def ai_http_error(exc: ai.AiError) -> HTTPException:
+        code = 400 if exc.code in ("not_configured", "bad_request", "bad_url", "invalid") else 401 if exc.code == "invalid_key" else 502
+        return HTTPException(code, {"error": exc.code, "message": str(exc)})
+
+    @app.get("/api/v1/settings/ai", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_ai():
+        return ai_state()
+
+    @app.put("/api/v1/settings/ai", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def put_ai(payload: dict):
+        try:
+            ai.update_settings(store.db, payload)
+        except ai.AiError as exc:
+            raise HTTPException(400, {"error": exc.code, "message": str(exc)}) from exc
+        ai_queue.wake.set()
+        return ai_state()
+
+    @app.post("/api/v1/settings/ai/test", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def test_ai():
+        try:
+            if app.state.ai_call:
+                reply = app.state.ai_call([{"role": "user", "content": "ok"}])
+                return {"ok": True, "model": ai.model_of(store.db), "reply": str(reply)[:200]}
+            return ai.probe(store.db)
+        except ai.AiError as exc:
+            raise ai_http_error(exc) from exc
+
+    @app.post("/api/v1/settings/ai/fill", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def fill_ai():
+        n = ai.enqueue_fill(store, ai_queue, ai.lang_of(store.db)) if ai.is_active(store.db) else 0
+        return {"queued": n, **ai_state()}
+
+    def ai_lang_param(lang: str | None) -> str:
+        return lang if lang in ai.LANGS else ai.lang_of(store.db)
+
+    @app.get("/api/v1/ai/ride/{ride_pk}", dependencies=[Depends(read_auth)], tags=["ki"])
+    def ai_ride(ride_pk: int, lang: str | None = Query(None, max_length=8)):
+        """KI-Text zu einer Fahrt: ``status`` off | pending | ready | stale | error | none."""
+        if not store.db.one("SELECT 1 FROM rides WHERE id = ?", (ride_pk,)):
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        if not ai.is_active(store.db):
+            return ai.lookup(store, ai_queue, "ride", str(ride_pk), "de", None)
+        lang = ai_lang_param(lang)
+        return ai.lookup(store, ai_queue, "ride", str(ride_pk), lang, ai.ride_facts(store, ride_pk))
+
+    @app.get("/api/v1/ai/dashboard", dependencies=[Depends(read_auth)], tags=["ki"])
+    def ai_dashboard(period: str = Query("week", pattern="^(week|month|year|all)$"), offset: int = Query(0, ge=0, le=10000),
+                     compare: str = Query("elapsed", pattern="^(elapsed|full)$"), lang: str | None = Query(None, max_length=8)):
+        """KI-Text zu einem Zeitraum (Parameter wie ``/api/v1/dashboard``)."""
+        if not ai.is_active(store.db):
+            return ai.lookup(store, ai_queue, "period", "all", "de", None)
+        lang = ai_lang_param(lang)
+        # fester Vergleichsmodus: Text hängt nicht vom Umschalter ab und veraltet nicht täglich
+        dash = store.dashboard(period, offset, lang=lang, compare_mode=ai.COMPARE_MODE)
+        return ai.lookup(store, ai_queue, "period", ai.period_ref(dash), lang, ai.period_facts(dash))
+
     @app.post("/api/v1/files", dependencies=[Depends(read_auth)], tags=["upload"])
     async def upload_files(request: Request):
         """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl).
@@ -726,6 +824,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if r["new"]:
                     geo_wake.set()
                     hl_wake.set()
+                    ai_queue.request_scan()
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
                 synclog.event("file_new" if r["new"] else "file_known", ip, None, path=normalize_path(f.filename or ""), size=len(data), status=200, detail="Browser")
             except UploadError as exc:

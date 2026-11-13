@@ -40,6 +40,14 @@ Der Login ist aktiv, sobald es mindestens einen Benutzer gibt oder OIDC eingeric
 - **OIDC (optional):** `AVINOX_OIDC_ISSUER` und `AVINOX_OIDC_CLIENT_ID` (dazu meist `AVINOX_OIDC_CLIENT_SECRET`) einrichten, beim Anbieter die Redirect-URI `<Adresse>/auth/oidc/callback` eintragen (Adresse = `AVINOX_PUBLIC_URL` oder die aufgerufene). `AVINOX_OIDC_ALLOWED` begrenzt auf E-Mail-Adressen oder Gruppen (Claim `groups`; E-Mails zählen nur mit `email_verified: true` im ID-Token), `AVINOX_OIDC_ADMIN` bestimmt die Administratoren (leer = alle OIDC-Benutzer), `AVINOX_OIDC_NAME` ist die Beschriftung des Knopfes. Es wird PKCE (S256) mit `state` und `nonce` genutzt. OIDC-Benutzer werden nie automatisch mit einem Passwortbenutzer gleichen Namens verknüpft.
 - Hinter HTTPS-Proxy bekommt das Session-Cookie automatisch `Secure` (Proxy-Header, siehe `FORWARDED_ALLOW_IPS`).
 
+## KI-Auswertung (optional)
+
+Ein Sprachmodell formuliert aus berechneten Kennzahlen kurze Texte und Tipps zu einer Fahrt bzw. einem Zeitraum (Fahrtseite und Übersicht). Standardmäßig aus.
+
+**Einrichtung** (Einstellungen, oder per API `PUT /api/v1/settings/ai`): Anbieter wählen, Schlüssel eintragen, Modell prüfen, einschalten. Genutzt wird das OpenAI-kompatible Format `POST {Adresse}/chat/completions`; Voreinstellungen für OpenRouter, OpenAI, Anthropic, Mistral, Groq und Ollama (lokal, ohne Schlüssel), dazu „Eigene Adresse“ (z. B. LM Studio). Der Schlüssel liegt nur in der Datenbank und wird nie von der API zurückgegeben (nur die letzten vier Zeichen). `POST /api/v1/settings/ai/test` prüft die Verbindung, `POST /api/v1/settings/ai/fill` erstellt fehlende Texte für alle Fahrten ab 1 km und alle Zeiträume nach. Neue Fahrten werden im Hintergrund automatisch ausgewertet; geänderte Daten oder ein Modellwechsel erzeugen den Text neu.
+
+**Gesendet werden nur Kennzahlen:** Strecke, Dauer, Tempo, Höhenmeter, Fahrer-/Motorleistung, Motoranteil, Trittfrequenz, Puls, Zeit je Unterstützungsmodus und Gang, Schaltvorgänge, Steigungsbereiche, Akku, Vergleich mit den anderen Fahrten bzw. dem Vorzeitraum, Bestwerte. **Nie** gesendet werden GPS-Daten, Ortsnamen, Fahrt- und Dateinamen, Seriennummern oder Benutzernamen. Bei einem Cloud-Anbieter verlassen diese Zahlen den Server; mit Ollama bleibt alles lokal.
+
 ## Server (Docker)
 
 ```sh

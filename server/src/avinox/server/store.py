@@ -462,6 +462,7 @@ class Store:
             self.db.execute("DELETE FROM rides WHERE id = ?", (ride_pk,))
             self.db.execute("DELETE FROM ride_meta WHERE path = ?", (path,))
             self.db.execute("DELETE FROM ride_hr WHERE path = ?", (path,))
+            self.db.execute("DELETE FROM ai_texts WHERE kind = 'ride' AND ref = ?", (str(ride_pk),))
             for key in [k for k in self._derived_cache if k[0] == ride_pk]:
                 del self._derived_cache[key]
             self._sessions = None
@@ -473,6 +474,38 @@ class Store:
                 if not shared:
                     self._raw_path(f["sha256"]).unlink(missing_ok=True)
             return True
+
+    # ------------------------------------------------------------------ KI-Texte
+
+    def ai_text(self, kind: str, ref: str, lang: str) -> dict | None:
+        row = self.db.one("SELECT * FROM ai_texts WHERE kind = ? AND ref = ? AND lang = ?", (kind, ref, lang))
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["content"] = json.loads(row["content"]) if row["content"] else None
+        except ValueError:
+            d["content"] = None
+        return d
+
+    def ai_save(self, kind: str, ref: str, lang: str, input_hash: str, content: dict | None, model: str | None, error: str | None = None) -> None:
+        """Erfolg (``error=None``) ersetzt den Text; bei Fehler bleibt der alte Text erhalten."""
+        old = self.ai_text(kind, ref, lang)
+        if content is None and old:
+            content, model = old["content"], old["model"]
+        self.db.execute(
+            "INSERT OR REPLACE INTO ai_texts(kind, ref, lang, input_hash, content, model, created_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (kind, ref, lang, input_hash, json.dumps(content, ensure_ascii=False) if content is not None else None, model, _now(), error),
+        )
+
+    def ai_counts(self) -> dict:
+        row = self.db.one("SELECT SUM(error IS NULL AND content IS NOT NULL) AS done, SUM(error IS NOT NULL) AS errors FROM ai_texts")
+        return {"done": int(row["done"] or 0), "errors": int(row["errors"] or 0)}
+
+    def ai_known(self, lang: str) -> dict[tuple[str, str], dict]:
+        """(kind, ref) -> {model, error} aller Texte einer Sprache."""
+        return {(r["kind"], r["ref"]): {"model": r["model"], "error": r["error"]}
+                for r in self.db.query("SELECT kind, ref, model, error FROM ai_texts WHERE lang = ?", (lang,))}
 
     # ------------------------------------------------------------------ HealthLog-Puls
 

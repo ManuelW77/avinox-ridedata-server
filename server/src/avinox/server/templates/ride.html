@@ -59,6 +59,7 @@
     {% if a.battery.used_pct is not none %}{{ figure_text(a.battery.start_pct ~ ' → ' ~ a.battery.end_pct ~ ' %', t('ride.f.battery')) }}{% endif %}
   </div>
 </section>
+<section class="card ai-card ai-summary t-neutral" data-ai="summary compare" hidden style="margin-top:1rem"><div class="ai-body"></div></section>
 
 <div class="block t-ride" id="sec-course" data-jump="{{ t('ride.sec.course') }}">
   <h2 class="section-title">{{ t('ride.sec.course') }}</h2>
@@ -122,17 +123,19 @@
     {{ bars(mv_gears if mv_gears else a.gears.seconds_per_gear, '', 's', 0, {}) }}
   </section>
   {% if cad_gear %}<section class="card"><h2>{{ t('ride.d.cad_gear') }} <span class="muted small">{{ t('ride.d.cad_gear_sub') }}</span></h2>{{ bars(cad_gear, 'rider', t('ride.d.rpm'), 0, {}) }}</section>{% endif %}
+<section class="card ai-card ai-drive" data-ai="drive" hidden><div class="ai-body"></div></section>
 </div>
 </div>
 
 <div class="block t-rider" id="sec-power" data-jump="{{ t('ride.sec.power') }}">
   <h2 class="section-title">{{ t('ride.sec.power') }}</h2>
-<div class="grid cols-3">
+<div class="grid cols-3 cols-power{{ ' has-hr' if a.distributions.heart_rate_s else '' }}">
   <section class="card"><h2>{{ t('ride.d.rider') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.rider_power_s, 'rider', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.motor') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.motor_power_s, 'motor', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.cadence_moving') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">{{ t('ride.speed_moving') }}</span></h2>{{ bars(a.distributions.speed_s, drop_zero=true) }}</section>
   {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'hr') }}</section>{% endif %}
+  <section class="card ai-card ai-power" data-ai="power" hidden><div class="ai-body"></div></section>
 </div>
 </div>
 
@@ -146,6 +149,7 @@
     <p class="muted small" style="margin-top:0.4rem"><span style="color:var(--rider)">&#9632;</span> {{ t('ride.d.legend_rider') }} &nbsp; <span style="color:var(--motor)">&#9632;</span> {{ t('ride.d.legend_motor') }}</p></section>
   {% set spd_grad = {} %}{% for k, r in (a.by_gradient or {}).items() %}{% set _ = spd_grad.update({k: r.avg_speed_kmh}) %}{% endfor %}
   <section class="card"><h2>{{ t('ride.d.speed_grad') }} <span class="muted small">{{ t('ride.d.speed_grad_sub') }}</span></h2>{{ bars(spd_grad, '', 'km/h', 1, grad_labels) }}</section>
+  <section class="card ai-card ai-hill" data-ai="hill" hidden><div class="ai-body"></div></section>
 </div>
 </div>
 
@@ -183,6 +187,11 @@
     </dl>
   </section>
 </div>
+</div>
+
+<div class="block t-neutral" id="sec-ai" data-ai="tips" data-jump="{{ t('ai.ride.title') }}" hidden>
+  <h2 class="section-title">{{ t('ai.ride.title') }}</h2>
+  <section class="card ai-card"><div class="ai-body"></div></section>
 </div>
 
 <div class="block t-motor" id="sec-display" data-jump="{{ t('ride.sec.display') }}">
@@ -258,6 +267,7 @@
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 <script src="{{ url_for('static', path='vendor/maplibre/maplibre-gl.js').path }}"></script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
+<script src="{{ url_for('static', path='ai.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>

@@ -134,6 +134,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 
+-- KI-Texte: kind = ride (ref = rides.id) | period (ref z. B. week:2026-W45, month:2026-11, year:2026, all)
+CREATE TABLE IF NOT EXISTS ai_texts (
+    kind       TEXT NOT NULL,
+    ref        TEXT NOT NULL,
+    lang       TEXT NOT NULL,
+    input_hash TEXT NOT NULL,       -- sha256 über Fakten + Modell + Prompt-Version
+    content    TEXT,                -- JSON (normalisierte Schlüssel); bleibt bei Fehlern vom letzten Erfolg stehen
+    model      TEXT,
+    created_at TEXT NOT NULL,
+    error      TEXT,                -- Meldung des letzten Versuchs, NULL = ok
+    PRIMARY KEY (kind, ref, lang)
+);
+
 CREATE TABLE IF NOT EXISTS geocache (
     key        TEXT PRIMARY KEY,    -- "lat,lon" auf 3 Nachkommastellen gerundet
     name       TEXT,                -- NULL = Dienst kannte nichts

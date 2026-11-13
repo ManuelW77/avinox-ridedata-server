@@ -280,6 +280,7 @@
     const cadGear = g.avg_cadence_per_gear || {};
     const cadGearCard = Object.keys(cadGear).length ? `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>` : "";
     const hasCad = Object.keys(cadGear).length > 0;
+    const aiCard = (key) => `<section class="card ai-card ai-${key}" data-ai="${key}" hidden><div class="ai-body"></div></section>`;
     const grp = (cls, key, inner, t) => `<div class="${t}"><h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}</div>`;
     box.innerHTML =
       grp("g-motor", "mix.sec.drive", `<div class="grid cols-drive${hasCad ? "" : " two"}">
@@ -287,9 +288,11 @@
           <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table></section>
         <section class="card"><div class="chart-head"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2><span class="muted small">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</span></div>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}</section>
         ${cadGearCard}
+        ${aiCard("drive")}
       </div>`, "t-motor") +
-      grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`, "t-rider") +
-      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}</div>`, "t-hill");
+      grp("g-rider", "mix.sec.power", `<div class="grid cols-3 cols-power${d.heart_rate_s ? " has-hr" : ""}">${powerCards.join("")}${aiCard("power")}</div>`, "t-rider") +
+      grp("g-ride", "mix.sec.hill", `<div class="grid cols-3">${hillCards.join("")}${aiCard("hill")}</div>`, "t-hill");
+    if (window.avinoxAi) window.avinoxAi.apply();
   }
 
   /* --------------------------------------------------------- Diagramme */
@@ -448,6 +451,11 @@
 
   /* --------------------------------------------------------- Laden */
 
+  function loadAi() {
+    if (!window.avinoxAi) return;
+    window.avinoxAi.watch(`/api/v1/ai/dashboard?period=${encodeURIComponent(dash.period)}&offset=${dash.offset || 0}&compare=${cmp}&lang=${window.avinoxAi.lang}`);
+  }
+
   let pending = null;
   function load(period, offset) {
     const url = `/api/v1/dashboard?period=${encodeURIComponent(period)}&offset=${offset}&compare=${cmp}`;
@@ -465,6 +473,7 @@
         history.replaceState(null, "", location.pathname + "?" + q.toString());
         renderPeriod();
         buildCharts();
+        loadAi();
       })
       .catch(() => {})
       .finally(() => { if (token === pending) $("period").classList.remove("loading"); });
@@ -504,6 +513,7 @@
 
   renderPeriod();
   buildCharts();
+  loadAi();
   // gespeicherte Wahl abweichend vom gerenderten Stand: einmal neu laden
   if (dash.compare_mode != null && dash.compare_mode !== cmp) load(dash.period, dash.offset);
 })();

@@ -135,6 +135,36 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="sec-ai" data-jump="{{ t('set.ai') }}">
+  <h2 class="section-title">{{ t('set.ai') }}</h2>
+  <p class="muted small block-desc">{{ t('set.ai_text') }}</p>
+<section class="card stack ai-form">
+  <div class="form-row">
+    <label for="ai-enabled" class="switch-row"><input type="checkbox" class="switch" id="ai-enabled"> <span>{{ t('set.ai_toggle') }}</span></label>
+  </div>
+  <div class="form-row"><label for="ai-provider">{{ t('set.ai_provider') }}</label><select id="ai-provider"></select></div>
+  <div class="form-row"><label for="ai-url">{{ t('set.ai_url') }}</label><input type="url" id="ai-url" placeholder="https://" autocomplete="off"></div>
+  <div class="form-row"><label for="ai-model">{{ t('set.ai_model') }}</label><input type="text" id="ai-model" autocomplete="off"></div>
+  <div class="form-row">
+    <label for="ai-key">{{ t('set.ai_key') }}</label>
+    <div class="actions">
+      <input type="password" id="ai-key" autocomplete="new-password" style="flex:1">
+      <button type="button" class="btn ghost danger" id="ai-key-clear" hidden>{{ t('set.ai_key_clear') }}</button>
+    </div>
+  </div>
+  <div class="form-row"><label for="ai-lang">{{ t('set.ai_lang') }}</label>
+    <select id="ai-lang"><option value="de">Deutsch</option><option value="en">English</option></select></div>
+  <p class="muted small">{{ t('set.ai_privacy') }}</p>
+  <p class="small"><span id="ai-status" role="status"></span> <span class="muted" id="ai-counts"></span></p>
+  <p class="notice" id="ai-msg" role="status" hidden></p>
+  <div class="actions">
+    <button type="button" class="btn" id="ai-save">{{ t('set.ai_save') }}</button>
+    <button type="button" class="btn ghost" id="ai-test">{{ t('set.ai_test') }}</button>
+    <button type="button" class="btn ghost" id="ai-fill">{{ t('set.ai_fill') }}</button>
+  </div>
+</section>
+</div>
+
 <div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
   <h2 class="section-title">{{ t('set.upload') }}</h2>
   <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
