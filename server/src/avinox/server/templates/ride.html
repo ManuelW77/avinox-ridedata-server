@@ -155,8 +155,8 @@
   <section class="card">
     <h2>{{ t('ride.energy') }}</h2>
     <dl class="kv">
-      <dt>{{ t('ride.e.rider') }}</dt><dd>{{ a.energy.rider_kj | num }} kJ</dd>
-      <dt>{{ t('ride.e.motor') }}</dt><dd>{{ a.energy.motor_wh | num(1) }} Wh ({{ a.energy.motor_kj | num }} kJ)</dd>
+      <dt>{{ t('ride.e.rider') }}</dt><dd{% if a.energy.rider_kj is not none %} title="{{ a.energy.rider_kj | num }} kJ"{% endif %}>{{ (a.energy.rider_kj / 3.6 if a.energy.rider_kj is not none else none) | num }} Wh</dd>
+      <dt>{{ t('ride.e.motor') }}</dt><dd{% if a.energy.motor_kj is not none %} title="{{ a.energy.motor_kj | num }} kJ"{% endif %}>{{ a.energy.motor_wh | num }} Wh</dd>
       <dt>{{ t('ride.e.used') }}</dt><dd>{{ a.battery.used_pct | num }} %</dd>
       <dt>{{ t('ride.e.per_km') }}</dt><dd>{{ a.battery.pct_per_km | num(2) }} % · {{ t('ride.e.motor_wh', wh=a.battery.motor_wh_per_km | num(1)) }}</dd>
       <dt>{{ t('ride.e.km_per_pct') }}</dt><dd>{{ a.battery.km_per_pct | num(2) }} km</dd>
