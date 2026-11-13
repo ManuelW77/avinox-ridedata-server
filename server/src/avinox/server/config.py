@@ -4,7 +4,13 @@
 |---|---|---|
 | ``AVINOX_DATA_DIR`` | ``./data`` | Rohdateien, Datenbank, Upload-Token |
 | ``AVINOX_UPLOAD_TOKEN`` | zufällig, in ``<data>/upload_token`` | Bearer-Token für Uploads (ESP32) |
-| ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
+| ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Start-Admin: wird beim Start als Administrator angelegt, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben, spätere Änderungen in der Datenbank bleiben). Sobald es einen Benutzer gibt, ist der Login aktiv (Seite per Formular, API zusätzlich per Basic Auth); ohne Benutzer und OIDC bleibt alles offen |
+| ``AVINOX_OIDC_ISSUER`` / ``AVINOX_OIDC_CLIENT_ID`` | leer | Anmeldung über einen OpenID-Connect-Anbieter (Authorization Code mit PKCE); Redirect-URI ``<Adresse>/auth/oidc/callback`` |
+| ``AVINOX_OIDC_CLIENT_SECRET`` | leer | Client-Secret (leer = öffentlicher Client) |
+| ``AVINOX_OIDC_NAME`` | ``SSO`` | Name auf dem Knopf „Mit … anmelden“ |
+| ``AVINOX_OIDC_SCOPES`` | ``openid email profile`` | Angeforderte Scopes (für Gruppen ggf. ``groups`` ergänzen) |
+| ``AVINOX_OIDC_ALLOWED`` | leer | Kommagetrennt: E-Mail-Adressen oder Gruppen (Claim ``groups``), die sich anmelden dürfen; leer = jeder, den der Anbieter durchlässt |
+| ``AVINOX_OIDC_ADMIN`` | leer | Gleiche Schreibweise: wer Administrator wird; leer = alle OIDC-Benutzer sind Admin (privater Einzelserver) |
 | ``AVINOX_PUBLIC_URL`` | leer | Adresse des Servers für den ESP32, z. B. ``http://192.168.1.18:8000`` (sonst aus der Browser-Anfrage) |
 | ``AVINOX_TZ`` | ``Europe/Berlin`` | Zeitzone für die Anzeige |
 | ``AVINOX_MAP_STYLE`` | OpenFreeMap „liberty“ | Style-URL (MapLibre, Vektorkarte) für die Fahrtkarte und die 3D-Ansicht |
@@ -32,6 +38,13 @@ class Settings:
     map_style: str
     max_upload_bytes: int
     geocode_url: str | None = None
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_name: str = "SSO"
+    oidc_scopes: str = "openid email profile"
+    oidc_allowed: str = ""
+    oidc_admin: str = ""
 
     @property
     def db_path(self) -> Path:
@@ -79,4 +92,11 @@ def load_settings(data_dir: str | Path | None = None) -> Settings:
         map_style=os.environ.get("AVINOX_MAP_STYLE") or "https://tiles.openfreemap.org/styles/liberty",
         max_upload_bytes=int(os.environ.get("AVINOX_MAX_UPLOAD_MB", "64")) * 1024 * 1024,
         geocode_url=_geocode_url(),
+        oidc_issuer=(os.environ.get("AVINOX_OIDC_ISSUER", "").strip().rstrip("/") or None),
+        oidc_client_id=os.environ.get("AVINOX_OIDC_CLIENT_ID", "").strip() or None,
+        oidc_client_secret=os.environ.get("AVINOX_OIDC_CLIENT_SECRET", "").strip() or None,
+        oidc_name=os.environ.get("AVINOX_OIDC_NAME", "").strip() or "SSO",
+        oidc_scopes=os.environ.get("AVINOX_OIDC_SCOPES", "").strip() or "openid email profile",
+        oidc_allowed=os.environ.get("AVINOX_OIDC_ALLOWED", ""),
+        oidc_admin=os.environ.get("AVINOX_OIDC_ADMIN", ""),
     )
