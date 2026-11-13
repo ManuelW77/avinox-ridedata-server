@@ -117,6 +117,16 @@ def settings_view(db) -> dict:
     }
 
 
+def _origin(url: str) -> tuple:
+    """Schema, Host (klein) und Port: der Schlüssel gilt nur für genau diesen Empfänger."""
+    u = urlsplit(url or "")
+    try:
+        port = u.port
+    except ValueError:
+        port = None
+    return (u.scheme.lower(), (u.hostname or "").lower(), port or {"http": 80, "https": 443}.get(u.scheme.lower()))
+
+
 def update_settings(db, payload: dict) -> None:
     """Teilmenge setzen. Typfehler → ``AiError('invalid', ...)``. ``api_key`` fehlt = unverändert, ``""`` = löschen."""
     if not isinstance(payload, dict):
@@ -130,6 +140,7 @@ def update_settings(db, payload: dict) -> None:
         raise AiError("invalid", "Unbekannter Anbieter")
     if "lang" in payload and payload["lang"] not in LANGS:
         raise AiError("invalid", "lang muss de oder en sein")
+    old_origin = _origin(base_url_of(db))  # vor allen Änderungen: wohin der Schlüssel bisher ging
     base_url = None
     if "base_url" in payload:
         base_url = payload["base_url"].strip().rstrip("/")
@@ -147,7 +158,7 @@ def update_settings(db, payload: dict) -> None:
         _set(db, "provider", payload["provider"])
     if base_url is not None:
         # Schlüssel gehört zum Anbieter: neuer Host ohne neuen Schlüssel → alten löschen (sonst ginge er an die neue Adresse)
-        if "api_key" not in payload and urlsplit(base_url).netloc != urlsplit(base_url_of(db)).netloc:
+        if "api_key" not in payload and _origin(base_url) != old_origin:
             _set(db, "api_key", None)
         _set(db, "base_url", base_url)
     if "model" in payload:
