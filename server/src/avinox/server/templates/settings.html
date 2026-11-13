@@ -28,16 +28,16 @@
   </div>
   {% elif not login_active %}
   <p class="notice small">{{ t('set.auth_off') }}</p>
-  <form id="enable-form" class="stack" autocomplete="off" data-existing="{{ 1 if has_users else 0 }}">
-    <p class="small"><strong>{{ t('set.enable_title_existing') if has_users else t('set.enable_title') }}</strong></p>
+  {% if has_users %}
+  <form id="enable-form" class="stack" autocomplete="off">
+    <p class="small"><strong>{{ t('set.enable_title_existing') }}</strong></p>
     <div class="form-row"><label for="su-name">{{ t('login.user') }}</label><input type="text" id="su-name" autocomplete="username" autocapitalize="none" required maxlength="64"></div>
-    <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="{{ 'current-password' if has_users else 'new-password' }}"{% if not has_users %} minlength="{{ min_password }}"{% endif %} required></div>
-    {% if not has_users %}
-    <div class="form-row"><label for="su-pass2">{{ t('set.setup_repeat') }}</label><input type="password" id="su-pass2" autocomplete="new-password" minlength="{{ min_password }}" required></div>
-    <p class="muted small">{{ t('set.setup_hint', n=min_password) }}</p>
-    {% endif %}
+    <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="current-password" required></div>
     <div class="actions"><button type="submit" class="btn">{{ t('set.enable_save') }}</button></div>
   </form>
+  {% else %}
+  <p class="small" id="need-admin">{{ t('set.need_admin') }}</p>
+  {% endif %}
   {% endif %}
   {% if oidc_name %}<p class="muted small">{{ t('set.auth_oidc', name=oidc_name) }}</p>{% endif %}
   {% if current_user and current_user.password_hash %}
