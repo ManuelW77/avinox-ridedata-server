@@ -26,8 +26,8 @@
     <span>{{ t('set.auth_as') }} <strong>{{ current_user.username }}</strong>{% if current_user.is_admin %} <span class="pill">{{ t('set.auth_admin') }}</span>{% endif %}</span>
     <form method="post" action="/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn ghost">{{ t('auth.logout') }}</button></form>
   </div>
-  {% else %}
-  <p class="notice small">{{ t('set.auth_basic') }}</p>
+  {% elif not login_active %}
+  <p class="notice small">{{ t('set.auth_off') }}</p>
   {% endif %}
   {% if oidc_name %}<p class="muted small">{{ t('set.auth_oidc', name=oidc_name) }}</p>{% endif %}
   {% if current_user and current_user.password_hash %}
