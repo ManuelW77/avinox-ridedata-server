@@ -172,6 +172,11 @@ def test_rides_page_toolbar(client, settings):
     assert 'id="rides-tools"' in page and "data-search=" in page and "rides.js" in page
 
 
+def test_rides_page_has_more_button(client, settings):
+    put(client, settings, ride_bytes(assist=21))
+    assert 'id="rides-more"' in client.get("/rides").text
+
+
 def test_pages(client, settings):
     pk = put(client, settings, ride_bytes(assist=21)).json()["ride"]
     client.post("/api/v1/files", files=[("files", ("buried_rec/buried_file_cur.json", LINES.encode()))])
@@ -469,3 +474,40 @@ def test_device_page_battery_charts(client, monkeypatch):
     monkeypatch.setattr(store_mod.Store, "device", fake)
     page = client.get("/device").text
     assert 'id="bat-data"' in page and "battery.js" in page and 'id="bat-charts"' in page
+
+
+def test_delete_ride_stays_deleted(settings):
+    data = ride_bytes()
+    with TestClient(create_app(settings)) as c:
+        pk = put(c, settings, data).json()["ride"]
+        assert c.delete(f"/api/v1/rides/{pk}").json() == {"ok": True}
+        assert c.get(f"/api/v1/rides/{pk}").status_code == 404
+        assert c.get("/api/v1/rides").json() == []
+        manifest = c.get("/api/v1/manifest", headers=auth(settings)).json()["files"]
+        assert {"path": RIDE_PATH, "size": len(data)} in manifest
+        assert put(c, settings, data).json()["ride"] is None
+        bigger = ride_bytes(n=40)
+        assert put(c, settings, bigger).json()["ride"] is None
+        assert c.get("/api/v1/rides").json() == []
+
+
+def test_delete_ride_reprocess(settings):
+    with TestClient(create_app(settings)) as c:
+        pk = put(c, settings, ride_bytes()).json()["ride"]
+        assert c.delete(f"/api/v1/rides/{pk}").status_code == 200
+    store = store_mod.Store(settings)
+    try:
+        store.reprocess(only_outdated=False)
+        assert store.list_rides() == []
+    finally:
+        store.close()
+
+
+def test_delete_ride_unknown_and_auth(settings):
+    with TestClient(create_app(settings)) as c:
+        assert c.delete("/api/v1/rides/9999").status_code == 404
+    settings.web_user, settings.web_password = "fahrer", "geheim"
+    with TestClient(create_app(settings)) as c:
+        pk = put(c, settings, ride_bytes()).json()["ride"]
+        assert c.delete(f"/api/v1/rides/{pk}").status_code == 401
+        assert c.delete(f"/api/v1/rides/{pk}", auth=("fahrer", "geheim")).status_code == 200

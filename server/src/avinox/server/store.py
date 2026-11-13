@@ -5,6 +5,8 @@
 * Jede Fahrt wird beim Eingang einmal vollständig ausgewertet; die Ergebnisse
   liegen als JSON in der Datenbank. Ändert sich ``PARSER_VERSION``, wird beim
   Start alles neu berechnet.
+* Gelöschte Fahrten bleiben als Vermerk (``deleted_rides``) und in ``files`` erhalten,
+  damit sie beim nächsten Sync und bei der Neuberechnung nicht wieder auftauchen.
 """
 
 from __future__ import annotations
@@ -287,6 +289,8 @@ class Store:
             return self._sessions
 
     def _process_ride(self, file_id: int, path: str, data: bytes) -> int | None:
+        if self.db.one("SELECT 1 FROM deleted_rides WHERE path = ?", (path,)):
+            return None  # vom Nutzer gelöscht: nur in files vermerkt
         current = self.db.one("SELECT r.id, r.file_id, f.size FROM rides r JOIN files f ON f.id = r.file_id WHERE r.path = ?", (path,))
         if current and current["file_id"] != file_id and current["size"] > len(data):
             return current["id"]  # ältere, kürzere Fassung einer schon bekannten Fahrt
@@ -341,7 +345,8 @@ class Store:
             rows = self.db.query(sql, (PARSER_VERSION,) if only_outdated else ())
             # Fahrt-Dateien ohne Eintrag (z. B. früher unlesbar) ebenfalls versuchen
             orphans = self.db.query(
-                "SELECT f.id AS file_id, f.path FROM files f WHERE f.kind = 'ride' AND NOT EXISTS (SELECT 1 FROM rides r WHERE r.path = f.path)"
+                "SELECT f.id AS file_id, f.path FROM files f WHERE f.kind = 'ride' AND NOT EXISTS (SELECT 1 FROM rides r WHERE r.path = f.path) "
+                "AND f.path NOT IN (SELECT path FROM deleted_rides)"
             )
             for row in [*rows, *orphans]:
                 self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
@@ -430,6 +435,28 @@ class Store:
             (row["path"], clean),
         )
         return True
+
+    def delete_ride(self, ride_pk: int) -> bool:
+        """Löscht eine Fahrt samt Rohdaten; der Pfad wird gesperrt, die files-Zeilen bleiben (Manifest)."""
+        with self._lock:
+            row = self.db.one("SELECT path FROM rides WHERE id = ?", (ride_pk,))
+            if not row:
+                return False
+            path = row["path"]
+            self.db.execute("INSERT OR REPLACE INTO deleted_rides(path, deleted_at) VALUES (?, ?)", (path, _now()))
+            self.db.execute("DELETE FROM rides WHERE id = ?", (ride_pk,))
+            self.db.execute("DELETE FROM ride_meta WHERE path = ?", (path,))
+            for key in [k for k in self._derived_cache if k[0] == ride_pk]:
+                del self._derived_cache[key]
+            self._sessions = None
+            for f in self.db.query("SELECT DISTINCT sha256 FROM files WHERE path = ?", (path,)):
+                shared = self.db.one(
+                    "SELECT 1 FROM files WHERE sha256 = ? AND path != ? AND path NOT IN (SELECT path FROM deleted_rides)",
+                    (f["sha256"], path),
+                )
+                if not shared:
+                    self._raw_path(f["sha256"]).unlink(missing_ok=True)
+            return True
 
     def geocode_pending_count(self) -> int:
         row = self.db.one(

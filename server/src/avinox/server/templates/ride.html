@@ -16,6 +16,7 @@
     </p>
   </div>
   <div class="actions">
+    <button type="button" class="btn ghost danger" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/gpx">GPX</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
@@ -234,6 +235,18 @@
 </div>
 {% endif %}
 
+<dialog class="confirm-dialog" id="delete-dialog" aria-labelledby="delete-dialog-title">
+  <form method="dialog">
+    <h2 id="delete-dialog-title">{{ t('ride.delete_title') }}</h2>
+    <p><strong>{{ ride.name }}</strong></p>
+    <p>{{ t('ride.delete_text') }}</p>
+    <div class="actions">
+      <button type="submit" class="btn ghost" value="cancel" autofocus>{{ t('ride.delete_cancel') }}</button>
+      <button type="submit" class="btn btn-danger" value="delete" id="delete-confirm">{{ t('ride.delete') }}</button>
+    </div>
+  </form>
+</dialog>
+
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "map_style": map_style, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
@@ -242,4 +255,5 @@
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
+<script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>
 {% endblock %}
