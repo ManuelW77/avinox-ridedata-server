@@ -284,11 +284,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return oidc.enabled or auth_store.user_count() > 0
 
     def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
-        """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer."""
+        """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer.
+
+        Basic Auth gilt nur für die API (Skripte). Auf den Seiten würde sonst ein vom Browser
+        gemerktes Basic-Passwort (alter Login) die Login-Seite dauerhaft überspringen.
+        """
         user = auth_store.session_user(request.cookies.get(AUTH_COOKIE))
         if user:
             return user, "session"
-        if cred:
+        if cred and request.url.path.startswith("/api/"):
             # Dieselbe Bremse wie beim Login-Formular, sonst ließe sich über Basic Auth beliebig raten.
             ip = client_ip(request)
             if throttle.blocked(ip, cred.username):
