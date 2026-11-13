@@ -37,3 +37,7 @@ data/
 # Claude-Worktrees (lokal)
 .claude/
 3D-Print/
+
+# Erklärvideo: nur die fertigen Videos versionieren, Remotion-Projekt bleibt lokal
+video/*
+!video/*.mp4
