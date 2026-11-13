@@ -12,6 +12,39 @@
   let dash;
   try { dash = JSON.parse(dataEl.textContent); } catch (e) { return; }
 
+  // Fallback, falls das Backend rider_wh (noch) nicht liefert: kJ / 3,6
+  function addWh(o) { if (o && o.rider_wh == null && o.rider_kj != null) o.rider_wh = o.rider_kj / 3.6; }
+  function normalize(d) {
+    try {
+      [d.current, d.previous, d.total].forEach(addWh);
+      (d.series || []).forEach(addWh);
+      (d.recent || []).forEach(addWh);
+      const c = d.comparison;
+      if (c && !c.rider_wh && c.rider_kj) {
+        c.rider_wh = Object.assign({}, c.rider_kj, {
+          current: c.rider_kj.current == null ? null : c.rider_kj.current / 3.6,
+          previous: c.rider_kj.previous == null ? null : c.rider_kj.previous / 3.6 });
+      }
+    } catch (e) { /* ignorieren */ }
+    return d;
+  }
+  normalize(dash);
+
+  // Vergleichsmodus (gleicher Stand / ganzer Zeitraum), im Browser gemerkt
+  const CMP_KEY = "avinox.compare";
+  let cmp = "elapsed";
+  try {
+    const fromUrl = new URLSearchParams(location.search).get("compare");
+    const stored = localStorage.getItem(CMP_KEY);
+    cmp = fromUrl === "full" || fromUrl === "elapsed" ? fromUrl : (stored === "full" ? "full" : "elapsed");
+  } catch (e) { /* ohne Speicher */ }
+  const day10 = (v) => (v ? String(v).slice(0, 10) : "");
+  const deDate = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+    return m ? m[3] + "." + m[2] + "." + m[1] : "";
+  };
+  const isOpen = (x) => !!(x && x.end && dash.today && day10(x.end) >= day10(dash.today));
+
   const $ = (id) => document.getElementById(id);
   const cssVar = (name, fallback) => (getComputedStyle(document.documentElement).getPropertyValue(name) || "").trim() || fallback;
   const fmt = (v, digits) => (v == null || !isFinite(v)) ? "–"
@@ -37,7 +70,7 @@
     ["rides", tr("kpi.rides"), (v) => fmt(v, 0), "", true],
     ["moving_time_s", tr("kpi.moving"), (v) => hm(v) + "<small>h</small>", "", true],
     ["ascent_m", tr("kpi.ascent"), (v) => fmt(v, 0) + "<small>m</small>", "", true],
-    ["rider_kj", tr("kpi.rider"), (v) => fmt(v, 0) + "<small>kJ</small>", "rider", true],
+    ["rider_wh", tr("kpi.rider"), (v) => fmt(v, 0) + "<small>Wh</small>", "rider", true],
     ["avg_rider_power_w", tr("kpi.avg_rider"), (v) => fmt(v, 0) + "<small>W</small>", "rider", true],
     ["motor_wh", tr("kpi.motor_wh"), (v) => fmt(v, 0) + "<small>Wh</small>", "motor", false],
     ["motor_share_pct", tr("kpi.share"), (v) => fmt(v, 0) + "<small>%</small>", "motor", false],
@@ -111,8 +144,11 @@
       const rp = 100 * cur.rider_kj / energy;
       split.querySelector(".rider").style.width = rp + "%";
       split.querySelector(".motor").style.width = (100 - rp) + "%";
-      $("split-rider").innerHTML = `<i></i>${tr("you")} ${fmt(rp, 0)} % · ${fmt(cur.rider_kj, 0)} kJ`;
-      $("split-motor").innerHTML = `<i></i>${tr("motor")} ${fmt(100 - rp, 0)} % · ${fmt(cur.motor_kj, 0)} kJ`;
+      const mwh = cur.motor_wh != null ? cur.motor_wh : (cur.motor_kj || 0) / 3.6;
+      $("split-rider").innerHTML = `<i></i>${tr("you")} ${fmt(rp, 0)} % · ${fmt(cur.rider_wh, 0)} Wh`;
+      $("split-motor").innerHTML = `<i></i>${tr("motor")} ${fmt(100 - rp, 0)} % · ${fmt(mwh, 0)} Wh`;
+      $("split-rider").title = fmt(cur.rider_kj, 0) + " kJ";
+      $("split-motor").title = fmt(cur.motor_kj, 0) + " kJ";
     }
     const empty = $("hero-empty");
     empty.hidden = cur.rides > 0;
@@ -132,7 +168,8 @@
     $("kpis").hidden = !cur.rides;
     $("kpis").innerHTML = KPIS.map(([key, label, f, cls, judge]) => {
       const v = cur[key];
-      return `<div class="kpi ${cls}"><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge, (pv) => f(pv))}</div>`;
+      const tip = key === "rider_wh" && cur.rider_kj != null ? ` title="${esc(fmt(cur.rider_kj, 0) + " kJ")}"` : "";
+      return `<div class="kpi ${cls}"${tip}><div class="v">${v == null ? "–" : f(v)}</div><div class="k">${label}</div>${deltaHtml(key, cmp[key], judge, (pv) => f(pv))}</div>`;
     }).join("");
 
     const sum = (k) => dash.series.reduce((a, s) => a + (s[k] || 0), 0);
@@ -140,6 +177,44 @@
     $("sum-distance").textContent = tr("sum_in", { v: fmt(sum("distance_km"), 0), unit: "km", span });
     $("sum-ascent").textContent = tr("sum_in", { v: fmt(sum("ascent_m"), 0), unit: "m", span });
     renderMix();
+    renderCompare();
+    markNew();
+  }
+
+  function renderCompare() {
+    const box = $("compare-by");
+    if (!box) return;
+    const show = dash.compare_mode != null && (!!dash.compare_partial ||
+      (dash.offset === 0 && ["week", "month", "year"].includes(dash.period)));
+    box.hidden = !show;
+    const until = deDate(dash.previous_until);
+    box.querySelectorAll("button[data-key]").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.key === dash.compare_mode ? "true" : "false");
+      b.title = b.dataset.key === "elapsed"
+        ? (until ? tr("cmp.elapsed_tip", { d: until }) : tr("cmp.elapsed"))
+        : tr("cmp.full_tip");
+    });
+  }
+
+  // Bestwert aus dem angezeigten Zeitraum: Kachel markieren
+  function markNew() {
+    const cur = dash.current || {};
+    const cs = day10(cur.start), ce = day10(cur.end);
+    document.querySelectorAll("article.best").forEach((el) => {
+      const bs = day10(el.dataset.start), be = day10(el.dataset.end);
+      const isNew = dash.period !== "all" && !!(cs && ce && bs && be && bs >= cs && be <= ce);
+      el.classList.toggle("is-new", isNew);
+      let chip = el.querySelector(".best-new");
+      if (isNew && !chip) {
+        chip = document.createElement("span");
+        chip.className = "best-new";
+        chip.textContent = tr("best.new");
+        chip.title = tr("best.new_tip");
+        el.appendChild(chip);
+      } else if (!isNew && chip) {
+        chip.remove();
+      }
+    });
   }
 
   /* --------------------------------------------------------- Verteilung */
@@ -208,11 +283,9 @@
     const grp = (cls, key, inner, t) => `<div class="${t}"><h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}</div>`;
     box.innerHTML =
       grp("g-motor", "mix.sec.drive", `<div class="grid cols-drive${hasCad ? "" : " two"}">
-        <section class="card"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
-          <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table>
-          <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</p></section>
-        <section class="card"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}
-          <p class="muted small" style="margin-top:0.6rem">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</p></section>
+        <section class="card"><div class="chart-head"><h2>${esc(tr("mix.modes"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2><span class="muted small">${esc(tr("mix.changes", { n: fmt(a.changes || 0, 0) }))}</span></div>${barsHtml(a.moving_seconds_per_mode || a.seconds_per_mode, "motor")}
+          <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table></section>
+        <section class="card"><div class="chart-head"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2><span class="muted small">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</span></div>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}</section>
         ${cadGearCard}
       </div>`, "t-motor") +
       grp("g-rider", "mix.sec.power", `<div class="grid cols-3">${powerCards.join("")}</div>`, "t-rider") +
@@ -274,10 +347,10 @@
     const readout = cfg.readout;
     const show = (i) => {
       if (!readout) return;
-      const parts = cfg.series.map((sr, k) => {
-        const v = cfg.data[k][i];
-        const txt = sr.value ? sr.value(null, v, k + 1, i) : fmt(v, 0);
-        return `<i style="background:${sr.fill && !String(sr.fill).startsWith("rgba") ? sr.fill : sr.stroke}"></i>${sr.label} <b>${txt}</b>`;
+      const parts = cfg.rows.map((row) => {
+        const v = row.values[i];
+        const txt = row.value ? row.value(null, v, 0, i) : fmt(v, 0);
+        return `<i style="background:${row.color}"></i>${row.label} <b>${txt}</b>`;
       });
       readout.innerHTML = `${titles[i] || ""}${parts.join("")}`;
     };
@@ -310,29 +383,54 @@
     const s = dash.series;
     const val = (unit, digits) => (u, v) => (v == null ? "–" : fmt(v, digits) + " " + unit);
     const anyRide = s.some((x) => x.rides > 0);
+    const open = s.map(isOpen);
+    // Balken: abgeschlossene Zeiträume voll, laufender heller mit gestrichelter Kante
+    const split = (arr) => [arr.map((v, i) => (open[i] ? null : v)), arr.map((v, i) => (open[i] ? v : null))];
+    const barPair = (label, color, arr, size, align, value) => {
+      const common = { stroke: color, points: { show: false }, paths: bars(size, align), value };
+      return {
+        data: split(arr),
+        series: [Object.assign({ label, fill: color, width: 0 }, common),
+                 Object.assign({ label, fill: withAlpha(color, 0.45), width: 1.5, dash: [4, 4] }, common)],
+        row: { label, color, values: arr, value },
+      };
+    };
+    const compose = (parts, extra) => Object.assign({
+      data: parts.reduce((acc, p) => acc.concat(p.data), []),
+      series: parts.reduce((acc, p) => acc.concat(p.series), []),
+      rows: parts.map((p) => p.row),
+    }, extra || {});
+    const wideBar = (label, color, arr, unit, digits) => barPair(label, color, arr, [0.62, 40], 0, val(unit, digits));
+    const energyVal = (key) => (u, v, si, i) => (v == null ? "–"
+      : fmt(v, 0) + " Wh (" + fmt(s[i] && s[i][key], 0) + " kJ)");
+    const motorWh = s.map((x) => (x.motor_wh != null ? x.motor_wh : (x.motor_kj || 0) / 3.6));
+    const shareVals = s.map((x) => x.motor_share_pct);
+    const lastOpen = n1 => n1 >= 1 && open[n1];
+    const last = s.length - 1;
+    const dashedLast = lastOpen(last) && last >= 1;
+    const shareMain = dashedLast ? shareVals.map((v, i) => (i === last ? null : v)) : shareVals;
+    const shareTail = dashedLast ? shareVals.map((v, i) => (i >= last - 1 ? v : null)) : null;
+    const shareSeries = [{ label: tr("s.share"), stroke: c.motor, width: 2, spanGaps: true,
+      points: { show: true, size: 6, fill: c.motor }, value: val("%", 0) }];
+    const shareData = [shareMain];
+    if (shareTail) {
+      shareSeries.push({ label: tr("s.share"), stroke: c.motor, width: 2, dash: [4, 4], spanGaps: false,
+        points: { show: true, size: 6, fill: cssVar("--surface", "#fff"), stroke: c.motor, filter: () => [last] }, value: val("%", 0) });
+      shareData.push(shareTail);
+    }
     const defs = [
-      ["chart-distance", {
-        data: [s.map((x) => x.distance_km)],
-        series: [{ label: tr("s.distance"), stroke: c.alt, fill: c.alt, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("km", 1) }],
-      }],
-      ["chart-energy", {
-        data: [s.map((x) => x.rider_kj), s.map((x) => x.motor_kj)],
-        series: [
-          { label: tr("s.rider"), stroke: c.rider, fill: c.rider, width: 0, paths: bars([0.36, 22], -1), points: { show: false }, value: val("kJ", 0) },
-          { label: tr("s.motor"), stroke: c.motor, fill: c.motor, width: 0, paths: bars([0.36, 22], 1), points: { show: false },
-            value: (u, v, si, i) => (v == null ? "–" : fmt(v, 0) + " kJ (" + fmt(s[i] && s[i].motor_wh, 0) + " Wh)") },
-        ],
-      }],
+      ["chart-distance", compose([wideBar(tr("s.distance"), c.alt, s.map((x) => x.distance_km), "km", 1)])],
+      ["chart-energy", compose([
+        barPair(tr("s.rider"), c.rider, s.map((x) => x.rider_wh), [0.36, 22], -1, energyVal("rider_kj")),
+        barPair(tr("s.motor"), c.motor, motorWh, [0.36, 22], 1, energyVal("motor_kj")),
+      ])],
       ["chart-share", {
-        data: [s.map((x) => x.motor_share_pct)],
+        data: shareData,
         yRange: [0, 100], unitTick: " %", ySplits: () => [0, 25, 50, 75, 100],
-        series: [{ label: tr("s.share"), stroke: c.motor, width: 2, spanGaps: true,
-          points: { show: true, size: 6, fill: c.motor }, value: val("%", 0) }],
+        series: shareSeries,
+        rows: [{ label: tr("s.share"), color: c.motor, values: shareVals, value: val("%", 0) }],
       }],
-      ["chart-ascent", {
-        data: [s.map((x) => x.ascent_m)],
-        series: [{ label: tr("s.ascent"), stroke: c.ink3, fill: c.ink3, width: 0, paths: bars([0.62, 40], 0), points: { show: false }, value: val("m", 0) }],
-      }],
+      ["chart-ascent", compose([wideBar(tr("s.ascent"), c.alt, s.map((x) => x.ascent_m), "m", 0)])],
     ];
     defs.forEach(([id, cfg]) => {
       const el = $(id);
@@ -352,17 +450,18 @@
 
   let pending = null;
   function load(period, offset) {
-    const url = `/api/v1/dashboard?period=${encodeURIComponent(period)}&offset=${offset}`;
+    const url = `/api/v1/dashboard?period=${encodeURIComponent(period)}&offset=${offset}&compare=${cmp}`;
     const token = pending = {};
     $("period").classList.add("loading");
     fetch(url, { credentials: "same-origin" })
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then((d) => {
         if (token !== pending) return;
-        dash = d;
+        dash = normalize(d);
         const q = new URLSearchParams(location.search);
         q.set("period", d.period);
         if (d.offset) q.set("offset", d.offset); else q.delete("offset");
+        if (cmp !== "elapsed") q.set("compare", cmp); else q.delete("compare");
         history.replaceState(null, "", location.pathname + "?" + q.toString());
         renderPeriod();
         buildCharts();
@@ -373,6 +472,13 @@
 
   document.querySelectorAll("#period-by button[data-key]").forEach((b) =>
     b.addEventListener("click", () => { if (b.dataset.key !== dash.period) load(b.dataset.key, 0); }));
+  document.querySelectorAll("#compare-by button[data-key]").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (b.dataset.key === cmp) return;
+      cmp = b.dataset.key;
+      try { localStorage.setItem(CMP_KEY, cmp); } catch (e) { /* ohne Speicher */ }
+      load(dash.period, dash.offset);
+    }));
   $("period-prev").addEventListener("click", () => load(dash.period, dash.offset + 1));
   $("period-next").addEventListener("click", () => load(dash.period, Math.max(0, dash.offset - 1)));
   document.querySelectorAll("a.best-link[data-period]").forEach((a) =>
@@ -398,4 +504,6 @@
 
   renderPeriod();
   buildCharts();
+  // gespeicherte Wahl abweichend vom gerenderten Stand: einmal neu laden
+  if (dash.compare_mode != null && dash.compare_mode !== cmp) load(dash.period, dash.offset);
 })();

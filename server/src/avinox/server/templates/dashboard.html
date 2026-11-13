@@ -6,6 +6,7 @@
 {% endblock %}
 {% block main %}
 {% set tot = dash.total %}
+<div class="page-dash">
 <div class="lead">
   <div>
     <h1>{{ t('dash.title') }}</h1>
@@ -31,6 +32,10 @@
       {% for key, name in (('day', t('period.day')), ('week', t('period.week')), ('month', t('period.month')), ('year', t('period.year')), ('all', t('period.all'))) %}
       <button type="button" data-key="{{ key }}" aria-pressed="{{ 'true' if dash.period == key else 'false' }}">{{ name }}</button>
       {% endfor %}
+    </div>
+    <div class="segmented small" id="compare-by" role="group" aria-label="{{ t('js.cmp.label') }}" hidden>
+      <button type="button" data-key="elapsed" aria-pressed="{{ 'false' if dash.compare_mode == 'full' else 'true' }}">{{ t('js.cmp.elapsed') }}</button>
+      <button type="button" data-key="full" aria-pressed="{{ 'true' if dash.compare_mode == 'full' else 'false' }}">{{ t('js.cmp.full') }}</button>
     </div>
     <div class="stepper">
       <button type="button" id="period-prev" aria-label="{{ t('dash.prev') }}">‹</button>
@@ -100,9 +105,9 @@
   <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
   <div class="best-grid">
     {% for h in items %}
-    <article class="best g-{{ gkey }}" title="{{ h.sentence }}">
+    <article class="best g-{{ gkey }}" title="{{ h.sentence }}" data-start="{{ h.start or '' }}" data-end="{{ h.end or '' }}">
       <div class="best-k">{{ h.title }}</div>
-      <div class="best-v">{{ h.value_text }}</div>
+      <div class="best-v"{% if h.value_alt_text %} title="{{ h.value_alt_text }}"{% endif %}>{{ h.value_text }}</div>
       <p class="best-w">{{ h.when_text }}</p>
       {% if h.ride %}
       <a class="best-link" href="/rides/{{ h.ride }}">{{ t('best.to_ride') }} <span aria-hidden="true">→</span></a>
@@ -133,7 +138,7 @@
           <span class="n">{{ r.distance_km | num(1) }}<small>km</small></span>
           <span class="mix" title="{{ t('recent.share_title', v=r.motor_share_pct | num) }}">
             {% if r.motor_share_pct is not none %}<span class="mini"><span style="width: {{ 100 - r.motor_share_pct }}%"></span></span>{% endif %}
-            <span class="n">{{ r.rider_kj | num }}<small>kJ</small></span>
+            <span class="n" title="{{ r.rider_kj | num }} kJ">{{ (r.rider_wh if r.rider_wh is defined and r.rider_wh is not none else (r.rider_kj / 3.6)) | num }}<small>Wh</small></span>
           </span>
         </a>
       </li>
@@ -147,7 +152,7 @@
       {{ figure(tot.distance_km, t('fig.distance'), 'km', 1) }}
       {{ figure_text(tot.moving_time_s | duration, t('fig.time')) }}
       {{ figure(tot.ascent_m, t('fig.ascent'), 'm') }}
-      {{ figure(tot.rider_kj, t('fig.rider_energy'), 'kJ', 0, 'rider') }}
+      {{ figure(tot.rider_wh if tot.rider_wh is defined and tot.rider_wh is not none else (tot.rider_kj / 3.6 if tot.rider_kj is not none else none), t('fig.rider_energy'), 'Wh', 0, 'rider') }}
       {{ figure(tot.motor_wh, t('fig.motor_energy'), 'Wh', 0, 'motor') }}
       {{ figure(tot.motor_share_pct, t('fig.avg_share'), '%') }}
       {{ figure(tot.calories_kcal, t('fig.calories'), 'kcal') }}
@@ -157,6 +162,7 @@
 </div>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>

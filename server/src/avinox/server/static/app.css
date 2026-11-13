@@ -550,3 +550,25 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .fold[open] > summary h2::before { transform: rotate(90deg); }
 .fold[open] > summary { margin-bottom: 0.6rem; }
 @media (prefers-reduced-motion: reduce) { .fold > summary h2::before { transition: none; } }
+
+/* ---- Kleiner Vergleichsschalter ---- */
+.segmented.small { padding: 2px; }
+.segmented.small button { font-size: 0.75rem; padding: 0.2rem 0.6rem; }
+.segmented[hidden] { display: none; }
+
+/* ---- Übersicht: ruhigere Karten, Mengen einfarbig, Bestwert-Botschaft ---- */
+.page-dash :is(.block, .t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) :is(.card, .best),
+.page-dash .card:is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) {
+  box-shadow: none;
+  background: var(--surface);
+}
+.page-dash .t-hill .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+.page-dash .best { position: relative; }
+.page-dash .best.is-new { box-shadow: inset 0 3px 0 var(--accent, var(--line)); }
+.page-dash .best.is-new .best-k { padding-right: 2.6rem; }
+.page-dash .best-new {
+  position: absolute; top: 0.6rem; right: 0.7rem; font-size: 0.68rem; font-weight: 600; line-height: 1;
+  padding: 0.2rem 0.5rem; border-radius: 999px; color: var(--ink-2);
+  background: color-mix(in srgb, var(--accent, var(--ink-3)) 16%, var(--surface));
+}
+.page-dash .chart-head > .muted.small:last-child { white-space: nowrap; }

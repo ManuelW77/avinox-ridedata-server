@@ -93,8 +93,8 @@ def test_unknown_period(store):
 
 
 def test_week_series_and_comparison(store, filled):
-    d = store.dashboard("week", today=TODAY)
-    assert len(d["series"]) == 6  # erste Fahrt KW 42 -> 5 Wochen, Minimum 6
+    d = store.dashboard("week", today=TODAY, compare_mode="full")
+    assert len(d["series"]) == 5  # erste Fahrt KW 42 -> 5 Wochen
     cur, prev = d["series"][-1], d["series"][-2]
     assert cur["key"] == "2026-W46" and cur["rides"] == 3  # inkl. Testfahrt
     assert prev["key"] == "2026-W45" and prev["rides"] == 1
@@ -123,7 +123,7 @@ def test_offset_and_other_periods(store, filled):
     assert far["current"]["key"] == "2026-W42"
 
     m = store.dashboard("month", today=TODAY)
-    assert len(m["series"]) == 6
+    assert len(m["series"]) == 2
     assert m["series"][-1]["key"] == "2026-11" and m["series"][-1]["rides"] == 4
     assert m["series"][-2]["key"] == "2026-10" and m["series"][-2]["distance_km"] == pytest.approx(30)
     y = store.dashboard("year", today=TODAY)
@@ -138,7 +138,7 @@ def test_highlights(store, filled):
     h = {x["key"]: x for x in d["highlights"]}
     assert filled["test"] not in {x.get("ride") for x in d["highlights"]}  # Testfahrt ignoriert
     assert h["rider_kj"]["ride"] == filled["oct"]
-    assert h["rider_kj"]["sentence"] == "Am Do 15.10.2026 hast du die meiste eigene Energie aufgebracht: 450 kJ."
+    assert h["rider_kj"]["sentence"] == "Am Do 15.10.2026 hast du die meiste eigene Energie aufgebracht: 125 Wh."
     assert h["distance"]["ride"] == filled["oct"]
     assert h["motor_share_max"]["ride"] == filled["last"]
     assert h["motor_share_min"]["ride"] == filled["oct"]
@@ -327,3 +327,51 @@ def test_gesamt_api_und_seite(tmp_path, store, filled):
     assert j["period"] == "all" and j["offset"] == 0
     html = client.get("/?period=all").text
     assert 'data-key="all" aria-pressed="true"' in html
+
+
+def _rows(*days: date) -> list[dict]:
+    base = {"distance_m": 10000, "distance_km": 10.0, "ascent_m": 0, "rider_kj": 36.0, "motor_kj": 0, "motor_wh": 0,
+            "calories_kcal": 0, "battery_used_pct": 0, "avg_rider_power_w": None, "moving_time_s": 600, "id": 1,
+            "ride_id": 1, "start_utc": None}
+    out = []
+    for i, d in enumerate(days):
+        r = {**base, "id": i + 1, "ride_id": i + 1, "_local": d}
+        for k in ("motor_share_pct", "best_5min_w", "best_20min_w", "max_rider_power_w", "max_motor_power_w", "max_speed_kmh", "km_per_pct"):
+            r[k] = None
+        out.append(r)
+    return out
+
+
+def test_compare_elapsed_vs_full():
+    rows = _rows(date(2026, 10, 5), date(2026, 10, 20), date(2026, 11, 2))
+    today = date(2026, 11, 13)
+    e = dash.build(rows, "month", 0, today)
+    assert e["compare_mode"] == "elapsed" and e["compare_partial"] is True and e["previous_until"] == "2026-10-13"
+    assert e["previous"]["rides"] == 1 and e["comparison"]["rides"]["previous"] == 1
+    assert e["series"][-2]["rides"] == 2  # Chart bleibt voller Vormonat
+    f = dash.build(rows, "month", 0, today, compare_mode="full")
+    assert f["compare_partial"] is False and f["previous_until"] == "2026-10-13"
+    assert f["previous"]["rides"] == 2 and f["compare_mode"] == "full"
+
+
+def test_compare_not_partial_for_past_offset():
+    rows = _rows(date(2026, 9, 5), date(2026, 10, 5))
+    d = dash.build(rows, "month", 1, date(2026, 11, 13))
+    assert d["compare_partial"] is False and d["previous_until"] is None
+
+
+def test_rider_wh_and_highlight_range():
+    rows = _rows(date(2026, 11, 2))
+    d = dash.build(rows, "month", 0, date(2026, 11, 13))
+    assert d["series"][-1]["rider_wh"] == 10.0 and d["comparison"]["rider_wh"]["current"] == 10.0
+    assert d["recent"][0]["rider_wh"] == 10.0
+    h = {x["key"]: x for x in d["highlights"]}
+    assert h["rider_kj"]["value_text"] == "10 Wh" and h["rider_kj"]["value_alt_text"] == "36 kJ"
+    assert h["rider_kj"]["start"] == h["rider_kj"]["end"] == "2026-11-02"
+    assert h["distance"]["value_alt_text"] is None
+    pm = [x for x in d["highlights"] if x["group"] == "period"]
+    for x in pm:
+        assert x["start"] <= x["end"]
+    if any(x["period"] == "month" for x in pm):
+        m = next(x for x in pm if x["period"] == "month")
+        assert (m["start"], m["end"]) == ("2026-11-01", "2026-11-30")

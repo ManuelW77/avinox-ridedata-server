@@ -517,10 +517,11 @@ class Store:
             m["moving_time_s"] += r["moving_time_s"]
         return {"total": total, "months": dict(sorted(months.items()))}
 
-    def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None, lang: str = "de") -> dict:
+    def dashboard(self, period: str = "week", offset: int = 0, today: date | None = None, lang: str = "de",
+                  compare_mode: str = "elapsed") -> dict:
         """Übersicht für die Startseite (siehe ``dashboard.build``). ``today`` nur für Tests."""
         today = today or datetime.now(self.settings.tz).date()
-        dash = dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today, lang)
+        dash = dashboard.build(dashboard.load_rows(self.db, self.settings.tz), period, offset, today, lang, compare_mode)
         names = self.mode_names()
         if names:
             apply_mode_names(dash["mix"], names)
