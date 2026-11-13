@@ -424,12 +424,7 @@ html { scroll-behavior: smooth; }
   background: var(--accent, var(--ink-3)); margin-right: 0.55rem; vertical-align: -0.15em;
 }
 
-/* Karten in Akzentgruppen: Streifen oben + weicher Farbverlauf */
-:is(.block, .t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) :is(.card, .best),
-.card:is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) {
-  box-shadow: inset 0 3px 0 var(--accent, var(--line));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, var(--line)) 14%, var(--surface)) 0, var(--surface) 170px);
-}
+/* Karten bleiben neutral: Abschnitte trennen Titel und Trennlinie, Farbe nur auf Daten und Botschaften */
 .card h2 { color: var(--ink); }
 
 /* Gruppentitel: Quadrat und Text getönt */
@@ -438,8 +433,8 @@ html { scroll-behavior: smooth; }
 .group-title:is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral),
 :is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) > .group-title { color: color-mix(in srgb, var(--accent) 55%, var(--ink)); }
 
-/* Neutrale Balken nehmen die Farbe der Gruppe an */
-.t-hill .bar .fill:not(.rider):not(.motor) { background: var(--hill); }
+/* Mengen-Balken am Berg in der Mengenfarbe */
+.t-hill .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
 .t-ride .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
 
 /* Fahrt umbenennen */
@@ -556,13 +551,7 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .segmented.small button { font-size: 0.75rem; padding: 0.2rem 0.6rem; }
 .segmented[hidden] { display: none; }
 
-/* ---- Übersicht: ruhigere Karten, Mengen einfarbig, Bestwert-Botschaft ---- */
-.page-dash :is(.block, .t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) :is(.card, .best),
-.page-dash .card:is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) {
-  box-shadow: none;
-  background: var(--surface);
-}
-.page-dash .t-hill .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+/* ---- Übersicht: Bestwert-Botschaft ---- */
 .page-dash .best { position: relative; }
 .page-dash .best.is-new { box-shadow: inset 0 3px 0 var(--accent, var(--line)); }
 .page-dash .best.is-new .best-k { padding-right: 2.6rem; }
