@@ -451,3 +451,21 @@ def test_device_page_renders_battery_health(client):
     page = client.get("/device").text
     assert "Hinweise" in page and "Alles unauff" in page
     assert client.get("/api/v1/device").json()["battery_health"]["charge_count"] == 0
+
+
+def test_device_page_battery_charts(client, monkeypatch):
+    real = store_mod.Store.device
+
+    nulls = {k: None for k in ("start_temp_c", "end_temp_c", "min_cell_mv", "max_cell_mv", "min_total_v")}
+
+    def fake(self):
+        info = real(self)
+        info["battery_history"] = [
+            {"time": None, "boot_count": 1, "start_pct": 70, "end_pct": 43, "max_temp_c": 17, "max_cell_delta_mv": 200, "max_current_a": 40.0, **nulls},
+            {"time": "2026-01-05T10:00:00+00:00", "boot_count": 2, "start_pct": 90, "end_pct": 60, "max_temp_c": 20, "max_cell_delta_mv": 150, "max_current_a": 35.5, **nulls},
+        ]
+        return info
+
+    monkeypatch.setattr(store_mod.Store, "device", fake)
+    page = client.get("/device").text
+    assert 'id="bat-data"' in page and "battery.js" in page and 'id="bat-charts"' in page

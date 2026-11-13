@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% from "_macros.html" import figure, figure_text with context %}
 {% block title %}{{ t('dev.title') }} – Avinox Ride Data{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
+{% endblock %}
 {% block main %}
 {% set fw_labels = {'package': t('fw.package'), 'screen': t('fw.screen'), 'motor': t('fw.motor'), 'ble': t('fw.ble'), 'bat': t('fw.bat')} %}
 {% set hist = d.battery_history | reverse | list %}
@@ -165,6 +168,18 @@
 
 <div class="block t-motor" id="sec-history" data-jump="{{ t('hist.title') }}">
   <h2 class="section-title">{{ t('hist.title') }}</h2>
+  {% if d.battery_history | length >= 2 %}
+<section class="card" id="bat-charts">
+  <div class="chart-head"><h2>{{ t('bat.chart.charge') }}</h2><span class="muted small" id="bat-v-charge"></span></div>
+  <div class="dchart" id="bat-c-charge"></div>
+  <div class="chart-head"><h2>{{ t('bat.chart.temp') }}</h2><span class="muted small" id="bat-v-temp"></span></div>
+  <div class="dchart" id="bat-c-temp"></div>
+  <div class="chart-head"><h2>{{ t('bat.chart.delta') }}</h2><span class="muted small" id="bat-v-delta"></span></div>
+  <div class="dchart" id="bat-c-delta"></div>
+  <div class="chart-head"><h2>{{ t('bat.chart.current') }}</h2><span class="muted small" id="bat-v-current"></span></div>
+  <div class="dchart" id="bat-c-current"></div>
+</section>
+  {% endif %}
 <section class="card">
   {% if hist %}
   <div style="overflow-x:auto">
@@ -214,4 +229,9 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
+{% if d.battery_history | length >= 2 %}
+<script type="application/json" id="bat-data">{{ d.battery_history | tojson }}</script>
+<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
+<script src="{{ url_for('static', path='battery.js').path }}" defer></script>
+{% endif %}
 {% endblock %}
