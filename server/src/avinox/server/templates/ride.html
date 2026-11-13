@@ -15,14 +15,14 @@
       {% if a.warnings %}<span class="pill warn" title="{{ a.warnings | join('; ') }}">{{ t('ride.warnings', n=a.warnings | length) }}</span>{% endif %}
     </p>
   </div>
-  <div class="actions">
+  <div class="actions end">
     <button type="button" class="btn ghost danger" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/gpx">GPX</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/fit">FIT</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>
-    {% if hl_active and a.hr_source != 'belt' %}<button type="button" class="btn ghost" id="hl-fetch" data-ride="{{ ride.id }}">{{ t('ride.hl_fetch') }}</button>{% endif %}
+    {% if hl_active and a.hr_source != 'belt' %}<button type="button" class="btn ghost" id="hl-fetch" data-ride="{{ ride.id }}" title="{{ t('ride.hl_fetch_tip') }}">{{ t('ride.hl_fetch') }}</button>{% endif %}
   </div>
 </div>
 

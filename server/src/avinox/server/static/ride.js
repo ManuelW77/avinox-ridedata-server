@@ -178,7 +178,6 @@
           const range = fmt(edges[i], cfg.digits) + "–" + fmt(edges[i + 1], cfg.digits) + " " + cfg.unit;
           items.push([SCALE[i], range, range]);
         }
-        ends = { speed: tr("lg.speed"), rider: tr("lg.rider"), motor: tr("lg.motor"), alt: tr("lg.alt"), hr: tr("lg.hr") }[key].split("|");
         classes = vals.map((v) => classOf(v, br.cuts));
         palette = (c) => (c === -1 ? grey : SCALE[c]);
       } else {
