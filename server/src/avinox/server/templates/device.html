@@ -240,6 +240,17 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
+<script>
+/* Karten in einer .folds-Gruppe klappen immer gemeinsam auf/zu */
+document.querySelectorAll(".folds").forEach(function (g) {
+  var folds = g.querySelectorAll("details.fold");
+  folds.forEach(function (f) {
+    f.addEventListener("toggle", function () {
+      folds.forEach(function (o) { if (o !== f && o.open !== f.open) o.open = f.open; });
+    });
+  });
+});
+</script>
 {% if d.battery_history | length >= 2 %}
 <script type="application/json" id="bat-data">{{ d.battery_history | tojson }}</script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
