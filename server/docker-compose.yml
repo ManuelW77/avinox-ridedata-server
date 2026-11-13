@@ -16,8 +16,7 @@ services:
       # AVINOX_WEB_PASSWORD: "bitte-aendern"
       # AVINOX_PUBLIC_URL: "http://192.168.1.18:8000"  # Adresse für den ESP32 (Einstellungen-Seite)
       # AVINOX_TZ: "Europe/Berlin"
-      # AVINOX_TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-      # AVINOX_TILE_ATTRIBUTION: "© OpenStreetMap-Mitwirkende"
+      # AVINOX_MAP_STYLE: "https://tiles.openfreemap.org/styles/liberty"
       # AVINOX_MAX_UPLOAD_MB: "64"
       # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP des Reverse-Proxys (für echte Client-IPs im Sync-Log)
 

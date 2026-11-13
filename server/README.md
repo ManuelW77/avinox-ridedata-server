@@ -59,8 +59,7 @@ Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellun
 | `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
 | `AVINOX_PUBLIC_URL` | leer | Adresse(n) des Servers für den ESP32, kommagetrennt, z. B. `https://avinox.example.org,http://192.168.1.18:8000`; die Einstellungsseite bietet zusätzlich die aufgerufene Adresse und die LAN-IP an |
 | `AVINOX_TZ` | `Europe/Berlin` | Zeitzone für die Anzeige |
-| `AVINOX_TILE_URL` | OpenStreetMap | Kachel-URL für die Karte |
-| `AVINOX_TILE_ATTRIBUTION` | © OpenStreetMap | Quellenangabe der Karte |
+| `AVINOX_MAP_STYLE` | `https://tiles.openfreemap.org/styles/liberty` | Style-URL (MapLibre, Vektorkarte) für Fahrtkarte und 3D-Ansicht; die 3D-Höhen kommen von den AWS Terrain Tiles |
 | `AVINOX_MAX_UPLOAD_MB` | `64` | Größte erlaubte Datei |
 
 ### Upload-Protokoll (ESP32)

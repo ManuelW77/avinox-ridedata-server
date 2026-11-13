@@ -563,7 +563,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         token = i18n.use(lang)  # Filter und t() lesen die Sprache beim Rendern (läuft hier synchron)
         try:
             resp = templates.TemplateResponse(request, name, {
-                "tile_url": settings.tile_url, "tile_attribution": settings.tile_attribution,
+                "map_style": settings.map_style,
                 "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang), **ctx,
             })
         finally:
