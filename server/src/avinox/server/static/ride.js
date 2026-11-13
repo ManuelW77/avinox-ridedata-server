@@ -317,7 +317,13 @@
   /* --------------------------------------------------------------- 3D-Ansicht */
 
   const DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-  const EXAGGERATION = 1.5;  // Höhen leicht überhöht, sonst wirken Mittelgebirge platt
+  // Höhenüberhöhung (Standard leicht überhöht, sonst wirken Mittelgebirge platt); Wahl bleibt im Browser erhalten
+  const EXAG_CHOICES = [1, 1.5, 2, 3];
+  let exaggeration = 1.5;
+  try {
+    const saved = Number(localStorage.getItem("avinox3dExag"));
+    if (EXAG_CHOICES.includes(saved)) exaggeration = saved;
+  } catch (e) { /* Speicher gesperrt: Standard bleibt */ }
   const LOOK_AHEAD_M = 70;   // Richtung: Verlauf über die nächsten Meter
   const CHASE_BACK_M = 140, CHASE_UP_M = 70, CHASE_TARGET_M = 40;  // Kamera hinter und über dem Fahrer, Blick voraus
 
@@ -357,6 +363,21 @@
     btn.addEventListener("click", open3d);
     byId("close3d").addEventListener("click", close3d);
     document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !byId("view3d").hidden) close3d(); });
+    // Überhöhung: Listener nur hier, einmalig (setup3d läuft einmal pro Seite)
+    const exagEl = byId("exag");
+    if (exagEl) {
+      setPressed(exagEl, String(exaggeration));
+      exagEl.addEventListener("click", (ev) => {
+        const b = ev.target.closest("button[data-key]");
+        const v = b ? Number(b.dataset.key) : NaN;
+        if (!EXAG_CHOICES.includes(v)) return;
+        exaggeration = v;
+        try { localStorage.setItem("avinox3dExag", String(v)); } catch (e) { /* egal */ }
+        setPressed(exagEl, String(v));
+        if (map3d && map3d.getSource("dem")) map3d.setTerrain({ source: "dem", exaggeration });
+        if (play3d) play3d.refresh();
+      });
+    }
   }
 
   function open3d() {
@@ -405,7 +426,7 @@
       const firstSymbol = (map.getStyle().layers.find((l) => l.type === "symbol") || {}).id;
       map.addLayer({ id: "hillshade", type: "hillshade", source: "dem-shade",
         paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#3a3a3a" } }, firstSymbol);
-      map.setTerrain({ source: "dem", exaggeration: EXAGGERATION });
+      map.setTerrain({ source: "dem", exaggeration });
       if (map.setSky) map.setSky({ "sky-color": "#a9cbe8", "horizon-color": "#e9eef2", "sky-horizon-blend": 0.6 });
 
       const r = colorize(currentKey());
@@ -462,7 +483,7 @@
     const altAt = (meters) => {   // Notnagel ohne Gelände: Höhe aus den Messwerten
       const { i } = locate(meters);
       const s = t.samples[i];
-      return s && altIdx >= 0 && s[altIdx] != null ? s[altIdx] * EXAGGERATION : 0;
+      return s && altIdx >= 0 && s[altIdx] != null ? s[altIdx] * exaggeration : 0;
     };
     const heightAt = (meters) => { const g = ground(map, at(meters)); return g > 0 ? g : altAt(meters); };
 
@@ -536,7 +557,7 @@
       smoothed = smoothed === null ? course : (smoothed + ((course - smoothed + 540) % 360 - 180) * 0.06 + 360) % 360;
       map.getSource("rider").setData({ type: "Point", coordinates: [here[1], here[0]] });
       const behind = offsetPt(here, smoothed + 180, CHASE_BACK_M), ahead = offsetPt(here, smoothed, CHASE_TARGET_M);
-      smBack = lp(smBack, Math.max(heightAt(meters - CHASE_BACK_M), heightAt(meters)) + CHASE_UP_M * EXAGGERATION);
+      smBack = lp(smBack, Math.max(heightAt(meters - CHASE_BACK_M), heightAt(meters)) + CHASE_UP_M * exaggeration);
       smTarget = lp(smTarget, heightAt(meters + CHASE_TARGET_M));
       const camera = map.calculateCameraOptionsFromTo(toLngLat(behind), smBack, toLngLat(ahead), smTarget);
       // MapLibre führt die Höhe des Mittelpunkts nur verzögert nach, sonst läge die Kamera im Berg
@@ -587,6 +608,11 @@
     btn.hidden = false; dock.hidden = false; speedEl.hidden = false;
     label();
     return {
+      // nach Wechsel der Überhöhung: Glättung zurücksetzen, bei Pause Kamera einmal neu setzen
+      refresh() {
+        smBack = smTarget = null;
+        if (!playing && progress > 0) render();
+      },
       stop() {
         pause();
         btn.removeEventListener("click", toggle);
