@@ -561,3 +561,12 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   background: color-mix(in srgb, var(--accent, var(--ink-3)) 16%, var(--surface));
 }
 .page-dash .chart-head > .muted.small:last-child { white-space: nowrap; }
+
+/* Fahrtseite: Verlauf-Legende ohne Hover nur mit Seriennamen */
+.chart:not(.hovering) .u-legend .u-value { display: none; }
+
+/* Fahrtseite: Kartenschalter bleibt auf dem Handy einzeilig */
+@media (max-width: 480px) {
+  #color-by { display: flex; flex-wrap: nowrap; width: 100%; }
+  #color-by button { flex: 1; font-size: 0.75rem; padding: 0.3rem 0.2rem; white-space: nowrap; }
+}
