@@ -14,6 +14,12 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 
 **All data stays local** in your own network. No cloud account, no sharing. Only if you turn on the AI analysis with a cloud provider are key figures (no GPS data) sent to that provider. With Ollama everything stays local.
 
+## Explainer video
+
+<a href="video/avinox-erklaervideo-en-quer.mp4"><img src="assets/video/erklaervideo-en.jpg" width="640" alt="Explainer video: Avinox Ride Data in one minute"></a>
+
+▶ **Avinox Ride Data in one minute** (approx. 1:40): [landscape](video/avinox-erklaervideo-en-quer.mp4) · [portrait](video/avinox-erklaervideo-en-hoch.mp4) · Deutsch: [quer](video/avinox-erklaervideo-de-quer.mp4) · [hochkant](video/avinox-erklaervideo-de-hoch.mp4)
+
 ## What you get
 
 - **Your totals at a glance:** distance, riding time, elevation and calories per day, week, month, year or all time, compared with the previous period. A bar shows how much energy you pedalled yourself and how much the motor added.
