@@ -268,7 +268,7 @@
       card(tr("mix.d.cadence"), tr("mix.cadence_moving"), d.cadence_s, "rider", true),
       card(tr("mix.d.speed"), tr("mix.speed_moving"), d.speed_s, "", true),
     ];
-    if (d.heart_rate_s) powerCards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "rider"));
+    if (d.heart_rate_s) powerCards.push(card(tr("mix.d.hr"), "bpm", d.heart_rate_s, "hr"));
     const bg = m.by_gradient || {};
     const spdGrad = {};
     Object.entries(bg).forEach(([k, r]) => { spdGrad[k] = r.avg_speed_kmh; });

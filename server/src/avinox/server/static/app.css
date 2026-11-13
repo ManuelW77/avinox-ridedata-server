@@ -10,6 +10,7 @@
   --line: #dcd8cf;
   --rider: #d9661a;
   --motor: #13877a;
+  --hr: #d02a5e;
   --alt: #6b6f9a;
   --hill: #3f8a3a;
   --warn: #b3411b;
@@ -33,6 +34,7 @@
     --line: #333a40;
     --rider: #f08a3e;
     --motor: #35b8a6;
+    --hr: #ff7a98;
     --alt: #9da2d6;
     --hill: #6cc46a;
     --warn: #f07b52;
@@ -53,6 +55,7 @@
   --line: #333a40;
   --rider: #f08a3e;
   --motor: #35b8a6;
+  --hr: #ff7a98;
   --alt: #9da2d6;
   --hill: #6cc46a;
   --warn: #f07b52;
@@ -193,6 +196,7 @@ button.bar[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 1
 .bar .fill { display: block; height: 100%; min-width: 2px; border-radius: 999px; background: var(--ink-3); }
 .bar .fill.rider { background: var(--rider); }
 .bar .fill.motor { background: var(--motor); }
+.bar .fill.hr { background: var(--hr); }
 .bar .track-pair { display: grid; gap: 3px; }
 .bar .track-pair .track { height: 6px; }
 .bar .label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -218,8 +222,9 @@ dl.kv dd { margin: 0; }
 .btn.ghost { background: var(--surface-2); color: var(--ink); }
 .btn.danger { color: var(--warn); }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.actions.end { justify-content: flex-end; }
 
-input[type=text], input[type=password] {
+input[type=text], input[type=password], input[type=url] {
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0.45rem 0.7rem; width: 100%;
 }
 label.field { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--ink-2); }
@@ -435,7 +440,7 @@ html { scroll-behavior: smooth; }
 :is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) > .group-title { color: color-mix(in srgb, var(--accent) 55%, var(--ink)); }
 
 /* Mengen-Balken am Berg in der Mengenfarbe */
-.t-hill .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+.t-hill .bar .fill:not(.rider):not(.motor):not(.hr) { background: var(--alt); }
 .t-ride .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
 
 /* Fahrt umbenennen */
@@ -486,11 +491,11 @@ select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b0ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 select:hover:not(:disabled) { background-color: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); border-color: var(--ink-3); }
-select:focus-visible, input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=password]:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
+select:focus-visible, input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=password]:focus-visible, input[type=url]:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
 select:disabled { opacity: 0.5; cursor: not-allowed; }
 .rides-tools select { border: 1px solid var(--line); min-height: 0; font-size: 0.85rem; color: var(--ink-2); padding: 0.38rem 2rem 0.38rem 0.85rem; }
-input[type=text], input[type=search], input[type=password] { transition: border-color 0.15s; }
-input[type=text]:focus, input[type=search]:focus, input[type=password]:focus { border-color: var(--motor); }
+input[type=text], input[type=search], input[type=password], input[type=url] { transition: border-color 0.15s; }
+input[type=text]:focus, input[type=search]:focus, input[type=password]:focus, input[type=url]:focus { border-color: var(--motor); }
 .rename-form input { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
 
 /* Schalter statt Checkbox */

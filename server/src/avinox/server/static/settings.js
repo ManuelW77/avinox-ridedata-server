@@ -38,6 +38,64 @@
     });
   }
 
+  // ---- HealthLog
+  const hlForm = document.getElementById("hl-form");
+  if (hlForm) {
+    const $ = (id) => document.getElementById(id);
+    const jsonHdr = { "Content-Type": "application/json" };
+    const showHl = (d) => {
+      $("hl-url").value = d.url || $("hl-url").value;
+      $("hl-enabled").checked = !!d.enabled;
+      $("hl-status").textContent = d.connected ? tr("hl_connected", { u: d.username }) : tr("hl_not_connected");
+      $("hl-counts").textContent = d.connected ? "· " + tr("hl_counts", { ok: d.ok, open: d.open }) : "";
+      $("hl-form").hidden = !!d.connected;
+      $("hl-disconnect").hidden = !d.connected;
+      $("hl-retry").hidden = !d.connected;
+    };
+    const HL_ERR = { invalid_url: "hl_err.invalid_url", unreachable: "hl_err.unreachable", bad_response: "hl_err.bad_response", invalid_credentials: "hl_err.invalid_credentials", mfa_invalid: "hl_err.mfa_invalid" };
+    const errText = (res, data) => { const code = data.detail && data.detail.error; return HL_ERR[code] ? tr(HL_ERR[code]) : tr("error_n", { n: res.status }); };
+    const hlMsg = (text) => { $("hl-msg").textContent = text || ""; $("hl-msg").hidden = !text; };
+    fetch("/api/v1/settings/healthlog").then((r) => r.json()).then(showHl).catch(() => {});
+    const putHl = async (body) => {
+      const res = await fetch("/api/v1/settings/healthlog", { method: "PUT", headers: jsonHdr, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { showHl(data); toast(tr("autosaved")); return true; }
+      toast(errText(res, data), "error");
+      return false;
+    };
+    $("hl-enabled").addEventListener("change", async () => { if (!(await putHl({ enabled: $("hl-enabled").checked }))) $("hl-enabled").checked = !$("hl-enabled").checked; });
+    $("hl-url").addEventListener("change", () => { if ($("hl-url").value.trim()) putHl({ url: $("hl-url").value.trim() }); });
+    hlForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      hlMsg("");
+      try {
+        const res = await fetch("/api/v1/settings/healthlog/connect", {
+          method: "POST", headers: jsonHdr,
+          body: JSON.stringify({ url: $("hl-url").value.trim(), username: $("hl-user").value.trim(), password: $("hl-pass").value, mfa_code: $("hl-code").value.trim() || null }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          hlMsg(errText(res, data));
+          return;
+        }
+        if (data.mfa_required) { $("hl-code-row").hidden = false; $("hl-code").focus(); hlMsg(tr("hl_need_code")); return; }
+        $("hl-pass").value = ""; $("hl-code").value = ""; $("hl-code-row").hidden = true;
+        showHl(data); toast(tr("hl_connected_toast"));
+      } catch (e) { hlMsg(tr("error_msg", { m: e.message })); }
+    });
+    $("hl-retry").addEventListener("click", async () => {
+      const res = await fetch("/api/v1/settings/healthlog/retry", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(errText(res, data), "error"); return; }
+      showHl(data);
+      const m = $("hl-retry-msg"); m.textContent = tr("hl_retry_done", { n: data.retried }); m.hidden = false;
+    });
+    $("hl-disconnect").addEventListener("click", async () => {
+      const res = await fetch("/api/v1/settings/healthlog/disconnect", { method: "POST" });
+      if (res.ok) { showHl(await res.json()); toast(tr("hl_disconnected_toast")); }
+    });
+  }
+
   // ---- Ortsnamen an/aus
   const geoBox = document.getElementById("geo-enabled");
   if (geoBox) {
