@@ -433,3 +433,11 @@ def test_key_cleared_when_host_changes(client):
 @pytest.mark.parametrize("url", ["https://x.example/v1?a=1", "https://x.example/v1#f", "https://user:pw@x.example/v1"])
 def test_base_url_rejects_query_fragment_userinfo(client, url):
     assert client.put("/api/v1/settings/ai", json={"base_url": url}).status_code == 400
+
+
+def test_key_cleared_on_provider_switch_and_scheme_change(client):
+    configure(client)  # openrouter, Adresse aus dem Preset (nicht gespeichert)
+    assert not client.put("/api/v1/settings/ai", json={"provider": "ollama"}).json()["has_key"]
+    client.put("/api/v1/settings/ai", json={"provider": "custom", "base_url": "https://x.example/v1", "api_key": KEY})
+    assert client.put("/api/v1/settings/ai", json={"base_url": "https://X.example:443/v2"}).json()["has_key"]  # gleicher Empfänger
+    assert not client.put("/api/v1/settings/ai", json={"base_url": "http://x.example/v1"}).json()["has_key"]  # https → http
