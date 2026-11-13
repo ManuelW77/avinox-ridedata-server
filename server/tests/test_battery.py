@@ -27,10 +27,10 @@ def test_cycles_ignore_unknown_zero():
 
 
 def test_rest_balance_filter():
-    ss = [S(mx_c=4100, cur=1, delta=5), S(mx_c=4100, cur=10, delta=30), S(mx_c=3900, cur=1, delta=40), S(mx_c=4150, cur=2, delta=20)]
+    ss = [S(mx_c=4100, cur=1, delta=5), S(mx_c=4100, cur=10, delta=30), S(mx_c=3900, cur=1, delta=40), S(mx_c=4150, cur=2, delta=25)]
     rb = health(ss, [])["rest_balance"]
-    assert [p["delta_mv"] for p in rb["points"]] == [5, 20]
-    assert rb["first_mv"] == 5 and rb["latest_mv"] == 20
+    assert [p["delta_mv"] for p in rb["points"]] == [5, 25]
+    assert rb["first_mv"] == 5 and rb["latest_mv"] == 25
     assert any(h["key"] == "balance" for h in health(ss, [])["hints"])
 
 
@@ -69,3 +69,70 @@ def test_temperature_and_sag():
     assert r["temperature"]["cold_sessions"] == 0
     assert r["temperature"]["hot_sessions"] == 1 and r["temperature"]["seconds_over_50"] == 25
     assert r["sag"] == [{"time": None, "mv_per_a": 10.0}]
+
+
+def R(delta, time=None, **kw):
+    return S(time=time, mx_c=4100, cur=1, delta=delta, **kw)
+
+
+def keys(r):
+    return [h["key"] for h in r["hints"]]
+
+
+def test_balance_crit_and_status_check():
+    r = health([R(10), R(55)], [])
+    assert r["hints"][0] == {"level": "crit", "key": "balance_crit", "params": {"mv": 55}}
+    assert "balance" not in keys(r) and "balance_rising" not in keys(r)
+    assert r["status"] == "check"
+    assert r["rest_balance"]["warn_mv"] == 20 and r["rest_balance"]["crit_mv"] == 50
+
+
+def test_balance_warn_boundaries():
+    assert "balance" not in keys(health([R(19)], []))
+    assert "balance" in keys(health([R(20)], []))
+    assert "balance_crit" in keys(health([R(50)], []))
+
+
+def test_balance_rising():
+    r = health([R(18), R(22), R(30)], [])
+    assert "balance_rising" in keys(r) and "balance" in keys(r)
+    assert "balance_rising" not in keys(health([R(30), R(22), R(25)], []))
+    assert "balance_rising" not in keys(health([R(10), R(12), R(15)], []))
+
+
+def test_balance_down():
+    r = health([R(30), R(22)], [])
+    assert {"level": "info", "key": "balance_down", "params": {"mv": 22}} in r["hints"]
+    assert "balance_down" not in keys(health([R(30), R(27)], []))
+    assert "balance_down" not in keys(health([R(15), R(5)], []))
+
+
+def test_fullcharge_by_days():
+    a = S(time="2025-01-01T10:00:00+00:00", start=100, end=60)
+    b = S(time="2025-03-01T10:00:00+00:00", start=70, end=50)
+    r = health([a, b], [])
+    h = [x for x in r["hints"] if x["key"] == "fullcharge_days"]
+    assert h and h[0]["level"] == "info" and h[0]["params"]["days"] == 59
+    assert r["last_full"]["time"] == a["time"]
+    near = S(time="2025-01-20T10:00:00+00:00", start=70, end=50)
+    assert "fullcharge_days" not in keys(health([a, near], []))
+
+
+def test_fullcharge_by_rides():
+    full = S(start=100, end=80)
+    rides = [S(start=70, end=60) for _ in range(30)]
+    r = health([full] + rides, [])
+    assert {"level": "info", "key": "fullcharge_rides", "params": {"n": 30}} in r["hints"]
+    assert r["last_full"] == {"time": None, "rides_since": 30}
+    assert "fullcharge_rides" not in keys(health([full] + rides[:29], []))
+    assert "fullcharge_rides" in keys(health(rides, []))  # ohne Vollladung: insgesamt
+
+
+def test_status_good_watch_and_sorting():
+    assert health([S()], [])["status"] == "good"
+    assert health([R(25)], [])["status"] == "watch"
+    cold = S(st=2, et=3, mx=3)
+    r = health([cold, R(60), S(end=5)], [])
+    levels = [h["level"] for h in r["hints"]]
+    assert levels == sorted(levels, key=["crit", "warn", "info", "ok"].index)
+    assert levels[0] == "crit" and r["status"] == "check"

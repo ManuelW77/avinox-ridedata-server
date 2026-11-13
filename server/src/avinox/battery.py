@@ -13,7 +13,12 @@ from statistics import median
 CHARGE_MIN_RISE = 2  # Prozentpunkte über dem letzten Stand, ab denen wir „geladen“ sagen
 REST_FULL_MV = 4050
 REST_MAX_A = 2
-BALANCE_WARN_MV = 15
+BALANCE_WARN_MV = 20
+BALANCE_CRIT_MV = 50
+BALANCE_DROP_MV = 5
+FULL_PCT = 98
+FULL_REMIND_DAYS = 42
+FULL_REMIND_RIDES = 30
 COLD_C = 5
 HOT_C = 45
 DEEP_PCT = 10
@@ -118,6 +123,8 @@ def health(sessions_battery: list[dict], rides: list[dict]) -> dict:
         "points": rest,
         "first_mv": rest[0]["delta_mv"] if rest else None,
         "latest_mv": rest[-1]["delta_mv"] if rest else None,
+        "warn_mv": BALANCE_WARN_MV,
+        "crit_mv": BALANCE_CRIT_MV,
     }
 
     cold = hot = limit = 0
@@ -174,13 +181,33 @@ def health(sessions_battery: list[dict], rides: list[dict]) -> dict:
         if len(soh_points) >= SOH_MIN_POINTS and first:
             change = round((last / first - 1) * 100, 1)
 
+    full_idx = [i for i, s in enumerate(ss) if not _start_unknown(s) and s["start_pct"] >= FULL_PCT]
+    since = ss[full_idx[-1] + 1 :] if full_idx else ss
+    rides_since = sum(1 for s in since if not _start_unknown(s) and _end_known(s) and s["end_pct"] < s["start_pct"])
+    last_full_time = None
+    if full_idx:
+        last_full_time = _iso(ss[full_idx[-1]].get("time"))
+    newest = next((_time(s.get("time")) for s in reversed(ss) if _time(s.get("time"))), None)
+    full_days = None
+    if last_full_time and newest:
+        full_days = int((newest - _time(last_full_time)).total_seconds() // 86400)
+
     hints = []
     if deep_discharge["count"]:
         hints.append({"level": "warn", "key": "deep", "params": {"n": deep_discharge["count"]}})
     elif deep_discharge["low_cell_count"]:
         hints.append({"level": "warn", "key": "lowcell", "params": {"n": deep_discharge["low_cell_count"]}})
-    if rest_balance["latest_mv"] is not None and rest_balance["latest_mv"] > BALANCE_WARN_MV:
-        hints.append({"level": "warn", "key": "balance", "params": {"mv": rest_balance["latest_mv"]}})
+    vals = [p["delta_mv"] for p in rest]
+    latest = rest_balance["latest_mv"]
+    if latest is not None:
+        if latest >= BALANCE_CRIT_MV:
+            hints.append({"level": "crit", "key": "balance_crit", "params": {"mv": latest}})
+        elif latest >= BALANCE_WARN_MV:
+            hints.append({"level": "warn", "key": "balance", "params": {"mv": latest}})
+        if latest < BALANCE_CRIT_MV and len(vals) >= 3 and vals[-3] < vals[-2] < vals[-1] and latest >= BALANCE_WARN_MV:
+            hints.append({"level": "warn", "key": "balance_rising", "params": {"mv": latest}})
+        if len(vals) >= 2 and vals[-2] >= BALANCE_WARN_MV and vals[-1] <= vals[-2] - BALANCE_DROP_MV:
+            hints.append({"level": "info", "key": "balance_down", "params": {"mv": latest}})
     if change is not None and change < SOH_WARN_PCT:
         hints.append({"level": "warn", "key": "soh", "params": {"pct": abs(change)}})
     if cold_charges:
@@ -193,10 +220,21 @@ def health(sessions_battery: list[dict], rides: list[dict]) -> dict:
         hints.append({"level": "info", "key": "cold", "params": {"n": cold}})
     if limit:
         hints.append({"level": "info", "key": "limit", "params": {"n": limit}})
+    if full_days is not None and full_days > FULL_REMIND_DAYS:
+        hints.append({"level": "info", "key": "fullcharge_days", "params": {"days": full_days}})
+    elif rides_since >= FULL_REMIND_RIDES:
+        hints.append({"level": "info", "key": "fullcharge_rides", "params": {"n": rides_since}})
     if not hints:
         hints.append({"level": "ok", "key": "ok", "params": {}})
 
+    order = {"crit": 0, "warn": 1, "info": 2, "ok": 3}
+    hints.sort(key=lambda h: order.get(h["level"], 4))
+    levels = {h["level"] for h in hints}
+    status = "check" if "crit" in levels else "watch" if "warn" in levels else "good"
+
     return {
+        "status": status,
+        "last_full": {"time": last_full_time, "rides_since": rides_since},
         "charges": charges,
         "charge_count": len(charges),
         "full_cycles": round(discharged / 100, 1),
