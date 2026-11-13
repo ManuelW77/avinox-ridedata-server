@@ -415,7 +415,7 @@ def test_used_keys_exist():
 
     base = Path(i18n.__file__).parent
     known = set(i18n.TEXTS["de"])
-    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.", "bh.hint.")
+    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.", "bh.hint.", "bh.status.")
     for path in [*base.glob("templates/*.html"), base / "app.py", base / "dashboard.py"]:
         for key in re.findall(r"\bt\(\s*['\"]([a-z0-9_.]+)['\"]", path.read_text()):
             assert key in known or key.startswith(dynamic), (path.name, key)

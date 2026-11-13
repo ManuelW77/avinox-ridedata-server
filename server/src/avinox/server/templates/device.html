@@ -48,6 +48,11 @@
   <h2 class="section-title">{{ t('dev.sec.battery') }}</h2>
 
   {% set bh = d.battery_health %}
+  <section class="card status-box {{ bh.status }}">
+    <p class="status-line"><span class="dot"></span>{{ t('bh.status.' ~ bh.status) }}</p>
+    <p class="muted small">{{ t('bh.status.more') }}</p>
+  </section>
+
   <section class="card">
     <h2>{{ t('bh.hints.title') }}</h2>
     <p class="muted small">{{ t('bh.hints.text') }}</p>
@@ -126,8 +131,10 @@
     {% endif %}
   </details>
   {% set rp = bh.rest_balance.points %}
+  {% set bw = bh.rest_balance.warn_mv %}
+  {% set bc = bh.rest_balance.crit_mv %}
   <details class="card fold">
-    <summary><h2>{{ t('bh.balance.title') }}</h2>{% if rp %}<span class="muted small">{{ rp[-1].delta_mv | num }} mV</span>{% endif %}</summary>
+    <summary><h2>{{ t('bh.balance.title') }}</h2>{% if rp %}<span class="small bal-num-{{ 'crit' if rp[-1].delta_mv >= bc else ('warn' if rp[-1].delta_mv >= bw else 'ok') }}">{{ rp[-1].delta_mv | num }} mV</span>{% endif %}</summary>
     <p class="muted small">{{ t('bh.balance.text') }}</p>
     {% if rp %}
     {% set peak = rp | map(attribute='delta_mv') | max %}
@@ -135,11 +142,12 @@
       {% for p in rp[-30:] %}
       <div class="bar">
         <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else '–' }}</span>
-        <span class="track"><span class="fill" style="width: {{ (100 * p.delta_mv / peak) if peak else 0 }}%"></span></span>
+        <span class="track"><span class="fill bal-{{ 'crit' if p.delta_mv >= bc else ('warn' if p.delta_mv >= bw else 'ok') }}" style="width: {{ (100 * p.delta_mv / peak) if peak else 0 }}%"></span></span>
         <span class="val">{{ p.delta_mv | num }} mV</span>
       </div>
       {% endfor %}
     </div>
+    <p class="muted small">{{ t('bh.balance.legend') }}</p>
     {% else %}
     <p class="muted">{{ t('bh.few') }}</p>
     {% endif %}
