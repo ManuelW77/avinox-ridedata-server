@@ -16,25 +16,34 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 
 ## What you get
 
-- **Overview** with periods (day, week, month, year), comparison and best values; ride list at `/rides`.
-- **Ride details** with a map (GPS track with measured values) and charts: power, cadence, speed, gradient, heart rate.
-- **Statistics:** time per assist mode and gear, distributions, best efforts from 5 s to 60 min, energy and motor share, battery use, stops.
-- **Device:** firmware, battery (cell voltages, current, temperatures), usage statistics, drive messages.
-- **Export** as GPX (with power, cadence, heart rate) and GeoJSON.
-- **Sync page** (`/sync`) with the ESP32's status and reports.
+- **Your totals at a glance:** distance, riding time, elevation and calories per day, week, month, year or all time, compared with the previous period. A bar shows how much energy you pedalled yourself and how much the motor added.
+- **Personal bests:** strongest 5 and 20 minutes, highest peak power, longest ride, most climbing, top speed, most efficient ride (km per percent of battery), best week.
+- **Every ride in detail:** a map of the track, coloured by speed, rider or motor power, altitude or assist mode. Plus charts for altitude, speed, power, cadence, battery and temperature.
+- **Track in 3D:** replay the ride as a flight over the terrain, with exaggerated relief and buildings if you like.
+- **How you ride:** time per assist mode and gear, cadence per gear, distributions of power, speed and gradient, power uphill and downhill.
+- **Battery health in one sentence:** “Your battery is in good shape” plus notes. Behind it: charges and full cycles, health trend (usable Wh), cell balance, voltage drop under load and charts for charge level, temperature, cell deviation and current.
+- **Ride list** with automatic names (e.g. “Loop around …”, can be switched off), renaming, search, filters and route previews.
+- **Export** as GPX (with power, cadence, heart rate), GeoJSON and JSON.
+- **Convenient:** light and dark mode, German and English, your own names for assist modes, file upload in the browser, Wi-Fi firmware updates for the ESP32, a sync page with the ESP32’s reports.
 
 ## Screenshots
 
 <table>
 <tr>
-<td width="50%"><img src="assets/screenshots/dashboard-en.png" alt="Overview with periods, statistics and personal bests"><br><sub>Overview with periods, statistics and personal bests</sub></td>
-<td width="50%"><img src="assets/screenshots/ride-en.png" alt="Ride details with key figures and charts"><br><sub>Ride details with key figures and charts</sub></td>
+<td width="50%"><img src="assets/screenshots/dashboard-en.png" alt="Overview with period, rider and motor energy share and charts"><br><sub>Overview: totals, your share vs. the motor, charts</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-en.png" alt="Ride details with key figures and charts"><br><sub>Ride: key figures and charts</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/battery-en.png" alt="Battery health with notes, charge cycles and health trend"><br><sub>Battery: health, cycles, trend, voltage drop</sub></td>
+<td width="50%"><img src="assets/screenshots/bests-en.png" alt="Personal bests for power, motor, rides and periods"><br><sub>Personal bests</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/stats-en.png" alt="Assist modes, gears and distributions of a ride"><br><sub>Ride: modes, gears and distributions</sub></td>
+<td width="50%"><img src="assets/screenshots/battery-history-en.png" alt="Battery history: charge level, temperature, cell deviation and current"><br><sub>Battery history per session</sub></td>
 </tr>
 </table>
 
-![Assist modes, gears, distributions and best efforts of a ride](assets/screenshots/stats-en.png)
-
-*Assist modes, gears, distributions and best efforts of a ride*
+The map and 3D view are left out on purpose because they show real GPS tracks.
 
 ## Requirements
 
@@ -144,7 +153,7 @@ All states: [esp32/avinox-sync/README.md](esp32/avinox-sync/README.md) (German).
 | [`server/`](server/README.md) | Parser, analysis, server, Docker |
 | [`esp32/`](esp32/avinox-sync/README.md) | Firmware `avinox-sync`; next to it `usb-probe` = feasibility test |
 | [`ERKENNTNISSE.md`](ERKENNTNISSE.md) | File format, data paths, field mapping (German) |
-| `assets/` | Icon |
+| `assets/` | Icon, Screenshots |
 
 ## Notes
 
