@@ -317,6 +317,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.web_user and settings.web_password:
         auth_store.ensure_admin(settings.web_user, settings.web_password)
 
+    setup_lock = threading.Lock()
+    app.state.setup_code = None
+    if not (oidc.enabled or auth_store.user_count() > 0):
+        app.state.setup_code = secrets.token_urlsafe(9)
+        log.warning("Anmeldung aus – Einrichtungscode für den ersten Admin: %s (Einstellungen → Anmeldung)", app.state.setup_code)
+
     def login_active() -> bool:
         """Login nur, wenn es Benutzer gibt oder OIDC eingerichtet ist – sonst offen (LAN-Modus)."""
         return oidc.enabled or auth_store.user_count() > 0
@@ -1057,6 +1063,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth_store.set_password(user["id"], new)
         auth_store.delete_sessions(user["id"], keep=request.cookies.get(AUTH_COOKIE))
         return {"ok": True}
+
+    @app.post("/api/v1/setup/admin", tags=["benutzer"])
+    def setup_admin(request: Request, payload: dict):
+        """Ersten Admin im offenen Modus anlegen und sofort anmelden (danach 409)."""
+        csrf_guard(request, None)
+        if login_active():
+            bad("setup_done", 409)
+        key = (client_ip(request), "__setup__")
+        if throttle.blocked(*key):
+            bad("throttle", 429)
+        code = app.state.setup_code
+        given = str(payload.get("code") or "")
+        if not code or not secrets.compare_digest(given.encode(), code.encode()):
+            throttle.fail(*key)
+            bad("setup_code", 403)
+        name = valid_name(payload.get("username"))
+        password = str(payload.get("password") or "")
+        if problem := password_problem(password):
+            bad(problem)
+        with setup_lock:
+            if auth_store.user_count() != 0:
+                bad("setup_done", 409)
+            user = auth_store.create_user(name, password, True)
+        throttle.clear(*key)
+        app.state.setup_code = None
+        token, max_age = auth_store.create_session(user["id"], True)
+        resp = JSONResponse({"ok": True})
+        set_session_cookie(resp, request, token, max_age)
+        return resp
 
     @app.post("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])
     def users_create(payload: dict):

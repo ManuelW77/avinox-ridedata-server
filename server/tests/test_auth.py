@@ -532,3 +532,61 @@ def test_oidc_admin_setting_and_name_conflict(oidc_settings, idp):
         assert store.by_name("anna")["oidc_sub"] is None and store.by_name("anna")["is_admin"] == 1
         assert c.get("/api/v1/users").status_code == 403  # kein Admin
         assert c.get("/api/v1/rides").status_code == 200
+
+
+# ------------------------------------------------------------ Erster Admin im offenen Modus
+SETUP = {"username": "erster", "password": "erster-passwort-1"}
+
+
+def test_setup_admin_open_mode(settings):
+    c = make(settings)
+    code = c.app.state.setup_code
+    assert "setup-form" in c.get("/settings").text
+    r = c.post("/api/v1/setup/admin", json={**SETUP, "code": code}, headers=XRW)
+    assert r.status_code == 200
+    assert c.app.state.setup_code is None and r.json() == {"ok": True}
+    assert "set-cookie" in r.headers
+    assert c.get("/settings").status_code == 200
+    assert "setup-form" not in c.get("/settings").text
+    assert make(settings).get("/settings").status_code == 303
+    assert c.post("/api/v1/setup/admin", json={**SETUP, "code": code}, headers=XRW).status_code == 409
+
+
+def test_setup_admin_csrf(settings):
+    c = make(settings)
+    SETUP = {**globals()["SETUP"], "code": c.app.state.setup_code}
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert c.post("/api/v1/setup/admin", json=SETUP).status_code == 403
+
+
+def test_setup_admin_short_password(settings):
+    c = make(settings)
+    r = c.post("/api/v1/setup/admin", json={"username": "erster", "password": "kurz", "code": c.app.state.setup_code}, headers=XRW)
+    assert r.status_code == 400
+
+
+def test_setup_admin_refused_with_user_or_oidc(login_settings, settings):
+    r = make(login_settings).post("/api/v1/setup/admin", json=SETUP, headers=XRW)
+    assert r.status_code == 409
+
+
+def test_setup_admin_refused_with_oidc(settings):
+    settings.oidc_issuer, settings.oidc_client_id, settings.oidc_client_secret = ISSUER, "avinox-test", "test-secret"
+    c = make(settings)
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 409
+
+
+def test_setup_admin_login_active_no_code(login_settings, oidc_settings):
+    assert make(login_settings).app.state.setup_code is None
+    assert make(oidc_settings).app.state.setup_code is None
+
+
+def test_setup_admin_wrong_code_and_throttle(settings):
+    c = make(settings)
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 403
+    for _ in range(9):
+        r = c.post("/api/v1/setup/admin", json={**SETUP, "code": "falsch"}, headers=XRW)
+        assert r.status_code == 403 and r.json()["detail"]["error"] == "setup_code"
+    r = c.post("/api/v1/setup/admin", json={**SETUP, "code": c.app.state.setup_code}, headers=XRW)
+    assert r.status_code == 429
+    assert c.app.state.setup_code is not None

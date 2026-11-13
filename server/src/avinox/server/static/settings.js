@@ -365,6 +365,17 @@
       if (res.ok) { pwForm.reset(); toast(tr("pw_saved")); } else toast(authErr(res, data), "error");
     });
   }
+  const setupForm = document.getElementById("setup-form");
+  if (setupForm) {
+    setupForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const pass = document.getElementById("su-pass").value;
+      if (pass !== document.getElementById("su-pass2").value) { toast(tr("setup_mismatch"), "error"); return; }
+      const res = await fetch("/api/v1/setup/admin", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ code: document.getElementById("su-code").value.trim(), username: document.getElementById("su-name").value.trim(), password: pass }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) location.reload(); else toast(authErr(res, data), "error");
+    });
+  }
   const userForm = document.getElementById("user-add-form");
   if (userForm) {
     userForm.addEventListener("submit", async (ev) => {
