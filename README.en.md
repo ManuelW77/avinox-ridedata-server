@@ -12,7 +12,7 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 
 **Plug an ESP32 into the display's USB port, set up Wi-Fi once, done.** From then on every ride lands on your own server automatically.
 
-**All data stays local** in your own network. No cloud account, no sharing.
+**All data stays local** in your own network. No cloud account, no sharing. Only if you turn on the AI analysis with a cloud provider are key figures (no GPS data) sent to that provider. With Ollama everything stays local.
 
 ## What you get
 
@@ -24,6 +24,8 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 - **Battery health in one sentence:** “Your battery is in good shape” plus notes. Behind it: charges and full cycles, health trend (usable Wh), cell balance, voltage drop under load and charts for charge level, temperature, cell deviation and current.
 - **Ride list** with automatic names (e.g. “Loop around …”, can be switched off), renaming, search, filters and route previews.
 - **Export** as GPX (with power, cadence, heart rate), GeoJSON and JSON.
+- **AI analysis (optional):** A language model writes short texts and tips for every ride and for periods, shown on the ride page and in the overview. Choose any provider (OpenRouter, OpenAI, Anthropic, Mistral, Groq, Ollama locally or your own address). Only key figures are sent, never GPS data, places, names or serial numbers.
+- **Ask Claude or ChatGPT (MCP, optional):** The server offers read-only MCP access. Claude or ChatGPT can use it to query rides, periods, personal bests and battery health. Access only with a token, without GPS data and serial numbers.
 - **Convenient:** light and dark mode, German and English, your own names for assist modes, file upload in the browser, Wi-Fi firmware updates for the ESP32, a sync page with the ESP32’s reports.
 
 ## Screenshots
@@ -68,7 +70,7 @@ services:
       - avinox-data:/data
     environment:
       AVINOX_DATA_DIR: /data
-      # Optional: initial admin (turns the login on and locks it). Without it, sign-in can be turned on under Settings
+      # Optional: initial admin (turns the login on and locks it). The first administrator is only created this way
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "change-me"
 
@@ -88,7 +90,11 @@ The server creates the upload token for the ESP32 on first start:
 docker compose exec avinox cat /data/upload_token
 ```
 
-**Login:** Sign-in is off by default. Turn it on under **Settings → Sign-in** and choose a username and password there (more users are added there too). Alternatively `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` create an administrator at startup and turn the login on permanently. Signing in via OpenID Connect is optional, set up under Settings or with `AVINOX_OIDC_*` (see [server/README.md](server/README.md), German). **Warning:** While sign-in is off the web page is open to everyone on your LAN. Do not expose it to the internet without a login. All settings: [server/README.md](server/README.md) (German).
+**Login:** Sign-in is off by default. Only `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` create the first administrator at startup (this turns the login on permanently); this cannot be done through the web interface. You add more users under **Settings → Sign-in**. Signing in via OpenID Connect is optional, set up under Settings or with `AVINOX_OIDC_*` (see [server/README.md](server/README.md), German). **Warning:** While sign-in is off the web page is open to everyone on your LAN. Do not expose it to the internet without a login. All settings: [server/README.md](server/README.md) (German).
+
+**AI analysis:** Off by default. Under **Settings → AI analysis** choose a provider, enter the key, test the connection and turn it on. The key stays in the database and is never shown. New rides are then analysed automatically, older ones with a button in the settings. Details: [server/README.md](server/README.md) (German).
+
+**MCP:** Off by default. Turn it on under **Settings → MCP (Claude, ChatGPT)**. There you find the address (`/mcp`), the token and instructions for Claude and ChatGPT. Anyone with the token can read all ride data. claude.ai and ChatGPT connect from the internet, so the server must be publicly reachable over HTTPS (reverse proxy or tunnel). Details: [server/README.md](server/README.md) (German).
 
 ### b) Flash the ESP32 once
 
