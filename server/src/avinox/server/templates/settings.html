@@ -26,8 +26,18 @@
     <span>{{ t('set.auth_as') }} <strong>{{ current_user.username }}</strong>{% if current_user.is_admin %} <span class="pill">{{ t('set.auth_admin') }}</span>{% endif %}</span>
     <form method="post" action="/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn ghost">{{ t('auth.logout') }}</button></form>
   </div>
-  {% else %}
-  <p class="notice small">{{ t('set.auth_basic') }}</p>
+  {% elif not login_active %}
+  <p class="notice small">{{ t('set.auth_off') }}</p>
+  <form id="enable-form" class="stack" autocomplete="off" data-existing="{{ 1 if has_users else 0 }}">
+    <p class="small"><strong>{{ t('set.enable_title_existing') if has_users else t('set.enable_title') }}</strong></p>
+    <div class="form-row"><label for="su-name">{{ t('login.user') }}</label><input type="text" id="su-name" autocomplete="username" autocapitalize="none" required maxlength="64"></div>
+    <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="{{ 'current-password' if has_users else 'new-password' }}"{% if not has_users %} minlength="{{ min_password }}"{% endif %} required></div>
+    {% if not has_users %}
+    <div class="form-row"><label for="su-pass2">{{ t('set.setup_repeat') }}</label><input type="password" id="su-pass2" autocomplete="new-password" minlength="{{ min_password }}" required></div>
+    <p class="muted small">{{ t('set.setup_hint', n=min_password) }}</p>
+    {% endif %}
+    <div class="actions"><button type="submit" class="btn">{{ t('set.enable_save') }}</button></div>
+  </form>
   {% endif %}
   {% if oidc_name %}<p class="muted small">{{ t('set.auth_oidc', name=oidc_name) }}</p>{% endif %}
   {% if current_user and current_user.password_hash %}
@@ -71,6 +81,35 @@
       <div class="form-row"><label for="nu-admin" class="switch-row"><input type="checkbox" class="switch" id="nu-admin"> <span>{{ t('set.user_admin') }}</span></label></div>
       <div class="actions"><button type="submit" class="btn">{{ t('set.user_create') }}</button><span id="user-status" class="muted small" role="status"></span></div>
     </form>
+  </div>
+  <div class="stack">
+    <p class="small"><strong>{{ t('set.oidc_title') }}</strong></p>
+    {% if oidc_cfg.env_locked %}<p class="notice small">{{ t('set.oidc_env') }}</p>{% endif %}
+    <form id="oidc-form" class="stack" autocomplete="off"{% if oidc_cfg.env_locked %} data-locked="1"{% endif %}>
+      <div class="form-row"><label for="oi-on" class="switch-row"><input type="checkbox" class="switch" id="oi-on"{% if oidc_cfg.enabled %} checked{% endif %}{% if oidc_cfg.env_locked %} disabled{% endif %}> <span>{{ t('set.oidc_on') }}</span></label></div>
+      <div class="form-row"><label for="oi-issuer">{{ t('set.oidc_issuer') }}</label><input type="url" id="oi-issuer" value="{{ oidc_cfg.issuer }}" placeholder="https://auth.example.test/application/o/avinox/" maxlength="300" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-client">{{ t('set.oidc_client') }}</label><input type="text" id="oi-client" value="{{ oidc_cfg.client_id }}" maxlength="256" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-secret">{{ t('set.oidc_secret') }}</label><input type="password" id="oi-secret" autocomplete="new-password" maxlength="512" placeholder="{{ t('set.oidc_secret_set') if oidc_cfg.has_secret else '' }}"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-name">{{ t('set.oidc_name') }}</label><input type="text" id="oi-name" value="{{ oidc_cfg.name if oidc_cfg.name != 'SSO' else '' }}" placeholder="SSO" maxlength="40"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-allowed">{{ t('set.oidc_allowed') }}</label><input type="text" id="oi-allowed" value="{{ oidc_cfg.allowed }}" maxlength="1000" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-admin">{{ t('set.oidc_admin') }}</label><input type="text" id="oi-admin" value="{{ oidc_cfg.admin }}" maxlength="1000" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <p class="muted small">{{ t('set.oidc_list_hint') }}</p>
+      <div class="form-row"><label for="oi-redirect">{{ t('set.oidc_redirect') }}</label><input type="text" id="oi-redirect" value="{{ oidc_cfg.redirect_uri }}" readonly></div>
+      <div class="actions">
+        {% if not oidc_cfg.env_locked %}<button type="submit" class="btn">{{ t('set.save') }}</button>{% endif %}
+        <button type="button" class="btn ghost" id="oidc-test">{{ t('set.oidc_test') }}</button>
+        <span id="oidc-status" class="muted small" role="status"></span>
+      </div>
+    </form>
+  </div>
+  <div class="stack">
+    <p class="small"><strong>{{ t('set.disable_title') }}</strong></p>
+    {% if auth_env_locked %}
+    <p class="muted small">{{ t('set.disable_env') }}</p>
+    {% else %}
+    <p class="muted small">{{ t('set.disable_text') }}</p>
+    <div class="actions"><button type="button" class="btn ghost danger" id="auth-disable">{{ t('set.disable_btn') }}</button></div>
+    {% endif %}
   </div>
   {% endif %}
 </section>
@@ -131,6 +170,65 @@
   <div class="actions">
     <button type="button" class="btn ghost" id="hl-retry" hidden>{{ t('set.hl_retry') }}</button>
     <button type="button" class="btn ghost danger" id="hl-disconnect" hidden>{{ t('set.hl_disconnect') }}</button>
+  </div>
+</section>
+</div>
+
+<div class="block t-neutral" id="sec-ai" data-jump="{{ t('set.ai') }}">
+  <h2 class="section-title">{{ t('set.ai') }}</h2>
+  <p class="muted small block-desc">{{ t('set.ai_text') }}</p>
+<section class="card stack ai-form">
+  <div class="form-row">
+    <label for="ai-enabled" class="switch-row"><input type="checkbox" class="switch" id="ai-enabled"> <span>{{ t('set.ai_toggle') }}</span></label>
+  </div>
+  <div class="form-row"><label for="ai-provider">{{ t('set.ai_provider') }}</label><select id="ai-provider"></select></div>
+  <div class="form-row"><label for="ai-url">{{ t('set.ai_url') }}</label><input type="url" id="ai-url" placeholder="https://" autocomplete="off"></div>
+  <div class="form-row"><label for="ai-model">{{ t('set.ai_model') }}</label><input type="text" id="ai-model" autocomplete="off"></div>
+  <div class="form-row">
+    <label for="ai-key">{{ t('set.ai_key') }}</label>
+    <div class="actions">
+      <input type="password" id="ai-key" autocomplete="new-password" style="flex:1">
+      <button type="button" class="btn ghost danger" id="ai-key-clear" hidden>{{ t('set.ai_key_clear') }}</button>
+    </div>
+  </div>
+  <div class="form-row"><label for="ai-lang">{{ t('set.ai_lang') }}</label>
+    <select id="ai-lang"><option value="de">Deutsch</option><option value="en">English</option></select></div>
+  <p class="muted small">{{ t('set.ai_privacy') }}</p>
+  <p class="small"><span id="ai-status" role="status"></span> <span class="muted" id="ai-counts"></span></p>
+  <p class="notice" id="ai-msg" role="status" hidden></p>
+  <div class="actions">
+    <button type="button" class="btn" id="ai-save">{{ t('set.ai_save') }}</button>
+    <button type="button" class="btn ghost" id="ai-test">{{ t('set.ai_test') }}</button>
+    <button type="button" class="btn ghost" id="ai-fill">{{ t('set.ai_fill') }}</button>
+  </div>
+</section>
+</div>
+
+<div class="block t-neutral" id="sec-mcp" data-jump="{{ t('set.mcp') }}">
+  <h2 class="section-title">{{ t('set.mcp') }}</h2>
+  <p class="muted small block-desc">{{ t('set.mcp_text') }}</p>
+<section class="card stack ai-form">
+  <div class="form-row">
+    <label for="mcp-enabled" class="switch-row"><input type="checkbox" class="switch" id="mcp-enabled"> <span>{{ t('set.mcp_toggle') }}</span></label>
+  </div>
+  <div id="mcp-body" hidden class="stack">
+    <div class="form-row"><label for="mcp-url">{{ t('set.mcp_url') }}</label>
+      <div class="actions"><input type="text" id="mcp-url" readonly style="flex:1" autocomplete="off">
+        <button type="button" class="btn ghost" data-mcp-copy="mcp-url">{{ t('set.mcp_copy') }}</button></div></div>
+    <div class="form-row"><label for="mcp-token">{{ t('set.mcp_token') }}</label>
+      <div class="actions"><input type="password" id="mcp-token" readonly style="flex:1" autocomplete="off">
+        <button type="button" class="btn ghost" id="mcp-show">{{ t('set.mcp_show') }}</button>
+        <button type="button" class="btn ghost" data-mcp-copy="mcp-token">{{ t('set.mcp_copy') }}</button>
+        <button type="button" class="btn ghost danger" id="mcp-new">{{ t('set.mcp_new') }}</button></div></div>
+    <h3>{{ t('set.mcp_claude') }}</h3>
+    <p class="small">{{ t('set.mcp_claude_text') }}</p>
+    <h3>{{ t('set.mcp_chatgpt') }}</h3>
+    <p class="small">{{ t('set.mcp_chatgpt_text') }}</p>
+    <h3>{{ t('set.mcp_code') }}</h3>
+    <div class="actions"><input type="text" id="mcp-cmd" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" data-mcp-copy="mcp-cmd">{{ t('set.mcp_copy') }}</button></div>
+    <p class="muted small">{{ t('set.mcp_net') }}</p>
+    <p class="muted small">{{ t('set.mcp_privacy') }}</p>
   </div>
 </section>
 </div>

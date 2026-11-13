@@ -32,13 +32,29 @@ Hochladen, als aktuell setzen und Löschen von ESP32-Firmware (Weboberfläche un
 
 ## Login und OIDC
 
-Der Login ist aktiv, sobald es mindestens einen Benutzer gibt oder OIDC eingerichtet ist. Sonst bleibt alles im LAN offen wie bisher.
+Die Anmeldung ist standardmäßig **aus**: Die Seite ist dann im LAN offen. Du schaltest sie in den Einstellungen (Karte „Anmeldung“) ein; dort legst du Benutzername und Passwort des ersten Admins fest (`POST /api/v1/auth/enable`). Ausschalten kann nur ein angemeldeter Admin (`POST /api/v1/auth/disable`); die Benutzer bleiben erhalten, und wieder einschalten geht nur mit dem Konto eines vorhandenen Admins.
 
-- **Start-Admin:** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` legen beim Start einen Administrator an, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben). Weitere Benutzer, Passwortänderung und Zurücksetzen: Einstellungen, Karte „Anmeldung“.
+- **Start-Admin per Umgebung (Alternative):** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` legen beim Start einen Administrator an, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben), und schalten die Anmeldung ein. Sie lässt sich dann in den Einstellungen nicht ausschalten (409). Wer schon Benutzer hat, behält seinen Login beim Update. Weitere Benutzer, Passwortänderung und Zurücksetzen: Einstellungen, Karte „Anmeldung“.
 - **Webseite:** Anmeldeformular unter `/login`, optional „Angemeldet bleiben“ (30 Tage, sonst 12 Stunden). Sessions liegen serverseitig in SQLite und überleben einen Neustart. Nach 10 Fehlversuchen in 15 Minuten (je IP und Benutzer) wird die Anmeldung kurz gesperrt.
 - **API und Skripte:** `/api/v1/...` antwortet ohne Anmeldung mit 401. Zusätzlich zum Session-Cookie geht Basic Auth (`curl -u benutzer:passwort`) für Passwortbenutzer. Der ESP32 nutzt weiter nur das Upload-Token.
-- **OIDC (optional):** `AVINOX_OIDC_ISSUER` und `AVINOX_OIDC_CLIENT_ID` (dazu meist `AVINOX_OIDC_CLIENT_SECRET`) einrichten, beim Anbieter die Redirect-URI `<Adresse>/auth/oidc/callback` eintragen (Adresse = `AVINOX_PUBLIC_URL` oder die aufgerufene). `AVINOX_OIDC_ALLOWED` begrenzt auf E-Mail-Adressen oder Gruppen (Claim `groups`; E-Mails zählen nur mit `email_verified: true` im ID-Token), `AVINOX_OIDC_ADMIN` bestimmt die Administratoren (leer = alle OIDC-Benutzer), `AVINOX_OIDC_NAME` ist die Beschriftung des Knopfes. Es wird PKCE (S256) mit `state` und `nonce` genutzt. OIDC-Benutzer werden nie automatisch mit einem Passwortbenutzer gleichen Namens verknüpft.
+- **OIDC (optional):** In den Einstellungen unter „Anmeldung über OIDC“ (nur Admins, nur bei eingeschalteter Anmeldung): Issuer-URL (`https://…`, `http://` nur für localhost und private Adressen), Client-ID, Client-Secret (wird nie angezeigt; leer lassen = behalten, bei neuem Issuer oder neuer Client-ID wird es gelöscht), Beschriftung des Knopfes sowie „Erlaubt“ und „Admins“ (E-Mail-Adressen oder Gruppen aus dem Claim `groups`, durch Komma getrennt; E-Mails zählen nur mit `email_verified: true` im ID-Token; „Erlaubt“ leer = jeder, den der Anbieter durchlässt; „Admins“ leer = alle OIDC-Benutzer). Die Redirect-URI `<Adresse>/auth/oidc/callback` (Adresse = `AVINOX_PUBLIC_URL` oder die aufgerufene) steht dort zum Kopieren, „Verbindung prüfen“ testet den Issuer. Alternativ per Umgebung (`AVINOX_OIDC_ISSUER`, `AVINOX_OIDC_CLIENT_ID`, meist `AVINOX_OIDC_CLIENT_SECRET`, `AVINOX_OIDC_ALLOWED`, `AVINOX_OIDC_ADMIN`, `AVINOX_OIDC_NAME`): Die Umgebung hat Vorrang, die Einstellungen zeigen die Werte dann nur an. OIDC allein schaltet die Anmeldung nicht ein; es gibt immer einen Passwort-Admin, damit du dich nicht aussperrst. Es wird PKCE (S256) mit `state` und `nonce` genutzt. OIDC-Benutzer werden nie automatisch mit einem Passwortbenutzer gleichen Namens verknüpft.
 - Hinter HTTPS-Proxy bekommt das Session-Cookie automatisch `Secure` (Proxy-Header, siehe `FORWARDED_ALLOW_IPS`).
+
+## KI-Auswertung (optional)
+
+Ein Sprachmodell formuliert aus berechneten Kennzahlen kurze Texte und Tipps zu einer Fahrt bzw. einem Zeitraum (Fahrtseite und Übersicht). Standardmäßig aus.
+
+**Einrichtung** (Einstellungen, oder per API `PUT /api/v1/settings/ai`): Anbieter wählen, Schlüssel eintragen, Modell prüfen, einschalten. Genutzt wird das OpenAI-kompatible Format `POST {Adresse}/chat/completions`; Voreinstellungen für OpenRouter, OpenAI, Anthropic, Mistral, Groq und Ollama (lokal, ohne Schlüssel), dazu „Eigene Adresse“ (z. B. LM Studio). Der Schlüssel liegt nur in der Datenbank und wird nie von der API zurückgegeben (nur die letzten vier Zeichen). `POST /api/v1/settings/ai/test` prüft die Verbindung, `POST /api/v1/settings/ai/fill` erstellt fehlende Texte für alle Fahrten ab 1 km und alle Zeiträume nach. Neue Fahrten werden im Hintergrund automatisch ausgewertet; geänderte Daten oder ein Modellwechsel erzeugen den Text neu.
+
+**Gesendet werden nur Kennzahlen:** Strecke, Dauer, Tempo, Höhenmeter, Fahrer-/Motorleistung, Motoranteil, Trittfrequenz, Puls, Zeit je Unterstützungsmodus und Gang, Schaltvorgänge, Steigungsbereiche, Akku, Vergleich mit den anderen Fahrten bzw. dem Vorzeitraum, Bestwerte. **Nie** gesendet werden GPS-Daten, Ortsnamen, Fahrt- und Dateinamen, Seriennummern oder Benutzernamen. Bei einem Cloud-Anbieter verlassen diese Zahlen den Server; mit Ollama bleibt alles lokal.
+
+## MCP (Claude, ChatGPT)
+
+Der Server spricht das Model Context Protocol (Streamable HTTP, nur lesend) unter `/mcp`, sodass Claude (claude.ai, Desktop, Code) und ChatGPT die Fahrdaten abfragen können. Standardmäßig aus; einschalten in den Einstellungen („MCP“), dort stehen Adresse, Token und Anleitungen (oder per API `GET/PUT /api/v1/settings/mcp`, `POST /api/v1/settings/mcp/token`; mit Login nur für Admins).
+
+Anmeldung nur mit dem MCP-Token: `Authorization: Bearer <token>` an `/mcp` oder die Adresse `/mcp/<token>` (für Dienste, die nur eine URL erlauben). Ohne gültiges Token 401, bei ausgeschaltetem MCP 404. Wer das Token hat, liest alle Fahrdaten. claude.ai und ChatGPT verbinden sich aus dem Internet, der Server muss dafür per HTTPS öffentlich erreichbar sein (Reverse Proxy, Tunnel).
+
+Werkzeuge: `list_rides`, `get_ride`, `get_period`, `get_bests`, `get_bike_status`. Es werden nie GPS-Daten, Seriennummern, Dateinamen oder Benutzerdaten ausgegeben.
 
 ## Server (Docker)
 
@@ -58,7 +74,7 @@ Alternativ das Token per `AVINOX_UPLOAD_TOKEN` in `docker-compose.yml` fest setz
 
 Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellung (Assets werden wurzelrelativ verlinkt). Damit Sync-Log und Fehlermeldungen die echte Client-IP zeigen, die IP des Proxys als `FORWARDED_ALLOW_IPS` setzen (z. B. `FORWARDED_ALLOW_IPS: "172.18.0.1"`). Nicht `*` verwenden: Dann kann jeder Client seine IP fälschen.
 
-**Achtung:** Ohne Login (kein Benutzer, kein OIDC) sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Login ins Internet stellen.
+**Achtung:** Bei ausgeschalteter Anmeldung (Standard) sind Webseite und Lese-API für jeden im LAN offen. Nicht ohne Login ins Internet stellen.
 
 ### Umgebungsvariablen
 
@@ -66,8 +82,8 @@ Hinter einem HTTPS-Reverse-Proxy funktioniert die Webseite ohne Zusatzeinstellun
 |---|---|---|
 | `AVINOX_DATA_DIR` | `./data` (im Container `/data`) | Rohdateien, Datenbank, Upload-Token |
 | `AVINOX_UPLOAD_TOKEN` | zufällig, in `<data>/upload_token` | Bearer-Token für Uploads (ESP32) |
-| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Start-Admin, wird beim Start angelegt, falls es den Benutzer noch nicht gibt; aktiviert den Login |
-| `AVINOX_OIDC_ISSUER` / `AVINOX_OIDC_CLIENT_ID` / `AVINOX_OIDC_CLIENT_SECRET` | leer | Anmeldung über OpenID Connect (Secret optional) |
+| `AVINOX_WEB_USER` / `AVINOX_WEB_PASSWORD` | leer | Start-Admin (Alternative zum Einschalten in den Einstellungen): wird beim Start angelegt, falls es den Benutzer noch nicht gibt; schaltet die Anmeldung ein und fest |
+| `AVINOX_OIDC_ISSUER` / `AVINOX_OIDC_CLIENT_ID` / `AVINOX_OIDC_CLIENT_SECRET` | leer | Anmeldung über OpenID Connect (Secret optional); hat Vorrang vor den Einstellungen |
 | `AVINOX_OIDC_NAME` | `SSO` | Beschriftung des Knopfes „Mit … anmelden“ |
 | `AVINOX_OIDC_SCOPES` | `openid email profile` | Angeforderte Scopes |
 | `AVINOX_OIDC_ALLOWED` | leer | Kommagetrennt: erlaubte E-Mails oder Gruppen; leer = jeder, den der Anbieter durchlässt |

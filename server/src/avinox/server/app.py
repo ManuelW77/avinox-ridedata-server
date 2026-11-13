@@ -24,8 +24,10 @@ from urllib.parse import urlencode, urlsplit
 
 from ..analysis import ASSIST_LEVELS
 from . import i18n
+from . import ai
+from . import mcp_server
 from . import healthlog
-from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next
+from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next, valid_issuer
 from .geocode import Nominatim
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
@@ -183,11 +185,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.exception("HealthLog-Worker")
             hl_wake.wait(600)
 
+    # KI-Texte: Worker arbeitet die Warteschlange ab (nur bei eingerichteter und eingeschalteter KI)
+    ai_queue = ai.AiQueue()
+    ai_thread: threading.Thread | None = None
+
+    def ai_worker() -> None:
+        while not geo_stop.is_set():
+            ai_queue.wake.clear()
+            try:
+                if app.state.ai_paused:  # Test-Haken: Worker lässt die Warteschlange in Ruhe
+                    pass
+                elif ai.is_active(store.db):
+                    if ai_queue.take_scan():
+                        ai.enqueue_new(store, ai_queue)
+                    while not geo_stop.is_set() and (job := ai_queue.pop()):
+                        try:
+                            ai.process(store, job, call=app.state.ai_call)
+                        except ai.AiError:
+                            ai_queue.clear()  # Schlüssel/Adresse kaputt: nicht weiter hämmern
+                        except Exception:
+                            log.exception("KI-Worker (%s)", job)
+                else:
+                    ai_queue.clear()
+                    ai_queue.take_scan()
+            except Exception:  # Worker darf nie sterben
+                log.exception("KI-Worker")
+            if not geo_stop.is_set() and not ai_queue.wake.is_set():
+                ai_queue.wake.wait(600)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        nonlocal geo_thread, hl_thread
+        nonlocal geo_thread, hl_thread, ai_thread
         hl_thread = threading.Thread(target=hl_worker, name="healthlog", daemon=True)
         hl_thread.start()
+        ai_thread = threading.Thread(target=ai_worker, name="ai", daemon=True)
+        ai_thread.start()
+        ai_queue.request_scan()  # nach dem Start: Fahrten ohne Text nachholen
+        mcp_ctx = mcp_app.router.lifespan_context(mcp_app)  # MCP-Session-Manager mit der App starten
+        await mcp_ctx.__aenter__()
         if settings.geocode_url:
             geo_thread = threading.Thread(
                 target=geo_worker, args=(Nominatim(settings.geocode_url, f"avinox-ridedata-server/{APP_VERSION}"),), name="geocode", daemon=True
@@ -196,19 +231,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            await mcp_ctx.__aexit__(None, None, None)
             geo_stop.set()
             geo_wake.set()
             hl_wake.set()
+            ai_queue.wake.set()
             if hl_thread:
                 hl_thread.join(timeout=15)
+            if ai_thread:
+                ai_thread.join(timeout=15)
             if geo_thread:
                 geo_thread.join(timeout=15)
             store.close()
 
     app = FastAPI(title="Avinox Ride Data", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+    mcp_app = mcp_server.create(store)
+    # Vor Login, CSRF und Read-Auth: /mcp prüft nur das MCP-Token (siehe mcp_server.McpGate)
+    app.add_middleware(mcp_server.McpGate, mcp_app=mcp_app, db=store.db)
     app.state.store = store
     app.state.synclog = synclog
     app.state.settings = settings
+    app.state.ai_queue = ai_queue
+    app.state.ai_call = None  # Test-Haken: callable(messages) -> str statt echtem LLM-Aufruf
+    app.state.ai_paused = False
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
     app.state.templates = templates
@@ -271,17 +316,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ------------------------------------------------------------ Anmeldung
 
     auth_store = AuthStore(store.db)
-    oidc = Oidc(settings)
+    oidc = Oidc(settings, store.db)
     throttle = LoginThrottle()
     app.state.auth = auth_store
     app.state.oidc = oidc
     app.state.login_throttle = throttle
-    if settings.web_user and settings.web_password:
-        auth_store.ensure_admin(settings.web_user, settings.web_password)
+    auth_env = bool(settings.web_user and settings.web_password)
+    if auth_env:
+        auth_store.ensure_admin(settings.web_user, settings.web_password)  # type: ignore[arg-type]
+    if auth_env or (store.db.get_setting("auth_enabled") is None and auth_store.user_count() > 0):
+        store.db.set_setting("auth_enabled", True)  # bisheriger Login bleibt an
+
+    setup_lock = threading.Lock()
 
     def login_active() -> bool:
-        """Login nur, wenn es Benutzer gibt oder OIDC eingerichtet ist – sonst offen (LAN-Modus)."""
-        return oidc.enabled or auth_store.user_count() > 0
+        """Login, wenn eingeschaltet und es einen Benutzer gibt – sonst offen (LAN-Modus).
+
+        Ausnahme: OIDC per Umgebung (``AVINOX_OIDC_*``) hält den Login immer an, auch ohne
+        Passwort-Benutzer – sonst stünden solche Installationen nach dem Update plötzlich offen.
+        """
+        if oidc.env_locked and oidc.config().enabled:
+            return True
+        return bool(store.db.get_setting("auth_enabled", False)) and auth_store.user_count() > 0
 
     def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
         """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer.
@@ -353,8 +409,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.user = user
         return user
 
-    FW_ADMIN_HINT = "Firmware-Verwaltung nur mit Web-Passwort (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD) – oder per ‚avinox firmware add‘ auf dem Server"
-    USERS_HINT = "Benutzerverwaltung nur mit Anmeldung (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD oder OIDC einrichten)"
+    FW_ADMIN_HINT = "Firmware-Verwaltung nur mit eingeschalteter Anmeldung (Einstellungen → Anmeldung) – oder per ‚avinox firmware add‘ auf dem Server"
+    USERS_HINT = "Benutzerverwaltung nur mit eingeschalteter Anmeldung (Einstellungen → Anmeldung)"
 
     def admin_required(hint: str):
         def dep(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict:
@@ -369,6 +425,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Firmware landet per OTA auf dem ESP32 (Code-Ausführung): nie ohne Login und nur für Admins.
     firmware_admin_auth = admin_required(FW_ADMIN_HINT)
     users_admin_auth = admin_required(USERS_HINT)
+
+    def settings_admin_auth(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict | None:
+        """Mit Login nur Admins (gespeicherte Schlüssel, Adressen, Kosten); ohne Login ist der Server ohnehin offen."""
+        user = read_auth(request, cred)
+        if login_active() and (not user or not user["is_admin"]):
+            raise HTTPException(403, "Nur für Administratoren")
+        return user
 
     def check_length(request: Request, limit: int) -> None:
         """Größe vor dem Lesen prüfen: ohne Content-Length 411, zu groß 413."""
@@ -430,6 +493,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if result.get("new"):
                 geo_wake.set()
                 hl_wake.set()
+                ai_queue.request_scan()
             synclog.event("file_new" if result.get("new") else "file_known", ip, dev, path=result["path"], size=size, status=200)
         return JSONResponse(result, status_code=409 if result.get("conflict") else 200)
 
@@ -702,6 +766,85 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         healthlog.disconnect(store.db)
         return healthlog_state()
 
+    def ai_state() -> dict:
+        return {**ai.settings_view(store.db), "counts": {**store.ai_counts(), "pending": ai_queue.size()}, "busy": ai_queue.busy()}
+
+    def ai_http_error(exc: ai.AiError) -> HTTPException:
+        code = 400 if exc.code in ("not_configured", "bad_request", "bad_url", "invalid") else 401 if exc.code == "invalid_key" else 502
+        return HTTPException(code, {"error": exc.code, "message": str(exc)})
+
+    @app.get("/api/v1/settings/ai", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_ai():
+        return ai_state()
+
+    @app.put("/api/v1/settings/ai", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def put_ai(payload: dict):
+        try:
+            ai.update_settings(store.db, payload)
+        except ai.AiError as exc:
+            raise HTTPException(400, {"error": exc.code, "message": str(exc)}) from exc
+        ai_queue.wake.set()
+        return ai_state()
+
+    @app.post("/api/v1/settings/ai/test", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def test_ai():
+        try:
+            if app.state.ai_call:
+                reply = app.state.ai_call([{"role": "user", "content": "ok"}])
+                return {"ok": True, "model": ai.model_of(store.db), "reply": str(reply)[:200]}
+            return ai.probe(store.db)
+        except ai.AiError as exc:
+            raise ai_http_error(exc) from exc
+
+    @app.post("/api/v1/settings/ai/fill", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def fill_ai():
+        n = ai.enqueue_fill(store, ai_queue, ai.lang_of(store.db)) if ai.is_active(store.db) else 0
+        return {"queued": n, **ai_state()}
+
+    def mcp_state(request: Request) -> dict:
+        base = (settings.public_url or "").split(",")[0].strip() or str(request.base_url)
+        return mcp_server.settings_view(store.db, base)
+
+    @app.get("/api/v1/settings/mcp", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def get_mcp(request: Request):
+        return mcp_state(request)
+
+    @app.put("/api/v1/settings/mcp", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def put_mcp(payload: dict, request: Request):
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(400, {"error": "invalid", "message": "enabled muss true oder false sein"})
+        mcp_server.set_enabled(store.db, payload["enabled"])
+        return mcp_state(request)
+
+    @app.post("/api/v1/settings/mcp/token", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def new_mcp_token(request: Request):
+        mcp_server.rotate_token(store.db)
+        return mcp_state(request)
+
+    def ai_lang_param(lang: str | None) -> str:
+        return lang if lang in ai.LANGS else ai.lang_of(store.db)
+
+    @app.get("/api/v1/ai/ride/{ride_pk}", dependencies=[Depends(read_auth)], tags=["ki"])
+    def ai_ride(ride_pk: int, lang: str | None = Query(None, max_length=8)):
+        """KI-Text zu einer Fahrt: ``status`` off | pending | ready | stale | error | none."""
+        if not store.db.one("SELECT 1 FROM rides WHERE id = ?", (ride_pk,)):
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        if not ai.is_active(store.db):
+            return ai.lookup(store, ai_queue, "ride", str(ride_pk), "de", None)
+        lang = ai_lang_param(lang)
+        return ai.lookup(store, ai_queue, "ride", str(ride_pk), lang, ai.ride_facts(store, ride_pk))
+
+    @app.get("/api/v1/ai/dashboard", dependencies=[Depends(read_auth)], tags=["ki"])
+    def ai_dashboard(period: str = Query("week", pattern="^(week|month|year|all)$"), offset: int = Query(0, ge=0, le=10000),
+                     compare: str = Query("elapsed", pattern="^(elapsed|full)$"), lang: str | None = Query(None, max_length=8)):
+        """KI-Text zu einem Zeitraum (Parameter wie ``/api/v1/dashboard``)."""
+        if not ai.is_active(store.db):
+            return ai.lookup(store, ai_queue, "period", "all", "de", None)
+        lang = ai_lang_param(lang)
+        # fester Vergleichsmodus: Text hängt nicht vom Umschalter ab und veraltet nicht täglich
+        dash = store.dashboard(period, offset, lang=lang, compare_mode=ai.COMPARE_MODE)
+        return ai.lookup(store, ai_queue, "period", ai.period_ref(dash), lang, ai.period_facts(dash))
+
     @app.post("/api/v1/files", dependencies=[Depends(read_auth)], tags=["upload"])
     async def upload_files(request: Request):
         """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl).
@@ -726,6 +869,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if r["new"]:
                     geo_wake.set()
                     hl_wake.set()
+                    ai_queue.request_scan()
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
                 synclog.event("file_new" if r["new"] else "file_known", ip, None, path=normalize_path(f.filename or ""), size=len(data), status=200, detail="Browser")
             except UploadError as exc:
@@ -813,7 +957,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fw_admin=bool(user and user["is_admin"]),
             fw_admin_hint=FW_ADMIN_HINT,
             users=auth_store.list_users() if user and user["is_admin"] else [],
-            oidc_name=settings.oidc_name if oidc.enabled else None,
+            oidc_name=oidc.config().name if oidc.enabled else None,
+            oidc_cfg=oidc_view(request) if user and user["is_admin"] else None,
+            auth_env_locked=auth_env,
+            has_users=auth_store.user_count() > 0,
             min_password=MIN_PASSWORD,
             server_urls=server_urls,
             server_url_unreachable=unreachable,
@@ -834,7 +981,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Formular mit CSRF-Token (Double-Submit über ein eigenes Cookie)."""
         base = request.cookies.get(CSRF_COOKIE) or secrets.token_urlsafe(24)
         resp = page(request, "login.html", bare=True, next=next_url, error=error, csrf_token=auth_store.csrf_token(base),
-                    oidc_name=settings.oidc_name if oidc.enabled else None)
+                    oidc_name=oidc.config().name if oidc.enabled else None)
         resp.status_code = status
         if not request.cookies.get(CSRF_COOKIE):
             resp.set_cookie(CSRF_COOKIE, base, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/")
@@ -880,7 +1027,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/auth/oidc/login", include_in_schema=False)
     async def oidc_login(request: Request, next: str = "/"):
-        if not oidc.enabled:
+        if not oidc.enabled or not login_active():
             raise HTTPException(404, "OIDC ist nicht eingerichtet")
         try:
             url, state = await oidc.start(oidc.redirect_uri(str(request.base_url), request.headers.get("host", "")), safe_next(next))
@@ -893,7 +1040,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/auth/oidc/callback", include_in_schema=False)
     async def oidc_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
-        if not oidc.enabled:
+        if not oidc.enabled or not login_active():
             raise HTTPException(404, "OIDC ist nicht eingerichtet")
 
         def fail(code_: str):
@@ -957,6 +1104,112 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             bad(problem)
         auth_store.set_password(user["id"], new)
         auth_store.delete_sessions(user["id"], keep=request.cookies.get(AUTH_COOKIE))
+        return {"ok": True}
+
+    @app.post("/api/v1/auth/enable", tags=["benutzer"])
+    def auth_enable(request: Request, payload: dict):
+        """Anmeldung einschalten und sofort anmelden.
+
+        Ohne Benutzer wird ein Admin angelegt. Gibt es schon Benutzer (Login war vorher an), muss die
+        Eingabe zu einem vorhandenen Admin mit Passwort passen.
+        """
+        csrf_guard(request, None)
+        if login_active():
+            bad("already_on", 409)
+        key = (client_ip(request), "__enable__")
+        if throttle.blocked(*key):
+            bad("throttle", 429)
+        name, password = str(payload.get("username") or "").strip(), str(payload.get("password") or "")
+        with setup_lock:
+            if login_active():
+                bad("already_on", 409)
+            if auth_store.user_count() == 0:
+                name = valid_name(name)
+                if problem := password_problem(password):
+                    bad(problem)
+                user = auth_store.create_user(name, password, True)
+            else:
+                user = auth_store.check_password(name, password[:512])
+                if not user or not user["is_admin"]:
+                    throttle.fail(*key)
+                    bad("bad_login", 403)
+            store.db.set_setting("auth_enabled", True)
+        throttle.clear(*key)
+        token, max_age = auth_store.create_session(user["id"], True)
+        resp = JSONResponse({"ok": True})
+        set_session_cookie(resp, request, token, max_age)
+        return resp
+
+    @app.post("/api/v1/auth/disable", tags=["benutzer"])
+    def auth_disable(admin: dict = Depends(users_admin_auth)):
+        """Anmeldung ausschalten (nur Admins). Benutzer bleiben, alle Sessions enden."""
+        if auth_env or (oidc.env_locked and oidc.config().enabled):
+            bad("env_locked", 409)
+        store.db.set_setting("auth_enabled", False)
+        store.db.execute("DELETE FROM sessions")
+        return {"ok": True}
+
+    # ------------------------------------------------------------ OIDC-Einstellungen
+
+    def oidc_view(request: Request) -> dict:
+        cfg = oidc.config()
+        return {"enabled": cfg.active, "issuer": cfg.issuer, "client_id": cfg.client_id, "has_secret": bool(cfg.client_secret), "name": cfg.name,
+                "allowed": cfg.allowed, "admin": cfg.admin, "env_locked": oidc.env_locked,
+                "redirect_uri": oidc.redirect_uri(str(request.base_url), request.headers.get("host", ""))}
+
+    @app.get("/api/v1/settings/oidc", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    def oidc_settings_get(request: Request):
+        return oidc_view(request)
+
+    @app.put("/api/v1/settings/oidc", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    def oidc_settings_put(request: Request, payload: dict):
+        """OIDC speichern. Das Secret wird nie zurückgegeben; leer = unverändert, bei neuem Issuer/Client-ID ohne neues Secret gelöscht."""
+        if oidc.env_locked:
+            bad("env_locked", 409)
+        db = store.db
+
+        def text(key: str, limit: int) -> str:
+            value = str(payload.get(key) or "").strip()
+            if len(value) > limit:
+                bad("too_long")
+            return value
+
+        enabled = bool(payload.get("enabled"))
+        issuer_raw, client_id = text("issuer", 300), text("client_id", 256)
+        secret, name = str(payload.get("secret") or "").strip(), text("name", 40)
+        if len(secret) > 512:
+            bad("too_long")
+        issuer = ""
+        if issuer_raw:
+            issuer = valid_issuer(issuer_raw) or ""
+            if not issuer:
+                bad("issuer_invalid")
+        if enabled and not (issuer and client_id):
+            bad("oidc_incomplete")
+        old = oidc.config()
+        if secret:
+            db.set_setting("oidc_secret", secret)
+        elif (issuer, client_id) != (old.issuer, old.client_id):
+            db.set_setting("oidc_secret", "")
+        db.set_setting("oidc_enabled", enabled)
+        db.set_setting("oidc_issuer", issuer)
+        db.set_setting("oidc_client_id", client_id)
+        db.set_setting("oidc_name", name)
+        db.set_setting("oidc_allowed", text("allowed", 1000))
+        db.set_setting("oidc_admin", text("admin", 1000))
+        oidc.reset_cache()
+        return oidc_view(request)
+
+    @app.post("/api/v1/settings/oidc/test", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    async def oidc_settings_test():
+        """Verbindung prüfen: Discovery des gespeicherten Issuers. Antworten des Anbieters gehen nicht an den Browser."""
+        if not oidc.config().issuer:
+            return {"ok": False, "error": "not_configured"}
+        oidc._disc = None
+        try:
+            await oidc.discovery()
+        except OidcError as exc:
+            return {"ok": False, "error": exc.code}
         return {"ok": True}
 
     @app.post("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])

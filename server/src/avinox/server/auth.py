@@ -1,8 +1,8 @@
 """Anmeldung: Passwort-Hashing, Benutzer, serverseitige Sessions, Login-Bremse und OIDC.
 
-Der Login ist aktiv, sobald mindestens ein Benutzer existiert oder OIDC konfiguriert ist
-(sonst bleibt die Seite wie bisher im LAN offen). Alles nutzt nur die Standardbibliothek
-plus ``authlib``/``joserfc``/``httpx2`` für OIDC.
+Der Login ist aktiv, wenn er in den Einstellungen eingeschaltet ist (``auth_enabled``) und es
+mindestens einen Benutzer gibt; sonst bleibt die Seite wie bisher im LAN offen. Alles nutzt nur
+die Standardbibliothek plus ``authlib``/``joserfc``/``httpx2`` für OIDC.
 """
 
 from __future__ import annotations
@@ -10,9 +10,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import re
 import secrets
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -237,26 +239,88 @@ def _csv(value: str) -> list[str]:
     return [v.strip().lower() for v in value.split(",") if v.strip()]
 
 
+@dataclass(frozen=True)
+class OidcConfig:
+    """Wirksame OIDC-Einstellungen (Umgebung hat Vorrang vor der Datenbank)."""
+
+    active: bool
+    issuer: str
+    client_id: str
+    client_secret: str
+    name: str
+    scopes: str
+    allowed: str
+    admin: str
+    from_env: bool
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.active and self.issuer and self.client_id)
+
+
+def valid_issuer(url: str) -> str | None:
+    """Bereinigte Issuer-URL oder ``None``: ``https://…``, ``http://`` nur für localhost und private/Loopback-IPs."""
+    try:
+        parts = urlsplit(url.strip())
+        host = (parts.hostname or "").lower()
+        parts.port  # noqa: B018  (löst bei ungültigem Port ValueError aus)
+    except ValueError:
+        return None
+    if not host or parts.username or parts.password or parts.query or parts.fragment:
+        return None
+    if parts.scheme == "https":
+        return url.strip().rstrip("/")
+    if parts.scheme == "http":
+        if host == "localhost":
+            return url.strip().rstrip("/")
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return None
+        return url.strip().rstrip("/") if ip.is_private or ip.is_loopback else None
+    return None
+
+
 class Oidc:
     """Authorization-Code-Flow mit PKCE (S256), ``state`` und ``nonce``; ID-Token per JWKS geprüft."""
 
     PENDING_TTL = 600
     DISCOVERY_TTL = 3600
+    DEFAULT_SCOPES = "openid email profile"
 
-    def __init__(self, settings: Settings, transport: httpx2.AsyncBaseTransport | None = None):
+    def __init__(self, settings: Settings, db: Database | None = None, transport: httpx2.AsyncBaseTransport | None = None):
         self.s = settings
+        self.db = db
         self.transport = transport  # nur für Tests (gemockter IdP)
         self._pending: dict[str, dict] = {}
         self._disc: tuple[float, dict] | None = None
         self._jwks: tuple[float, dict] | None = None
 
     @property
+    def env_locked(self) -> bool:
+        """Sobald Issuer oder Client-ID per Umgebung gesetzt sind, gilt ausschließlich die Umgebung."""
+        return bool(self.s.oidc_issuer or self.s.oidc_client_id)
+
+    def config(self) -> OidcConfig:
+        if self.env_locked or not self.db:
+            s = self.s
+            return OidcConfig(True, (s.oidc_issuer or "").rstrip("/"), s.oidc_client_id or "", s.oidc_client_secret or "", s.oidc_name or "SSO",
+                              s.oidc_scopes or self.DEFAULT_SCOPES, s.oidc_allowed or "", s.oidc_admin or "", True)
+        g = self.db.get_setting
+        return OidcConfig(bool(g("oidc_enabled", False)), str(g("oidc_issuer", "")).rstrip("/"), str(g("oidc_client_id", "")), str(g("oidc_secret", "")),
+                          str(g("oidc_name", "")) or "SSO", self.s.oidc_scopes or self.DEFAULT_SCOPES, str(g("oidc_allowed", "")), str(g("oidc_admin", "")), False)
+
+    def reset_cache(self) -> None:
+        self._disc = self._jwks = None
+        self._pending.clear()
+
+    @property
     def enabled(self) -> bool:
-        return bool(self.s.oidc_issuer and self.s.oidc_client_id)
+        return self.config().enabled
 
     @property
     def issuer(self) -> str:
-        return (self.s.oidc_issuer or "").rstrip("/")
+        return self.config().issuer
 
     def redirect_uri(self, base_url: str, host: str) -> str:
         base = base_url.rstrip("/")
@@ -296,12 +360,13 @@ class Oidc:
 
     def _oauth(self, redirect_uri: str, doc: dict | None = None) -> AsyncOAuth2Client:
         methods = (doc or {}).get("token_endpoint_auth_methods_supported") or ["client_secret_basic"]
-        if not self.s.oidc_client_secret:
+        cfg = self.config()
+        if not cfg.client_secret:
             method = "none"
         else:
             method = "client_secret_basic" if "client_secret_basic" in methods else "client_secret_post"
         return AsyncOAuth2Client(
-            client_id=self.s.oidc_client_id, client_secret=self.s.oidc_client_secret or None, scope=self.s.oidc_scopes,
+            client_id=cfg.client_id, client_secret=cfg.client_secret or None, scope=cfg.scopes,
             redirect_uri=redirect_uri, token_endpoint_auth_method=method, code_challenge_method="S256",
             transport=self.transport, timeout=10)
 
@@ -335,7 +400,7 @@ class Oidc:
 
     async def _verify(self, id_token: str, doc: dict, nonce: str) -> dict:
         registry = jwt.JWTClaimsRegistry(
-            iss={"essential": True, "value": self.issuer}, aud={"essential": True, "value": self.s.oidc_client_id},
+            iss={"essential": True, "value": self.issuer}, aud={"essential": True, "value": self.config().client_id},
             exp={"essential": True}, sub={"essential": True}, nonce={"essential": True, "value": nonce})
         for refresh in (False, True):  # unbekannte Schlüssel-ID: JWKS einmal neu laden (Schlüsselwechsel)
             try:
@@ -358,12 +423,12 @@ class Oidc:
         return ids
 
     def allowed(self, claims: dict) -> bool:
-        wanted = _csv(self.s.oidc_allowed or "")
+        wanted = _csv(self.config().allowed)
         return not wanted or bool(self._identities(claims) & set(wanted))
 
     def is_admin(self, claims: dict) -> bool | None:
         """``None`` = nicht konfiguriert (OIDC-Benutzer sind dann beim Anlegen Admin)."""
-        wanted = _csv(self.s.oidc_admin or "")
+        wanted = _csv(self.config().admin)
         return bool(self._identities(claims) & set(wanted)) if wanted else None
 
     def find_or_create(self, store: AuthStore, claims: dict) -> dict:

@@ -645,3 +645,57 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .confirm-dialog .actions { justify-content: flex-end; margin-top: 1.1rem; }
 .btn.btn-danger { background: var(--warn); color: #fff; }
 .btn.btn-danger:disabled { opacity: 0.6; cursor: wait; }
+
+/* ---- KI-Auswertung ---- */
+.ai-card[hidden], [data-ai][hidden] { display: none; }
+.ai-card { border-left: 3px solid color-mix(in srgb, var(--accent, var(--ink-3)) 70%, var(--line)); background: color-mix(in srgb, var(--accent, var(--ink-3)) 5%, var(--surface)); }
+.ai-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.45rem; }
+.ai-tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; padding: 0.05rem 0.45rem; border-radius: 999px; background: color-mix(in srgb, var(--accent, var(--ink-3)) 20%, var(--surface)); color: var(--ink); }
+.ai-model { font-size: 0.72rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ai-text, .ai-note { margin: 0; font-size: 0.92rem; line-height: 1.5; overflow-wrap: anywhere; }
+.ai-text + .ai-text, .ai-text + .ai-note, .ai-sub + .ai-tips { margin-top: 0.5rem; }
+.ai-sub { margin: 0.75rem 0 0.3rem; }
+.ai-tips { margin: 0; padding-left: 1.2rem; font-size: 0.92rem; }
+.ai-tips li + li { margin-top: 0.3rem; }
+.ai-note a { color: inherit; }
+.block > .ai-card { margin-top: 0; }
+/* Platzierung: die Karten füllen die Lücken der vorhandenen Raster */
+.cols-3 > .ai-card { grid-column: 1 / -1; }
+.cols-drive > .ai-card { grid-column: 1 / -1; }
+.bests > .ai-card { margin-top: 1rem; }
+@media (min-width: 901px) {
+  .cols-drive:has(> .ai-card:not([hidden])) > :first-child { grid-row: span 2; }
+  .cols-drive > .ai-card { grid-column: 2 / -1; }
+}
+@media (min-width: 1000px) {
+  .cols-power:has(> .ai-card:not([hidden])) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cols-power.has-hr > .ai-card { grid-column: span 3; }
+}
+@media (min-width: 1200px) {
+  /* 5-spaltiges Raster wie ohne KI: Leistung und Zeiträume volle Breite, KI-Karte als 5. Spalte neben Motor + Fahrten & Akku */
+  .bests:has(> .ai-bests:not([hidden])) { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 1fr); column-gap: 0.75rem; align-items: start; }
+  .bests:has(> .ai-bests:not([hidden])) > * { grid-column: 1 / -1; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="motor"],
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="ride"] { grid-column: 1; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="motor"] .best-grid,
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="ride"] .best-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="rider"] .best-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .bests:has(> .ai-bests:not([hidden])) > .section-title { grid-row: 1; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="rider"] { grid-row: 2; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="motor"] { grid-row: 3; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="ride"] { grid-row: 4; }
+  .bests:has(> .ai-bests:not([hidden])) > [data-g="period"] { grid-row: 5; }
+  .bests:has(> .ai-bests:not([hidden])) > .ai-bests { grid-column: 2; grid-row: 3 / 5; margin-top: 2.6rem; align-self: stretch; }
+  .bests:has(> .ai-bests:not([hidden])) > p { grid-row: 6; }
+}
+.best-grid > .ai-trend { grid-column: 1 / -1; }
+@media (min-width: 1200px) {
+  .best-grid:has(> .ai-trend:not([hidden])) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .best-grid > .ai-trend { grid-column: var(--ai-start, 3) / -1; }
+}
+@media (min-width: 900px) and (max-width: 1199px) {
+  .best-grid:has(> .ai-trend:not([hidden])) { grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)) minmax(0, 2fr); }
+  .best-grid > .ai-trend { grid-column: auto; }
+}
+/* Einstellungen */
+.ai-form .row-inline { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }

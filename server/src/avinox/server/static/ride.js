@@ -831,3 +831,11 @@
       .then((geo) => { try { initMap(geo); } catch (e) { console.error("Karte:", e); } });
   }
 })();
+
+// KI-Auswertung der Fahrt (Karten [data-ai], siehe ai.js)
+(function () {
+  "use strict";
+  let id = null;
+  try { id = JSON.parse(document.getElementById("ride-data").textContent).id; } catch (e) { return; }
+  if (id != null && window.avinoxAi) window.avinoxAi.watch(`/api/v1/ai/ride/${encodeURIComponent(id)}?lang=${window.avinoxAi.lang}`);
+})();
