@@ -519,3 +519,12 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   .toast, .to-top, input[type=checkbox].switch, input[type=checkbox].switch::after, select { transition: none; }
 }
 .btn[hidden] { display: none; }
+/* Auf-/zuklappbare Karten (details.card.fold), nebeneinander ohne Mitstrecken */
+.folds { align-items: start; }
+.fold > summary { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; cursor: pointer; list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary h2 { margin: 0; }
+.fold > summary h2::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--ink-3); transition: transform 0.15s; }
+.fold[open] > summary h2::before { transform: rotate(90deg); }
+.fold[open] > summary { margin-bottom: 0.6rem; }
+@media (prefers-reduced-motion: reduce) { .fold > summary h2::before { transition: none; } }
