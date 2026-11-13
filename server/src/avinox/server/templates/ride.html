@@ -22,6 +22,7 @@
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>
+    {% if hl_active and a.hr_source != 'belt' %}<button type="button" class="btn ghost" id="hl-fetch" data-ride="{{ ride.id }}">{{ t('ride.hl_fetch') }}</button>{% endif %}
   </div>
 </div>
 
@@ -46,9 +47,9 @@
     {{ figure(s.avg_cadence_rpm, t('ride.f.cadence'), t('ride.f.cadence_unit')) }}
     {{ figure(s.max_rider_torque_nm, t('ride.f.torque'), 'Nm', 0, 'rider') }}
     {% if s.avg_heart_rate_bpm %}{{ figure(s.avg_heart_rate_bpm, t('ride.f.hr'), 'bpm') }}{% endif %}
+    {% if s.max_heart_rate_bpm %}{{ figure(s.max_heart_rate_bpm, t('ride.f.max_hr'), 'bpm') }}{% endif %}
   </div>
   {% if a.hr_source %}<p class="muted small" id="hr-source">{{ t('ride.hr.healthlog' if a.hr_source == 'healthlog_workout' else 'ride.hr.' ~ a.hr_source) }}</p>{% endif %}
-  {% if hl_active and a.hr_source != 'belt' %}<p class="small"><button type="button" class="btn ghost small" id="hl-fetch" data-ride="{{ ride.id }}">{{ t('ride.hl_fetch') }}</button></p>{% endif %}
   <h3 class="group-title g-motor t-motor">{{ t('ride.grp.motor') }}</h3>
   <div class="figures">
     {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}
