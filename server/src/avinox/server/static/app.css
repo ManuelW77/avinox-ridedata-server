@@ -13,6 +13,8 @@
   --alt: #6b6f9a;
   --hill: #3f8a3a;
   --warn: #b3411b;
+  --caution: #c28a0e;
+  --crit: #c4281c;
   --up: #2f7d4f;
   --down: #a5512c;
   --radius: 14px;
@@ -34,6 +36,8 @@
     --alt: #9da2d6;
     --hill: #6cc46a;
     --warn: #f07b52;
+    --caution: #e5b93c;
+    --crit: #ff6b5e;
     --up: #6cc08b;
     --down: #e98d64;
     color-scheme: dark;
@@ -52,6 +56,8 @@
   --alt: #9da2d6;
   --hill: #6cc46a;
   --warn: #f07b52;
+  --caution: #e5b93c;
+  --crit: #ff6b5e;
   --up: #6cc08b;
   --down: #e98d64;
   color-scheme: dark;
@@ -447,7 +453,23 @@ html { scroll-behavior: smooth; }
 .hint-list .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-top: 0.3rem; background: var(--ink-3); }
 .hint-list .dot.ok { background: var(--hill); }
 .hint-list .dot.info { background: var(--alt); }
-.hint-list .dot.warn { background: var(--warn); }
+.hint-list .dot.warn { background: var(--caution); }
+.hint-list .dot.crit { background: var(--crit); }
+.bars .fill.bal-ok { background: var(--hill); }
+.bars .fill.bal-warn { background: var(--caution); }
+.bars .fill.bal-crit { background: var(--crit); }
+.bal-num-ok { color: var(--hill); }
+.bal-num-warn { color: var(--caution); }
+.bal-num-crit { color: var(--crit); }
+.status-box { border-left: 6px solid var(--ink-3); }
+.status-box.good { border-left-color: var(--hill); }
+.status-box.watch { border-left-color: var(--caution); }
+.status-box.check { border-left-color: var(--crit); }
+.status-box .status-line { display: flex; align-items: center; gap: 0.6rem; font-size: 1.2rem; font-weight: 600; margin: 0; }
+.status-box .dot { width: 0.9rem; height: 0.9rem; border-radius: 50%; flex: none; background: var(--ink-3); }
+.status-box.good .dot { background: var(--hill); }
+.status-box.watch .dot { background: var(--caution); }
+.status-box.check .dot { background: var(--crit); }
 .bars.mini .bar { grid-template-columns: 8.5rem 1fr 5.5rem; }
 
 /* Auswahlfelder (Pill-Look wie die Werkzeugleiste) */
