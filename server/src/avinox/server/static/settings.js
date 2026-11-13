@@ -280,4 +280,43 @@
       if (res.ok) location.reload(); else if (fwStatus) fwStatus.textContent = tr("error_n", { n: res.status });
     });
   });
+
+  // ---- Anmeldung: Passwort ändern, Benutzer verwalten (nur Admins sehen die Benutzerliste)
+  const jsonHeaders = { "Content-Type": "application/json" };
+  const authErr = (res, data) => { const code = data && data.detail && data.detail.error; const key = "auth_err." + code; return I[key] ? tr(key) : tr("error_n", { n: res.status }); };
+  const pwForm = document.getElementById("pw-form");
+  if (pwForm) {
+    pwForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const res = await fetch("/api/v1/users/me/password", { method: "PUT", headers: jsonHeaders, body: JSON.stringify({ old_password: document.getElementById("pw-old").value, new_password: document.getElementById("pw-new").value }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { pwForm.reset(); toast(tr("pw_saved")); } else toast(authErr(res, data), "error");
+    });
+  }
+  const userForm = document.getElementById("user-add-form");
+  if (userForm) {
+    userForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const res = await fetch("/api/v1/users", { method: "POST", headers: jsonHeaders, body: JSON.stringify({ username: document.getElementById("nu-name").value.trim(), password: document.getElementById("nu-pass").value, is_admin: document.getElementById("nu-admin").checked }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) location.reload(); else toast(authErr(res, data), "error");
+    });
+  }
+  document.querySelectorAll("[data-user-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(tr("user_confirm_delete", { u: btn.dataset.name }))) return;
+      const res = await fetch(`/api/v1/users/${btn.dataset.userDelete}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) location.reload(); else toast(authErr(res, data), "error");
+    });
+  });
+  document.querySelectorAll("[data-user-reset]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const password = prompt(tr("user_reset_prompt", { u: btn.dataset.name }));
+      if (!password) return;
+      const res = await fetch(`/api/v1/users/${btn.dataset.userReset}/password`, { method: "PUT", headers: jsonHeaders, body: JSON.stringify({ password }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) toast(tr("user_pw_reset")); else toast(authErr(res, data), "error");
+    });
+  });
 })();

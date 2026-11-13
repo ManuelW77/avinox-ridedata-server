@@ -11,9 +11,18 @@ services:
       AVINOX_DATA_DIR: /data
       # Upload-Token für den ESP32. Ohne Angabe wird eines erzeugt und in /data/upload_token abgelegt.
       # AVINOX_UPLOAD_TOKEN: "hier-ein-langes-zufaelliges-token"
-      # Passwortschutz (Basic Auth) für Webseite und Lese-API. Leer = im LAN offen.
+      # Start-Admin: wird beim Start angelegt, falls es den Benutzer noch nicht gibt. Danach ist der Login aktiv
+      # (Seite per Anmeldeformular, API zusätzlich per Basic Auth). Ohne Benutzer und OIDC bleibt alles im LAN offen.
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "bitte-aendern"
+      # Anmeldung über OpenID Connect (Redirect-URI: <AVINOX_PUBLIC_URL>/auth/oidc/callback)
+      # AVINOX_OIDC_ISSUER: "https://sso.example.com/application/o/avinox/"
+      # AVINOX_OIDC_CLIENT_ID: "avinox"
+      # AVINOX_OIDC_CLIENT_SECRET: ""        # leer = öffentlicher Client
+      # AVINOX_OIDC_NAME: "SSO"              # Beschriftung des Knopfes „Mit … anmelden“
+      # AVINOX_OIDC_SCOPES: "openid email profile"
+      # AVINOX_OIDC_ALLOWED: "me@example.com,familie"  # E-Mails oder Gruppen; leer = jeder, den der Anbieter durchlässt
+      # AVINOX_OIDC_ADMIN: ""                # wer Admin wird; leer = alle OIDC-Benutzer
       # AVINOX_PUBLIC_URL: "http://192.168.1.18:8000"  # Adresse für den ESP32 (Einstellungen-Seite)
       # AVINOX_TZ: "Europe/Berlin"
       # AVINOX_MAP_STYLE: "https://tiles.openfreemap.org/styles/liberty"

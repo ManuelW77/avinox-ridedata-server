@@ -151,9 +151,11 @@ def test_mode_names(client, settings):
 def test_basic_auth(settings):
     settings.web_user, settings.web_password = "fahrer", "geheim"
     with TestClient(create_app(settings)) as c:
-        assert c.get("/").status_code == 401
+        # Seiten leiten auf den Login um, die API antwortet mit 401; Basic Auth gilt weiter (Skripte)
+        assert c.get("/", follow_redirects=False).status_code == 303
         assert c.get("/api/v1/rides").status_code == 401
-        assert c.get("/", auth=("fahrer", "falsch")).status_code == 401
+        assert c.get("/api/v1/rides", auth=("fahrer", "falsch")).status_code == 401
+        assert c.get("/api/v1/rides", auth=("fahrer", "geheim")).status_code == 200
         assert c.get("/", auth=("fahrer", "geheim")).status_code == 200
         data = ride_bytes()
         assert put(c, settings, data).status_code == 200
@@ -165,7 +167,7 @@ def test_basic_auth_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("AVINOX_WEB_PASSWORD", "b")
     with TestClient(create_app(load_settings(tmp_path))) as c:
         assert c.get("/healthz").status_code == 200
-        assert c.get("/").status_code == 401
+        assert c.get("/", follow_redirects=False).status_code == 303
         assert c.get("/", auth=("a", "b")).status_code == 200
 
 

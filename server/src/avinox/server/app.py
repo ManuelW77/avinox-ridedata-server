@@ -16,15 +16,16 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from starlette.datastructures import UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBasic, HTTPBasicCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from ..analysis import ASSIST_LEVELS
 from . import i18n
 from . import healthlog
+from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next
 from .geocode import Nominatim
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
@@ -267,20 +268,96 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             synclog.event("auth_error", client_ip(request), None, path=request.url.path, status=401, detail="Token fehlt" if not cred else "Token falsch")
             raise HTTPException(401, "Upload-Token fehlt oder ist falsch", headers={"WWW-Authenticate": "Bearer"})
 
-    def read_auth(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:
-        if not settings.web_user:
-            return
-        ok = cred and secrets.compare_digest(cred.username, settings.web_user) and secrets.compare_digest(cred.password, settings.web_password or "")
-        if not ok:
-            raise HTTPException(401, "Anmeldung erforderlich", headers={"WWW-Authenticate": 'Basic realm="Avinox"'})
+    # ------------------------------------------------------------ Anmeldung
+
+    auth_store = AuthStore(store.db)
+    oidc = Oidc(settings)
+    throttle = LoginThrottle()
+    app.state.auth = auth_store
+    app.state.oidc = oidc
+    app.state.login_throttle = throttle
+    if settings.web_user and settings.web_password:
+        auth_store.ensure_admin(settings.web_user, settings.web_password)
+
+    def login_active() -> bool:
+        """Login nur, wenn es Benutzer gibt oder OIDC eingerichtet ist – sonst offen (LAN-Modus)."""
+        return oidc.enabled or auth_store.user_count() > 0
+
+    def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
+        """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer."""
+        user = auth_store.session_user(request.cookies.get(AUTH_COOKIE))
+        if user:
+            return user, "session"
+        if cred:
+            # Dieselbe Bremse wie beim Login-Formular, sonst ließe sich über Basic Auth beliebig raten.
+            ip = client_ip(request)
+            if throttle.blocked(ip, cred.username):
+                raise HTTPException(429, "Zu viele Fehlversuche, bitte später erneut versuchen")
+            user = auth_store.check_password(cred.username, cred.password[:512])
+            if user:
+                throttle.clear(ip, cred.username)
+                return user, "basic"
+            throttle.fail(ip, cred.username)
+        return None, ""
+
+    class LoginRequired(Exception):
+        pass
+
+    @app.exception_handler(LoginRequired)
+    async def login_required_handler(request: Request, _exc: LoginRequired):
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse("/login?" + urlencode({"next": target}), status_code=303)
+
+    def allowed_hosts(request: Request) -> set[str]:
+        hosts = {request.headers.get("host", "").strip().lower()}
+        hosts |= {h.strip().lower() for h in request.headers.get("x-forwarded-host", "").split(",")}
+        hosts |= {urlsplit(u).netloc.lower() for u in (settings.public_url or "").split(",") if u.strip()}
+        hosts.discard("")
+        return hosts
+
+    def csrf_guard(request: Request, base: str | None, form_token: str | None = None, strict: bool = False) -> None:
+        """Ändernde Anfragen mit Cookie: Origin/Referer muss zum eigenen Host passen.
+
+        Fehlen beide, genügt ``X-Requested-With`` oder ein gültiges CSRF-Token. Formulare (``strict``)
+        brauchen immer ein gültiges Token.
+        """
+        src = request.headers.get("origin") or request.headers.get("referer")
+        same = urlsplit(src).netloc.lower() in allowed_hosts(request) if src else None
+        token = form_token or request.headers.get("x-csrf-token")
+        valid = auth_store.csrf_valid(base, token)
+        if same is False or (strict and not valid) or (same is None and not (valid or request.headers.get("x-requested-with"))):
+            raise HTTPException(403, "Anfrage abgelehnt (CSRF)")
+
+    def read_auth(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict | None:
+        """Session-Cookie oder Basic Auth; ohne Login-Pflicht offen. Gibt den Benutzer zurück (offen: ``None``)."""
+        if not login_active():
+            return None
+        user, via = identify(request, cred)
+        if not user:
+            raise LoginRequired
+        if via == "session" and request.method not in ("GET", "HEAD", "OPTIONS"):
+            csrf_guard(request, request.cookies.get(AUTH_COOKIE))
+        request.state.user = user
+        return user
 
     FW_ADMIN_HINT = "Firmware-Verwaltung nur mit Web-Passwort (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD) – oder per ‚avinox firmware add‘ auf dem Server"
+    USERS_HINT = "Benutzerverwaltung nur mit Anmeldung (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD oder OIDC einrichten)"
 
-    def firmware_admin_auth(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:
-        """Firmware landet per OTA auf dem ESP32 (Code-Ausführung): nie ohne konfiguriertes Web-Passwort."""
-        if not settings.web_user:
-            raise HTTPException(403, FW_ADMIN_HINT)
-        read_auth(cred)
+    def admin_required(hint: str):
+        def dep(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict:
+            if not login_active():
+                raise HTTPException(403, hint)
+            user = read_auth(request, cred)
+            if not user or not user["is_admin"]:
+                raise HTTPException(403, "Nur für Administratoren")
+            return user
+        return dep
+
+    # Firmware landet per OTA auf dem ESP32 (Code-Ausführung): nie ohne Login und nur für Admins.
+    firmware_admin_auth = admin_required(FW_ADMIN_HINT)
+    users_admin_auth = admin_required(USERS_HINT)
 
     def check_length(request: Request, limit: int) -> None:
         """Größe vor dem Lesen prüfen: ohne Content-Length 411, zu groß 413."""
@@ -655,10 +732,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lang = ctx.pop("lang", None) or lang_of(request)
         params = [(k, v) for k, v in request.query_params.multi_items() if k != "lang"]
         lang_links = {code: "?" + urlencode([*params, ("lang", code)]) for code in i18n.LANGS}
+        user = getattr(request.state, "user", None)
+        csrf = auth_store.csrf_token(request.cookies.get(AUTH_COOKIE if user else CSRF_COOKIE))
         token = i18n.use(lang)  # Filter und t() lesen die Sprache beim Rendern (läuft hier synchron)
         try:
             resp = templates.TemplateResponse(request, name, {
-                "map_style": settings.map_style,
+                "map_style": settings.map_style, "current_user": user, "csrf_token": csrf,
                 "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang), **ctx,
             })
         finally:
@@ -710,8 +789,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             d["offline"] = d["age_min"] is None or d["age_min"] > 15
         return page(request, "sync.html", snap=snap, fw_latest=store.current_firmware("avinox-sync"))
 
-    @app.get("/settings", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
-    def settings_page(request: Request):
+    @app.get("/settings", response_class=HTMLResponse, include_in_schema=False)
+    def settings_page(request: Request, user: dict | None = Depends(read_auth)):
         server_urls, unreachable, docker_hint = _server_url_suggestions(request, settings.public_url)
         return page(
             request,
@@ -719,9 +798,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             levels=store.custom_levels_seen(),
             names=store.mode_names(),
             token=settings.upload_token,
-            has_web_login=bool(settings.web_user),
-            fw_admin=bool(settings.web_user),
+            login_active=login_active(),
+            fw_admin=bool(user and user["is_admin"]),
             fw_admin_hint=FW_ADMIN_HINT,
+            users=auth_store.list_users() if user and user["is_admin"] else [],
+            oidc_name=settings.oidc_name if oidc.enabled else None,
+            min_password=MIN_PASSWORD,
             server_urls=server_urls,
             server_url_unreachable=unreachable,
             server_url_docker_hint=docker_hint,
@@ -731,5 +813,172 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             upload_files=UPLOAD_FILES,
             not_uploaded=NOT_UPLOADED,
         )
+
+    # ------------------------------------------------------------ Login, Logout, OIDC
+
+    def set_session_cookie(resp: Response, request: Request, token: str, max_age: int | None) -> None:
+        resp.set_cookie(AUTH_COOKIE, token, max_age=max_age, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/")
+
+    def login_page(request: Request, next_url: str, error: str | None = None, status: int = 200) -> HTMLResponse:
+        """Formular mit CSRF-Token (Double-Submit über ein eigenes Cookie)."""
+        base = request.cookies.get(CSRF_COOKIE) or secrets.token_urlsafe(24)
+        resp = page(request, "login.html", bare=True, next=next_url, error=error, csrf_token=auth_store.csrf_token(base),
+                    oidc_name=settings.oidc_name if oidc.enabled else None)
+        resp.status_code = status
+        if not request.cookies.get(CSRF_COOKIE):
+            resp.set_cookie(CSRF_COOKIE, base, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+    def login_get(request: Request, next: str = "/", error: str | None = None):
+        if not login_active() or identify(request)[0]:
+            return RedirectResponse(safe_next(next), status_code=303)
+        return login_page(request, safe_next(next), f"login.err_{error}" if error in ("state", "denied", "unreachable", "failed") else None)
+
+    @app.post("/login", response_class=HTMLResponse, include_in_schema=False)
+    async def login_post(request: Request):
+        form = await request.form(max_fields=10)
+        csrf_guard(request, request.cookies.get(CSRF_COOKIE), str(form.get("csrf") or ""), strict=True)
+        next_url = safe_next(str(form.get("next") or "/"))
+        if not login_active():
+            return RedirectResponse(next_url, status_code=303)
+        username, password = str(form.get("username") or "").strip(), str(form.get("password") or "")
+        ip = client_ip(request)
+        if throttle.blocked(ip, username):
+            return login_page(request, next_url, "login.err_throttle", 429)
+        user = auth_store.check_password(username, password[:512])
+        if not user:
+            throttle.fail(ip, username)
+            return login_page(request, next_url, "login.err_bad", 401)
+        throttle.clear(ip, username)
+        token, max_age = auth_store.create_session(user["id"], bool(form.get("remember")))
+        resp = RedirectResponse(next_url, status_code=303)
+        set_session_cookie(resp, request, token, max_age)
+        return resp
+
+    @app.post("/logout", include_in_schema=False)
+    async def logout(request: Request):
+        form = await request.form(max_fields=5)
+        token = request.cookies.get(AUTH_COOKIE)
+        csrf_guard(request, token, str(form.get("csrf") or ""), strict=True)
+        auth_store.delete_session(token)
+        resp = RedirectResponse("/login" if login_active() else "/", status_code=303)
+        resp.delete_cookie(AUTH_COOKIE, path="/")
+        return resp
+
+    @app.get("/auth/oidc/login", include_in_schema=False)
+    async def oidc_login(request: Request, next: str = "/"):
+        if not oidc.enabled:
+            raise HTTPException(404, "OIDC ist nicht eingerichtet")
+        try:
+            url, state = await oidc.start(oidc.redirect_uri(str(request.base_url), request.headers.get("host", "")), safe_next(next))
+        except OidcError as exc:
+            log.warning("OIDC-Start fehlgeschlagen: %s", exc.code)
+            return RedirectResponse("/login?" + urlencode({"error": exc.code, "next": safe_next(next)}), status_code=303)
+        resp = RedirectResponse(url, status_code=303)
+        resp.set_cookie(OIDC_COOKIE, state, max_age=Oidc.PENDING_TTL, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/auth/oidc")
+        return resp
+
+    @app.get("/auth/oidc/callback", include_in_schema=False)
+    async def oidc_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+        if not oidc.enabled:
+            raise HTTPException(404, "OIDC ist nicht eingerichtet")
+
+        def fail(code_: str):
+            resp = RedirectResponse("/login?" + urlencode({"error": code_}), status_code=303)
+            resp.delete_cookie(OIDC_COOKIE, path="/auth/oidc")
+            return resp
+
+        cookie = request.cookies.get(OIDC_COOKIE)
+        if not state or not cookie or not secrets.compare_digest(cookie, state):
+            return fail("state")
+        if error or not code:
+            oidc._pending.pop(state, None)
+            return fail("denied")
+        try:
+            claims, next_url = await oidc.finish(code, state)
+        except OidcError as exc:
+            log.warning("OIDC-Anmeldung fehlgeschlagen: %s", exc.code)
+            return fail(exc.code)
+        if not oidc.allowed(claims):
+            return fail("denied")
+        user = oidc.find_or_create(auth_store, claims)
+        token, max_age = auth_store.create_session(user["id"], True)
+        resp = RedirectResponse(next_url, status_code=303)
+        resp.delete_cookie(OIDC_COOKIE, path="/auth/oidc")
+        set_session_cookie(resp, request, token, max_age)
+        return resp
+
+    # ------------------------------------------------------------ Benutzerverwaltung
+
+    def user_view(u: dict) -> dict:
+        return {k: u[k] for k in ("id", "username", "email", "is_admin", "created", "last_login")}
+
+    def bad(code: str, status: int = 400):
+        raise HTTPException(status, {"error": code})
+
+    def valid_name(raw) -> str:
+        name = str(raw or "").strip()
+        if not USERNAME_RE.match(name):
+            bad("username_invalid")
+        return name
+
+    @app.get("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])
+    def users_list():
+        return {"users": [{**u, "is_admin": bool(u["is_admin"]), "has_password": bool(u["has_password"]), "is_oidc": bool(u["is_oidc"])} for u in auth_store.list_users()]}
+
+    @app.get("/api/v1/users/me", tags=["benutzer"])
+    def users_me(user: dict | None = Depends(read_auth)):
+        return {"user": {**user_view(user), "is_admin": bool(user["is_admin"])} if user else None, "login_active": login_active()}
+
+    @app.put("/api/v1/users/me/password", tags=["benutzer"])
+    def users_me_password(request: Request, payload: dict, user: dict | None = Depends(read_auth)):
+        """Eigenes Passwort ändern (altes ist nötig); alle anderen Sessions enden."""
+        if not user:
+            raise HTTPException(403, USERS_HINT)
+        if not user["password_hash"]:
+            bad("no_password")
+        if not auth_store.check_password(user["username"], str(payload.get("old_password") or "")):
+            bad("old_wrong")
+        new = str(payload.get("new_password") or "")
+        if problem := password_problem(new):
+            bad(problem)
+        auth_store.set_password(user["id"], new)
+        auth_store.delete_sessions(user["id"], keep=request.cookies.get(AUTH_COOKIE))
+        return {"ok": True}
+
+    @app.post("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])
+    def users_create(payload: dict):
+        name = valid_name(payload.get("username"))
+        if problem := password_problem(str(payload.get("password") or "")):
+            bad(problem)
+        if auth_store.by_name(name):
+            bad("username_taken", 409)
+        user = auth_store.create_user(name, str(payload["password"]), bool(payload.get("is_admin")))
+        return {"user": {**user_view(user), "is_admin": bool(user["is_admin"])}}
+
+    @app.put("/api/v1/users/{user_id}/password", tags=["benutzer"])
+    def users_reset_password(user_id: int, payload: dict, admin: dict = Depends(users_admin_auth)):
+        """Passwort eines Benutzers zurücksetzen (Admin); dessen Sessions enden."""
+        if not auth_store.get_user(user_id):
+            bad("not_found", 404)
+        if problem := password_problem(str(payload.get("password") or "")):
+            bad(problem)
+        auth_store.set_password(user_id, str(payload["password"]))
+        auth_store.delete_sessions(user_id)
+        return {"ok": True}
+
+    @app.delete("/api/v1/users/{user_id}", tags=["benutzer"])
+    def users_delete(user_id: int, admin: dict = Depends(users_admin_auth)):
+        target = auth_store.get_user(user_id)
+        if not target:
+            bad("not_found", 404)
+        if target["id"] == admin["id"]:
+            bad("delete_self", 409)
+        if target["is_admin"] and auth_store.admin_count() <= 1:
+            bad("last_admin", 409)
+        auth_store.delete_user(user_id)
+        return {"ok": True}
 
     return app
