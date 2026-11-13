@@ -352,7 +352,8 @@ class Oidc:
     # --- Zulassung
     def _identities(self, claims: dict) -> set[str]:
         ids = {str(g).lower() for g in (claims.get("groups") or []) if isinstance(g, str)}
-        if claims.get("email") and claims.get("email_verified") is not False:
+        # Nur bestätigte E-Mails zählen (fehlt email_verified, gilt sie als unbestätigt).
+        if claims.get("email") and claims.get("email_verified") is True:
             ids.add(str(claims["email"]).lower())
         return ids
 
