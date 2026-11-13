@@ -16,9 +16,9 @@ Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) str
 
 ## Explainer video
 
-<a href="video/avinox-erklaervideo-en-quer.mp4"><img src="assets/video/erklaervideo-en.jpg" width="640" alt="Explainer video: Avinox Ride Data in one minute"></a>
+https://github.com/user-attachments/assets/c287f2eb-b306-4e56-b8a6-f7478fd79b21
 
-▶ **Avinox Ride Data in one minute** (approx. 1:40): [landscape](video/avinox-erklaervideo-en-quer.mp4) · [portrait](video/avinox-erklaervideo-en-hoch.mp4) · Deutsch: [quer](video/avinox-erklaervideo-de-quer.mp4) · [hochkant](video/avinox-erklaervideo-de-hoch.mp4)
+Download in full size: [landscape](video/avinox-erklaervideo-en-quer.mp4) · [portrait](video/avinox-erklaervideo-en-hoch.mp4) · Deutsch: [quer](video/avinox-erklaervideo-de-quer.mp4) · [hochkant](video/avinox-erklaervideo-de-hoch.mp4)
 
 ## What you get
 

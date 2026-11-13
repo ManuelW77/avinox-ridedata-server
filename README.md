@@ -16,9 +16,9 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 
 ## Erklärvideo
 
-<a href="video/avinox-erklaervideo-de-quer.mp4"><img src="assets/video/erklaervideo-de.jpg" width="640" alt="Erklärvideo: Avinox Ride Data in einer Minute"></a>
+https://github.com/user-attachments/assets/4a70fee8-672a-4590-bdea-2d153ec1299c
 
-▶ **Avinox Ride Data in einer Minute** (ca. 1:40): [quer](video/avinox-erklaervideo-de-quer.mp4) · [hochkant](video/avinox-erklaervideo-de-hoch.mp4) · English: [landscape](video/avinox-erklaervideo-en-quer.mp4) · [portrait](video/avinox-erklaervideo-en-hoch.mp4)
+Herunterladen in voller Größe: [quer](video/avinox-erklaervideo-de-quer.mp4) · [hochkant](video/avinox-erklaervideo-de-hoch.mp4) · English: [landscape](video/avinox-erklaervideo-en-quer.mp4) · [portrait](video/avinox-erklaervideo-en-hoch.mp4)
 
 ## Was man bekommt
 
