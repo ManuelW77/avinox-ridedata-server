@@ -2,7 +2,7 @@
 {% from "_macros.html" import figure, figure_text, bars, bars_pair with context %}
 {% block title %}{{ ride.name }} · {{ ride.start_utc | localtime if ride.start_utc else t('ride_n', n=ride.ride_id) }} – Avinox Ride Data{% endblock %}
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css').path }}">
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/maplibre/maplibre-gl.css').path }}">
 <link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
 {% endblock %}
 {% block main %}
@@ -60,12 +60,15 @@
   <div class="toolbar">
     <h2 style="margin:0">{{ t('ride.track') }}</h2>
     {% if a.gps.points > 1 %}
+    <div class="map-tools">
+    <button type="button" class="btn ghost small" id="open3d" hidden>{{ t('ride.view3d') }}</button>
     <div class="segmented" id="color-by" role="group" aria-label="{{ t('ride.color_by') }}">
       <button type="button" data-key="speed" aria-pressed="true">{{ t('ride.c.speed') }}</button>
       <button type="button" data-key="rider">{{ t('ride.c.rider') }}</button>
       <button type="button" data-key="motor">{{ t('ride.c.motor') }}</button>
       <button type="button" data-key="alt">{{ t('ride.c.alt') }}</button>
       <button type="button" data-key="mode">{{ t('ride.c.mode') }}</button>
+    </div>
     </div>
     {% endif %}
   </div>
@@ -206,11 +209,32 @@
   </section>
 </div>
 
-<script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "tile_url": tile_url, "tile_attribution": tile_attribution, "preview": a.gps.preview} | tojson }}</script>
+{% if a.gps.points > 1 %}
+<div class="view3d" id="view3d" hidden role="dialog" aria-modal="true" aria-labelledby="view3d-title">
+  <div id="map3d"></div>
+  <header class="view3d-bar">
+    <h2 id="view3d-title"></h2>
+    <div class="segmented small view3d-speed" id="play-speed" role="group" aria-label="{{ t('js.d3.speed') }}" hidden>
+      <button type="button" data-key="1" aria-pressed="true">1×</button>
+      <button type="button" data-key="2" aria-pressed="false">2×</button>
+      <button type="button" data-key="4" aria-pressed="false">4×</button>
+    </div>
+    <button type="button" class="btn view3d-ride" id="play-btn" aria-pressed="false" hidden></button>
+    <button type="button" class="btn ghost view3d-close" id="close3d" aria-label="{{ t('ride.close') }}">×</button>
+  </header>
+  <p class="view3d-legend" id="legend3d"></p>
+  <div class="view3d-dock" id="play-dock" hidden>
+    <div class="view3d-hud" id="play-hud" aria-live="off"></div>
+    <input type="range" class="view3d-seek" id="play-seek" min="0" max="1000" value="0" aria-label="{{ t('js.d3.seek') }}">
+  </div>
+</div>
+{% endif %}
+
+<script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "map_style": map_style, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
-<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js').path }}"></script>
+<script src="{{ url_for('static', path='vendor/maplibre/maplibre-gl.js').path }}"></script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>

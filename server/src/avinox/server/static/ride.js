@@ -1,4 +1,4 @@
-/* Fahrtansicht: Karte (Leaflet) und Verlaufsdiagramme (uPlot), gekoppelt über die Strecke. */
+/* Fahrtansicht: Karte (MapLibre, mit 3D-Ansicht) und Verlaufsdiagramme (uPlot), gekoppelt über die Strecke. */
 (function () {
   "use strict";
 
@@ -82,7 +82,7 @@
 
   /* ---------------------------------------------------------------- Karte */
 
-  const mapState = { map: null, track: null, layer: null, marker: null, onHoverDistance: null };
+  const mapState = { map: null, ready: false, track: null, onHoverDistance: null };
 
   const SCALE = ["#2c7bb6", "#7fbfd4", "#e8d86a", "#f08a3e", "#c62e1d"];
   const MODE_COLORS = ["#8a908c", "#3a9a5b", "#2c7bb6", "#c62e1d", "#8e4fb3", "#e0a21a", "#13877a", "#d9661a", "#5b6abf", "#b0417a"];
@@ -94,6 +94,9 @@
     alt: { field: "altitude_m", unit: "m", digits: 0 },
     mode: { field: "assist_level" },
   };
+
+  const EMPTY_FC = { type: "FeatureCollection", features: [] };
+  const currentKey = () => pressedKey(document.getElementById("color-by"), "speed");
 
   function quantileBreaks(values) {
     const v = values.filter((x) => x != null && isFinite(x)).sort((a, b) => a - b);
@@ -109,8 +112,7 @@
     return i;
   }
 
-  function legend(items) {
-    const el = document.getElementById("map-legend");
+  function legendInto(el, items) {
     if (!el) return;
     el.textContent = "";
     items.forEach(([color, text]) => {
@@ -123,28 +125,29 @@
     });
   }
 
-  function drawTrack(key) {
+  const legend = (items) => legendInto(document.getElementById("map-legend"), items);
+
+  // Spur als Segmente gleicher Farbe: { features, items } (items = Legende)
+  function colorize(key) {
     const t = mapState.track;
-    if (!t || !mapState.map) return;
-    if (mapState.layer) mapState.layer.remove();
     const cfg = COLOR_KEYS[key] || COLOR_KEYS.speed;
     const fi = t.fields.indexOf(cfg.field);
     const vals = t.samples.map((s) => (s && fi >= 0 ? s[fi] : null));
     const grey = cssVar("--ink-3", "#8a908c");
-    let colorFor, items = [];
+    const items = [];
+    let classes, palette;
 
     if (key === "mode") {
       const seen = new Map();
-      colorFor = (v) => {
+      const colorFor = (v) => {
         if (v == null) return -1;
         const k = Math.round(v);
         if (!seen.has(k)) seen.set(k, MODE_COLORS[((k % MODE_COLORS.length) + MODE_COLORS.length) % MODE_COLORS.length]);
         return k;
       };
-      vals.forEach(colorFor);
+      classes = vals.map(colorFor);
       [...seen.keys()].sort((a, b) => a - b).forEach((k) => items.push([seen.get(k), modeName(k)]));
-      const palette = (c) => (c === -1 ? grey : seen.get(c));
-      buildSegments(t, vals.map(colorFor), palette);
+      palette = (c) => (c === -1 ? grey : seen.get(c));
     } else {
       const br = quantileBreaks(vals);
       if (br) {
@@ -153,153 +156,447 @@
           if (i > 0 && edges[i] === edges[i + 1] && edges[i] === edges[i - 1]) continue;
           items.push([SCALE[i], fmt(edges[i], cfg.digits) + "–" + fmt(edges[i + 1], cfg.digits) + " " + cfg.unit]);
         }
-        buildSegments(t, vals.map((v) => classOf(v, br.cuts)), (c) => (c === -1 ? grey : SCALE[c]));
+        classes = vals.map((v) => classOf(v, br.cuts));
+        palette = (c) => (c === -1 ? grey : SCALE[c]);
       } else {
-        buildSegments(t, vals.map(() => -1), () => grey);
+        classes = vals.map(() => -1);
+        palette = () => grey;
         items.push([grey, tr("no_values")]);
       }
     }
-    legend(items);
+    return { features: buildSegments(t, classes, palette), items };
   }
 
   function buildSegments(t, classes, palette) {
-    const group = L.layerGroup();
+    const feats = [];
+    const n = t.coords.length;
     let start = 0;
-    const n = t.latlngs.length;
     for (let i = 1; i <= n; i++) {
       if (i === n || classes[i] !== classes[start]) {
-        const pts = t.latlngs.slice(start, Math.min(i + 1, n));
+        const pts = t.coords.slice(start, Math.min(i + 1, n));
         if (pts.length > 1) {
-          L.polyline(pts, { color: palette(classes[start]), weight: 4, opacity: 0.95, interactive: false }).addTo(group);
+          feats.push({ type: "Feature", properties: { color: palette(classes[start]) }, geometry: { type: "LineString", coordinates: pts } });
         }
         start = i;
       }
     }
-    group.addTo(mapState.map);
-    mapState.layer = group;
+    return feats;
+  }
+
+  // Farbige Spur samt weißer Kontur in eine Karte einbauen (2D und 3D)
+  function addTrackLayers(map, features, width) {
+    map.addSource("track", { type: "geojson", data: { type: "FeatureCollection", features } });
+    map.addLayer({ id: "track-casing", type: "line", source: "track", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-width": width + 3, "line-opacity": 0.9 } });
+    map.addLayer({ id: "track", type: "line", source: "track", layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": ["get", "color"], "line-width": width } });
+  }
+
+  function drawTrack(key) {
+    const t = mapState.track;
+    if (!t || !mapState.ready) return;
+    const r = colorize(key);
+    const src = mapState.map.getSource("track");
+    if (src) src.setData({ type: "FeatureCollection", features: r.features });
+    legend(r.items);
+  }
+
+  function dot(color, title) {
+    const d = document.createElement("div");
+    d.style.cssText = "width:12px;height:12px;border-radius:50%;box-sizing:border-box;border:2px solid " + cssVar("--surface", "#fffdf9")
+      + ";background:" + color;
+    d.title = title;
+    return d;
   }
 
   function initMap(geo) {
     const el = document.getElementById("map");
-    if (!el || typeof L === "undefined") return;
-    const map = L.map(el, { zoomControl: true, attributionControl: true });
-    mapState.map = map;
-    // Ausschnitt zuerst setzen: Linien vor dem ersten Ausschnitt scheitern in Leaflet (Renderer ohne Grenzen).
-    const initial = [];
-    (geo && Array.isArray(geo.features) ? geo.features : []).forEach((f) => {
-      const g = f && f.geometry;
-      if (g && g.type === "LineString") g.coordinates.forEach((c) => initial.push([c[1], c[0]]));
-      if (g && g.type === "Point") initial.push([g.coordinates[1], g.coordinates[0]]);
-    });
-    if (!initial.length && Array.isArray(ride.preview)) ride.preview.forEach((p) => initial.push(p));
-    if (initial.length) map.fitBounds(L.latLngBounds(initial), { padding: [20, 20] });
-    else map.setView([0, 0], 2);
-    if (ride.tile_url) {
-      L.tileLayer(ride.tile_url, { attribution: ride.tile_attribution || "", maxZoom: 19 }).addTo(map);
-    }
+    if (!el || typeof maplibregl === "undefined" || !ride.map_style) return;
     const feats = (geo && Array.isArray(geo.features)) ? geo.features : [];
     const findKind = (kind, type) => feats.find((f) => f && f.properties && f.properties.kind === kind
       && f.geometry && f.geometry.type === type);
     const trackF = findKind("track", "LineString");
     const ink = cssVar("--ink", "#1c2226");
-    const surface = cssVar("--surface", "#fffdf9");
-    let bounds = null;
 
+    let trackLine = null, previewPts = [];
     if (trackF && trackF.geometry.coordinates.length > 1) {
       const p = trackF.properties;
-      const coords = trackF.geometry.coordinates;
+      const coords = trackF.geometry.coordinates.map((c) => [c[0], c[1]]);
       const samples = Array.isArray(p.samples) ? p.samples : [];
       const tf = Array.isArray(p.fields) ? p.fields : [];
-      mapState.track = {
-        latlngs: coords.map((c) => [c[1], c[0]]),
-        samples: coords.map((_, i) => samples[i] || null),
-        fields: tf,
-        di: tf.indexOf("distance_m"),
-      };
-      const colorBy = document.getElementById("color-by");
-      drawTrack(pressedKey(colorBy, "speed"));
-      if (colorBy) {
-        colorBy.addEventListener("click", (ev) => {
-          const b = ev.target.closest("button[data-key]");
-          if (!b) return;
-          setPressed(colorBy, b.dataset.key);
-          drawTrack(b.dataset.key);
-        });
-      }
-      bounds = L.latLngBounds(mapState.track.latlngs);
-
-      // Hover auf der Karte -> Diagramm-Cursor
-      map.on("mousemove", (ev) => {
-        const t = mapState.track;
-        if (!t || t.di < 0 || !mapState.onHoverDistance) return;
-        const pt = map.latLngToContainerPoint(ev.latlng);
-        let best = -1, bestD = Infinity;
-        for (let i = 0; i < t.latlngs.length; i++) {
-          const q = map.latLngToContainerPoint(t.latlngs[i]);
-          const d = (q.x - pt.x) ** 2 + (q.y - pt.y) ** 2;
-          if (d < bestD) { bestD = d; best = i; }
-        }
-        if (best >= 0 && bestD < 400) {
-          const s = t.samples[best];
-          if (s && s[t.di] != null) {
-            showMarker(t.latlngs[best]);
-            mapState.onHoverDistance(s[t.di]);
-          }
-        }
-      });
+      trackLine = coords;
+      mapState.track = { coords, samples: coords.map((_, i) => samples[i] || null), fields: tf, di: tf.indexOf("distance_m") };
     } else {
       const prevF = findKind("preview", "LineString");
-      let pts = prevF ? prevF.geometry.coordinates.map((c) => [c[1], c[0]]) : [];
-      if (pts.length < 2 && Array.isArray(ride.preview)) pts = ride.preview.filter((p) => Array.isArray(p) && p.length >= 2);
-      if (pts.length > 1) {
-        L.polyline(pts, { color: cssVar("--alt", "#6b6f9a"), weight: 3, dashArray: "6 6", interactive: false }).addTo(map);
-        bounds = L.latLngBounds(pts);
-        legend([[cssVar("--alt", "#6b6f9a"), tr("preview_nogps")]]);
+      previewPts = prevF ? prevF.geometry.coordinates.map((c) => [c[0], c[1]]) : [];
+      if (previewPts.length < 2 && Array.isArray(ride.preview)) {
+        previewPts = ride.preview.filter((q) => Array.isArray(q) && q.length >= 2).map((q) => [q[1], q[0]]);
       }
     }
 
-    ["start", "end"].forEach((kind) => {
-      const f = findKind(kind, "Point");
-      if (!f) return;
-      const c = f.geometry.coordinates;
-      L.circleMarker([c[1], c[0]], {
-        radius: 6, weight: 2, color: surface, fillOpacity: 1,
-        fillColor: kind === "start" ? cssVar("--motor", "#13877a") : ink,
-      }).bindTooltip(kind === "start" ? tr("start") : tr("end")).addTo(map);
-    });
-
+    // Ausschnitt: bbox, sonst Spur bzw. Vorschau
+    const bounds = new maplibregl.LngLatBounds();
+    let hasBounds = false;
     if (geo && Array.isArray(geo.bbox) && geo.bbox.length >= 4) {
-      const b = geo.bbox;
-      const n = b.length >= 6 ? 3 : 2;
-      bounds = L.latLngBounds([b[1], b[0]], [b[n + 1], b[n]]);
+      const b = geo.bbox, n = b.length >= 6 ? 3 : 2;
+      bounds.extend([b[0], b[1]]); bounds.extend([b[n], b[n + 1]]);
+      hasBounds = true;
+    } else {
+      (trackLine || previewPts).forEach((c) => { bounds.extend(c); hasBounds = true; });
     }
-    if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-    else map.setView([0, 0], 2);
+    const map = new maplibregl.Map(Object.assign({
+      container: el, style: ride.map_style, attributionControl: { compact: true },
+    }, hasBounds ? { bounds, fitBoundsOptions: { padding: 20 } } : { center: [0, 0], zoom: 1 }));
+    mapState.map = map;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.on("error", (ev) => { if (ev && ev.error) console.warn("Karte:", ev.error.message || ev.error); });
+
+    map.on("load", () => {
+      if (mapState.track) {
+        const t = mapState.track;
+        const r = colorize(currentKey());
+        addTrackLayers(map, r.features, 4.5);
+        legend(r.items);
+        map.addSource("hover", { type: "geojson", data: EMPTY_FC });
+        map.addLayer({ id: "hover", type: "circle", source: "hover",
+          paint: { "circle-radius": 7, "circle-color": ink, "circle-stroke-color": cssVar("--surface", "#fffdf9"), "circle-stroke-width": 3 } });
+        mapState.ready = true;
+
+        // Hover auf der Karte -> Diagramm-Cursor (nächster Spurpunkt, höchstens 20 px entfernt)
+        map.on("mousemove", (ev) => {
+          if (t.di < 0 || !mapState.onHoverDistance) return;
+          let best = -1, bestD = Infinity;
+          for (let i = 0; i < t.coords.length; i++) {
+            const q = map.project(t.coords[i]);
+            const d = (q.x - ev.point.x) ** 2 + (q.y - ev.point.y) ** 2;
+            if (d < bestD) { bestD = d; best = i; }
+          }
+          if (best >= 0 && bestD < 400) {
+            const s = t.samples[best];
+            if (s && s[t.di] != null) {
+              showMarker(t.coords[best]);
+              mapState.onHoverDistance(s[t.di]);
+            }
+          }
+        });
+        setup3d();
+      } else if (previewPts.length > 1) {
+        const c = cssVar("--alt", "#6b6f9a");
+        map.addSource("preview", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: previewPts } } });
+        map.addLayer({ id: "preview", type: "line", source: "preview", paint: { "line-color": c, "line-width": 3, "line-dasharray": [2, 2] } });
+        legend([[c, tr("preview_nogps")]]);
+      }
+
+      ["start", "end"].forEach((kind) => {
+        const f = findKind(kind, "Point");
+        if (!f) return;
+        const label = kind === "start" ? tr("start") : tr("end");
+        new maplibregl.Marker({ element: dot(kind === "start" ? cssVar("--motor", "#13877a") : ink, label) })
+          .setLngLat(f.geometry.coordinates.slice(0, 2)).addTo(map);
+      });
+    });
   }
 
-  function showMarker(latlng) {
-    if (!mapState.map) return;
-    if (!mapState.marker) {
-      mapState.marker = L.circleMarker(latlng, {
-        radius: 7, weight: 3, color: cssVar("--surface", "#fffdf9"),
-        fillColor: cssVar("--ink", "#1c2226"), fillOpacity: 1, interactive: false,
-      }).addTo(mapState.map);
-    } else {
-      mapState.marker.setLatLng(latlng);
-      if (!mapState.map.hasLayer(mapState.marker)) mapState.marker.addTo(mapState.map);
-    }
+  function showMarker(lngLat) {
+    const src = mapState.ready && mapState.map.getSource("hover");
+    if (src) src.setData({ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: lngLat } });
   }
 
   function markerAtDistance(dist) {
     const t = mapState.track;
     if (!t || t.di < 0 || dist == null) return;
     const i = nearestIndex(t.samples.length, (k) => (t.samples[k] ? t.samples[k][t.di] : null), dist);
-    if (i >= 0) showMarker(t.latlngs[i]);
+    if (i >= 0) showMarker(t.coords[i]);
   }
 
   function hideMarker() {
-    if (mapState.marker && mapState.map) mapState.marker.remove();
+    const src = mapState.ready && mapState.map.getSource("hover");
+    if (src) src.setData(EMPTY_FC);
   }
+
+  /* --------------------------------------------------------------- 3D-Ansicht */
+
+  const DEM_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+  const EXAGGERATION = 1.5;  // Höhen leicht überhöht, sonst wirken Mittelgebirge platt
+  const LOOK_AHEAD_M = 70;   // Richtung: Verlauf über die nächsten Meter
+  const CHASE_BACK_M = 140, CHASE_UP_M = 70, CHASE_TARGET_M = 40;  // Kamera hinter und über dem Fahrer, Blick voraus
+
+  let map3d = null, play3d = null, opener3d = null;
+  const byId = (id) => document.getElementById(id);
+
+  const toLngLat = (p) => new maplibregl.LngLat(p[1], p[0]);  // p = [lat, lon]
+  function distM(a, b) {
+    const r = Math.PI / 180, R = 6371000;
+    const dLat = (b[0] - a[0]) * r, dLon = (b[1] - a[1]) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function headingDeg(a, b) {
+    const r = Math.PI / 180;
+    const y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
+    const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
+    return (Math.atan2(y, x) / r + 360) % 360;
+  }
+  // Punkt `meters` m von p in Richtung `bearing` (Grad)
+  function offsetPt(p, bearing, meters) {
+    const r = Math.PI / 180, a = bearing * r;
+    return [p[0] + meters * Math.cos(a) / 111320, p[1] + meters * Math.sin(a) / (111320 * Math.cos(p[0] * r))];
+  }
+  // Geländehöhe in m (überhöht, wie gezeichnet); ohne geladene Kachel 0
+  function ground(map, p) {
+    try {
+      const h = map.terrain ? map.terrain.getElevationForLngLatZoom(toLngLat(p), 14) : 0;
+      return isFinite(h) ? h : 0;
+    } catch (e) { return 0; }
+  }
+
+  function setup3d() {
+    const btn = byId("open3d");
+    if (!btn || !byId("view3d")) return;
+    btn.hidden = false;
+    btn.addEventListener("click", open3d);
+    byId("close3d").addEventListener("click", close3d);
+    document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !byId("view3d").hidden) close3d(); });
+  }
+
+  function open3d() {
+    opener3d = document.activeElement;
+    const title = document.getElementById("ride-title-text");
+    byId("view3d-title").textContent = title ? title.textContent : "";
+    byId("view3d").hidden = false;
+    document.body.style.overflow = "hidden";
+    legendInto(byId("legend3d"), []);
+    show3d();
+    byId("close3d").focus();
+  }
+
+  function close3d() {
+    if (play3d) { play3d.stop(); play3d = null; }
+    byId("view3d").hidden = true;
+    document.body.style.overflow = "";
+    if (map3d) { map3d.remove(); map3d = null; }
+    if (opener3d && opener3d.focus) opener3d.focus();
+  }
+
+  // Blickrichtung: Hauptrichtung Start -> Ziel
+  function bearing3d(coords) {
+    const a = coords[0], b = coords[coords.length - 1];
+    return headingDeg([a[1], a[0]], [b[1], b[0]]);
+  }
+
+  function show3d() {
+    const t = mapState.track;
+    if (!t || typeof maplibregl === "undefined") { byId("legend3d").textContent = tr("d3.failed"); return; }
+    const coords = t.coords;
+    const bounds = coords.reduce((box, c) => box.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+    const demAttr = `<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">${tr("d3.elev")}: Mapzen Terrain Tiles</a>`;
+    const map = new maplibregl.Map({
+      container: "map3d", style: ride.map_style, bounds, fitBoundsOptions: { padding: 80 },
+      maxPitch: 80, attributionControl: { compact: true },
+    });
+    map3d = map;
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.on("error", (ev) => { if (ev && ev.error) console.warn("3D:", ev.error.message || ev.error); });
+    map.on("load", () => {
+      if (map !== map3d) return;
+      map.addSource("dem", { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15, attribution: demAttr });
+      // eigene Quelle fürs Relief, MapLibre empfiehlt sie getrennt vom Gelände
+      map.addSource("dem-shade", { type: "raster-dem", tiles: [DEM_TILES], encoding: "terrarium", tileSize: 256, maxzoom: 15 });
+      const firstSymbol = (map.getStyle().layers.find((l) => l.type === "symbol") || {}).id;
+      map.addLayer({ id: "hillshade", type: "hillshade", source: "dem-shade",
+        paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#3a3a3a" } }, firstSymbol);
+      map.setTerrain({ source: "dem", exaggeration: EXAGGERATION });
+      if (map.setSky) map.setSky({ "sky-color": "#a9cbe8", "horizon-color": "#e9eef2", "sky-horizon-blend": 0.6 });
+
+      const r = colorize(currentKey());
+      addTrackLayers(map, r.features, 5);
+      legendInto(byId("legend3d"), r.items);
+
+      const first = coords[0], last = coords[coords.length - 1];
+      new maplibregl.Marker({ element: dot(cssVar("--motor", "#13877a"), tr("start")) }).setLngLat(first).addTo(map);
+      new maplibregl.Marker({ element: dot(cssVar("--ink", "#1c2226"), tr("end")) }).setLngLat(last).addTo(map);
+
+      // Einpassen erst nach den Höhenkacheln (sonst rechnet die Kamera mit Meereshöhe), dann kippen
+      let fitted = false;
+      const fit = () => {
+        if (fitted || map !== map3d) return;
+        fitted = true;
+        map.off("sourcedata", onData);
+        const side = Math.min(80, Math.round(map.getContainer().clientWidth * 0.08));
+        const camera = map.cameraForBounds(bounds, { padding: { top: 90, bottom: 130, left: side, right: side }, bearing: bearing3d(coords) });
+        if (!camera) return;
+        map.jumpTo(Object.assign({}, camera, { pitch: 0 }));
+        map.easeTo({ pitch: 62, zoom: camera.zoom - 0.2, duration: 1400 });
+      };
+      const onData = (ev) => { if (ev.sourceId === "dem" && map.isSourceLoaded("dem")) setTimeout(fit, 150); };
+      map.on("sourcedata", onData);
+      setTimeout(fit, 5000);
+      play3d = setupPlayback(map, coords);
+    });
+  }
+
+  /* ----------------------------------------------------------------- Abspielen */
+
+  function setupPlayback(map, coords) {
+    const t = mapState.track;
+    const btn = byId("play-btn"), dock = byId("play-dock"), hud = byId("play-hud"), seek = byId("play-seek"), speedEl = byId("play-speed");
+    const points = coords.map((c) => [c[1], c[0]]);   // [lat, lon], immer in Aufzeichnungsrichtung
+    const lengths = [0];
+    for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1] + distM(points[i - 1], points[i]));
+    const total = lengths[lengths.length - 1];
+    if (total < 20) return null;
+
+    // Stelle bei `meters`: Segmentindex i (>=1) und Anteil f im Segment
+    const locate = (meters) => {
+      const target = Math.min(Math.max(meters, 0), total);
+      let lo = 1, hi = points.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (lengths[mid] < target) lo = mid + 1; else hi = mid; }
+      const piece = lengths[lo] - lengths[lo - 1] || 1;
+      return { i: lo, f: Math.min(Math.max((target - lengths[lo - 1]) / piece, 0), 1) };
+    };
+    const at = (meters) => {
+      const { i, f } = locate(meters);
+      return [points[i - 1][0] + (points[i][0] - points[i - 1][0]) * f, points[i - 1][1] + (points[i][1] - points[i - 1][1]) * f];
+    };
+    const altIdx = t.fields.indexOf("altitude_m");
+    const altAt = (meters) => {   // Notnagel ohne Gelände: Höhe aus den Messwerten
+      const { i } = locate(meters);
+      const s = t.samples[i];
+      return s && altIdx >= 0 && s[altIdx] != null ? s[altIdx] * EXAGGERATION : 0;
+    };
+    const heightAt = (meters) => { const g = ground(map, at(meters)); return g > 0 ? g : altAt(meters); };
+
+    // aufgezeichnete Strecke an der Stelle (für Anzeige und Wertesuche)
+    const recAt = (meters) => {
+      if (t.di < 0) return meters;
+      const { i, f } = locate(meters);
+      const a = t.samples[i - 1], b = t.samples[i];
+      if (!a || !b || a[t.di] == null || b[t.di] == null) return meters;
+      return a[t.di] + (b[t.di] - a[t.di]) * f;
+    };
+    const recTotal = (() => {
+      for (let i = t.samples.length - 1; i >= 0; i--) { const s = t.samples[i]; if (s && t.di >= 0 && s[t.di] != null) return s[t.di]; }
+      return total;
+    })();
+
+    // Werte aus der Zeitreihe am nächsten Punkt
+    const dcol = col("distance_m");
+    const colIdx = { time: col("offset_s"), speed: col("speed_kmh"), rider: col("rider_power_w"), motor: col("motor_power_w"), grade: col("gradient_pct") };
+    const cells = [];
+    const addCell = (key, label) => {
+      const span = document.createElement("span");
+      const small = document.createElement("small");
+      small.textContent = label;
+      const b = document.createElement("b");
+      span.append(small, b);
+      hud.appendChild(span);
+      cells.push({ key, b });
+    };
+    hud.textContent = "";
+    addCell("dist", tr("d3.dist"));
+    if (colIdx.time >= 0) addCell("time", tr("d3.time"));
+    if (colIdx.speed >= 0) addCell("speed", tr("c.speed"));
+    if (colIdx.rider >= 0) addCell("rider", tr("s.rider"));
+    if (colIdx.motor >= 0) addCell("motor", tr("s.motor"));
+    if (colIdx.grade >= 0) addCell("grade", tr("d3.grade"));
+    const hms = (sec) => { const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s % 60).padStart(2, "0"); };
+    const updateHud = (meters) => {
+      const d = recAt(meters);
+      const ri = dcol >= 0 ? nearestIndex(rows.length, (k) => rows[k][dcol], d) : -1;
+      const row = ri >= 0 ? rows[ri] : null;
+      const v = (key) => (row ? row[colIdx[key]] : null);
+      cells.forEach(({ key, b }) => {
+        if (key === "dist") b.textContent = fmt(d / 1000, 1) + " / " + fmt(recTotal / 1000, 1) + " km";
+        else if (key === "time") b.textContent = v("time") == null ? "–" : hms(v("time"));
+        else if (key === "speed") b.textContent = v("speed") == null ? "–" : fmt(v("speed"), 0) + " km/h";
+        else if (key === "rider") b.textContent = v("rider") == null ? "–" : fmt(v("rider"), 0) + " W";
+        else if (key === "motor") b.textContent = v("motor") == null ? "–" : fmt(v("motor"), 0) + " W";
+        else if (key === "grade") b.textContent = v("grade") == null ? "–" : (v("grade") >= 0 ? "↗ " : "↘ ") + fmt(Math.abs(v("grade")), 0) + " %";
+      });
+    };
+
+    map.addSource("rider", { type: "geojson", data: { type: "Point", coordinates: coords[0] } });
+    map.addLayer({ id: "rider", type: "circle", source: "rider",
+      paint: { "circle-radius": 8, "circle-color": cssVar("--rider", "#d9661a"), "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
+
+    const baseMs = Math.min(150, Math.max(25, total / 15)) * 1000;
+    let speed = 1, progress = 0, playing = false, frame = null, lastTs = null;
+    let smoothed = null, smBack = null, smTarget = null;
+    const lp = (prev, v) => (prev == null ? v : prev + (v - prev) * 0.2);
+
+    const label = () => {
+      btn.textContent = playing ? tr("d3.pause") : progress > 0 && progress < 1 ? tr("d3.resume") : tr("d3.play");
+      btn.setAttribute("aria-pressed", String(playing));
+    };
+    const render = () => {
+      const meters = progress * total, here = at(meters);
+      const course = headingDeg(at(meters - LOOK_AHEAD_M / 3), at(meters + LOOK_AHEAD_M));
+      // Richtung weich nachführen (kürzester Weg um 0°/360°), sonst ruckelt sie an jedem Knick
+      smoothed = smoothed === null ? course : (smoothed + ((course - smoothed + 540) % 360 - 180) * 0.06 + 360) % 360;
+      map.getSource("rider").setData({ type: "Point", coordinates: [here[1], here[0]] });
+      const behind = offsetPt(here, smoothed + 180, CHASE_BACK_M), ahead = offsetPt(here, smoothed, CHASE_TARGET_M);
+      smBack = lp(smBack, Math.max(heightAt(meters - CHASE_BACK_M), heightAt(meters)) + CHASE_UP_M * EXAGGERATION);
+      smTarget = lp(smTarget, heightAt(meters + CHASE_TARGET_M));
+      const camera = map.calculateCameraOptionsFromTo(toLngLat(behind), smBack, toLngLat(ahead), smTarget);
+      // MapLibre führt die Höhe des Mittelpunkts nur verzögert nach, sonst läge die Kamera im Berg
+      map.transform.elevation = smTarget;
+      map.jumpTo(camera);
+      updateHud(meters);
+      seek.value = String(Math.round(progress * 1000));
+    };
+    const step = (now) => {
+      if (!playing) return;
+      if (lastTs !== null) progress = Math.min(1, progress + (now - lastTs) / (baseMs / speed));
+      lastTs = now;
+      render();
+      if (progress >= 1) { pause(); return; }
+      frame = requestAnimationFrame(step);
+    };
+    const play = () => {
+      if (progress >= 1) { progress = 0; smoothed = smBack = smTarget = null; }
+      playing = true; lastTs = null; label();
+      frame = requestAnimationFrame(step);
+    };
+    function pause() {
+      playing = false;
+      if (frame) cancelAnimationFrame(frame);
+      frame = null; label();
+    }
+    const toggle = () => (playing ? pause() : play());
+    const onSeek = () => {
+      progress = Number(seek.value) / 1000;
+      smoothed = smBack = smTarget = null;
+      lastTs = null;
+      render();
+      label();
+    };
+    const onSpeed = (ev) => {
+      const b = ev.target.closest("button[data-key]");
+      if (!b) return;
+      speed = Number(b.dataset.key) || 1;
+      setPressed(speedEl, b.dataset.key);
+    };
+    const stopByUser = (ev) => { if (playing && ev.originalEvent) pause(); };
+    ["dragstart", "zoomstart", "rotatestart", "pitchstart"].forEach((n) => map.on(n, stopByUser));
+    btn.addEventListener("click", toggle);
+    seek.addEventListener("input", onSeek);
+    speedEl.addEventListener("click", onSpeed);
+    seek.value = "0";
+    updateHud(0);
+    btn.hidden = false; dock.hidden = false; speedEl.hidden = false;
+    label();
+    return {
+      stop() {
+        pause();
+        btn.removeEventListener("click", toggle);
+        seek.removeEventListener("input", onSeek);
+        speedEl.removeEventListener("click", onSpeed);
+        btn.hidden = true; dock.hidden = true; speedEl.hidden = true;
+      },
+    };
+  }
+
 
   /* ------------------------------------------------------------ Diagramme */
 
@@ -450,7 +747,7 @@
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const redo = () => {
         buildCharts();
-        if (mapState.track) drawTrack(pressedKey(document.getElementById("color-by"), "speed"));
+        if (mapState.track) drawTrack(currentKey());
       };
       if (mq.addEventListener) mq.addEventListener("change", redo);
       document.addEventListener("themechange", redo);
@@ -461,7 +758,17 @@
 
   try { initCharts(); } catch (e) { console.error("Diagramme:", e); }
 
-  if (document.getElementById("map") && typeof L !== "undefined") {
+  const colorByEl = document.getElementById("color-by");
+  if (colorByEl) {
+    colorByEl.addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-key]");
+      if (!b) return;
+      setPressed(colorByEl, b.dataset.key);
+      drawTrack(b.dataset.key);
+    });
+  }
+
+  if (document.getElementById("map") && typeof maplibregl !== "undefined") {
     const url = "/api/v1/rides/" + encodeURIComponent(ride.id) + "/geojson";
     fetch(url)
       .then((r) => (r.ok ? r.json() : null))
