@@ -234,6 +234,8 @@
 </div>
 {% endif %}
 
+<p class="ride-delete"><button type="button" class="btn ghost danger small" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button></p>
+
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "map_style": map_style, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
 {% block scripts %}
@@ -242,4 +244,5 @@
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
+<script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>
 {% endblock %}
