@@ -19,7 +19,7 @@
     : Number(v).toLocaleString(LOCALE, { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
   const pad = (n) => String(n).padStart(2, "0");
   function day(r, withYear) {
-    if (!r.time) return r.boot_count != null ? "#" + r.boot_count : "";
+    if (!r.time) return r.boot_count != null && withYear ? "#" + r.boot_count : "";
     const t = new Date(r.time);
     if (isNaN(t)) return "";
     return pad(t.getDate()) + "." + pad(t.getMonth() + 1) + "." + (withYear ? pad(t.getFullYear() % 100) : "");
@@ -35,6 +35,12 @@
     line: cssVar("--line", "#dcd8cf"), warn: cssVar("--warn", "#c0392b"), font: "11px " + cssVar("--font", "sans-serif"),
   };
 
+  const median = (a) => {
+    const v = a.filter((x) => x != null).sort((p, q) => p - q);
+    if (!v.length) return null;
+    const m = v.length >> 1;
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  };
   const charts = [];
   const defs = [
     { el: "bat-c-charge", out: "bat-v-charge", range: [0, 100],
@@ -44,7 +50,7 @@
       series: [{ k: "max_temp_c", color: C.alt, points: true, warn: (v) => v >= HOT || v < COLD }, { k: "start_temp_c", color: C.ink3, dash: [4, 4] }],
       text: (r) => fmt(r.max_temp_c) + " °C" },
     { el: "bat-c-delta", out: "bat-v-delta", series: [{ k: "max_cell_delta_mv", color: C.motor, points: true }],
-      text: (r) => fmt(r.max_cell_delta_mv) + " mV" },
+      text: (r) => fmt(r.max_cell_delta_mv) + " mV", median: true },
     { el: "bat-c-current", out: "bat-v-current", series: [{ k: "max_current_a", color: C.ink3, points: true }],
       text: (r) => fmt(r.max_current_a, 1) + " A" },
   ];
@@ -53,7 +59,7 @@
     const out = document.getElementById(def.out);
     if (!out) return;
     const r = rows[i == null ? rows.length - 1 : i];
-    const d = day(r, true);
+    const d = day(r, true) || (r.boot_count != null ? "#" + r.boot_count : "");
     out.textContent = def.text(r) + (d ? " · " + d : "");
   }
 
@@ -81,6 +87,19 @@
         } : { show: false },
       }))),
       hooks: {
+        draw: def.median ? [(u) => {
+          const m = median(col(def.series[0].k));
+          if (m == null) return;
+          const y = Math.round(u.valToPos(m, "y", true));
+          const ctx = u.ctx, b = u.bbox, px = devicePixelRatio;
+          ctx.save();
+          ctx.strokeStyle = C.ink3; ctx.lineWidth = 1.5 * px; ctx.setLineDash([6 * px, 4 * px]);
+          ctx.beginPath(); ctx.moveTo(b.left, y); ctx.lineTo(b.left + b.width, y); ctx.stroke();
+          ctx.setLineDash([]); ctx.fillStyle = C.ink3; ctx.font = (11 * px) + "px " + cssVar("--font", "sans-serif");
+          ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+          ctx.fillText((I["js.bat.typical"] || "typical (median)") + " " + fmt(m) + " mV", b.left + b.width - 4 * px, y - 3 * px);
+          ctx.restore();
+        }] : [],
         setCursor: [(u) => show(def, u.cursor.idx == null ? null : u.cursor.idx)],
       },
     };

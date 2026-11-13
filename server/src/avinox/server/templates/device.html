@@ -14,37 +14,7 @@
   </div>
 </div>
 
-<div class="block t-motor block-first" id="sec-overview" data-jump="{{ t('dev.sec.overview') }}">
-  <h2 class="section-title">{{ t('dev.sec.overview') }}</h2>
-<div class="grid cols-2">
-<section class="card">
-  <div class="figures">
-    {{ figure(d.charge_cycles, t('fig.cycles')) }}
-    {{ figure(d.boot_count, t('fig.boots')) }}
-    {{ figure(d.files.n, t('fig.files')) }}
-    {{ figure(d.files.bytes / 1048576, t('fig.data'), 'MB', 1) }}
-  </div>
-</section>
-
-  <section class="card">
-    <h2>{{ t('fw.title') }}</h2>
-    {% if d.firmware %}
-    <dl class="kv">
-      {% for key in ['package', 'screen', 'motor', 'ble', 'bat'] %}{% if d.firmware[key] %}
-      <dt>{{ fw_labels[key] }}</dt><dd class="mono">{{ d.firmware[key] }}</dd>
-      {% endif %}{% endfor %}
-      {% for key, val in d.firmware.items() if key not in fw_labels %}
-      <dt>{{ key }}</dt><dd class="mono">{{ val }}</dd>
-      {% endfor %}
-    </dl>
-    {% else %}
-    <p class="muted">{{ t('dev.nostats') }}</p>
-    {% endif %}
-  </section>
-</div>
-</div>
-
-<div class="block t-motor" id="sec-battery" data-jump="{{ t('dev.sec.battery') }}">
+<div class="block t-motor block-first" id="sec-battery" data-jump="{{ t('dev.sec.battery') }}">
   <h2 class="section-title">{{ t('dev.sec.battery') }}</h2>
 
   {% set bh = d.battery_health %}
@@ -75,7 +45,7 @@
     <h3 class="small">{{ t('bh.charge.last') }}</h3>
     <ul class="plain">
       {% for c in (bh.charges | reverse | list)[:5] %}
-      <li>{{ c.time | localtime('%d.%m.%y') if c.time else '–' }}: {{ c.from_pct }} % → {% if c.to_pct is not none %}{{ c.to_pct }} %{% else %}{{ t('bh.charge.atleast', to=c.min_to_pct) }}{% endif %}</li>
+      <li>{{ c.time | localtime('%d.%m.%y') if c.time else t('bh.nodate') }}: {{ c.from_pct }} % → {% if c.to_pct is not none %}{{ c.to_pct }} %{% else %}{{ t('bh.charge.atleast', to=c.min_to_pct) }}{% endif %}</li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -98,7 +68,7 @@
     <div class="bars wide">
       {% for p in pts[-30:] %}
       <div class="bar">
-        <span class="label">{{ p.time | localtime('%d.%m.%y') if p.time else '–' }}</span>
+        <span class="label">{{ p.time | localtime('%d.%m.%y') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill" style="width: {{ (100 * p.wh / peak) if peak else 0 }}%"></span></span>
         <span class="val">{{ p.wh | num }} Wh</span>
       </div>
@@ -119,7 +89,7 @@
     <div class="bars wide">
       {% for h in deltas[:30] %}
       <div class="bar">
-        <span class="label">{{ h.time | localtime('%d.%m.%y %H:%M') if h.time else '–' }}</span>
+        <span class="label">{{ h.time | localtime('%d.%m.%y %H:%M') if h.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill" style="width: {{ (100 * h.max_cell_delta_mv / peak) if peak else 0 }}%"></span></span>
         <span class="val">{{ h.max_cell_delta_mv | num }} mV</span>
       </div>
@@ -141,7 +111,7 @@
     <div class="bars wide">
       {% for p in rp[-30:] %}
       <div class="bar">
-        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else '–' }}</span>
+        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill bal-{{ 'crit' if p.delta_mv >= bc else ('warn' if p.delta_mv >= bw else 'ok') }}" style="width: {{ (100 * p.delta_mv / peak) if peak else 0 }}%"></span></span>
         <span class="val">{{ p.delta_mv | num }} mV</span>
       </div>
@@ -161,10 +131,10 @@
     {% set sp = bh.sag %}
     {% if sp %}
     {% set peak = sp | map(attribute='mv_per_a') | max %}
-    <div class="bars wide mini">
+    <div class="bars wide compact">
       {% for p in sp[-30:] %}
       <div class="bar">
-        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else '–' }}</span>
+        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill" style="width: {{ (100 * p.mv_per_a / peak) if peak else 0 }}%"></span></span>
         <span class="val">{{ p.mv_per_a | num(1) }} {{ t('bh.sag.unit') }}</span>
       </div>
@@ -177,13 +147,45 @@
 
 </div>
 
+<div class="block t-motor" id="sec-overview" data-jump="{{ t('dev.sec.overview') }}">
+  <h2 class="section-title">{{ t('dev.sec.overview') }}</h2>
+<div class="grid cols-2">
+<section class="card">
+  <div class="figures">
+    <div title="{{ t('dev.display_cycles', n=d.charge_cycles | num) }}">{{ figure(d.battery_health.charge_count, t('bh.charge.count')) }}</div>
+    {{ figure(d.boot_count, t('fig.boots')) }}
+    {{ figure(d.files.n, t('fig.files')) }}
+    {{ figure(d.files.bytes / 1048576, t('fig.data'), 'MB', 1) }}
+  </div>
+</section>
+
+  <section class="card">
+    <h2>{{ t('fw.title') }}</h2>
+    {% if d.firmware %}
+    <dl class="kv">
+      {% for key in ['package', 'screen', 'motor', 'ble', 'bat'] %}{% if d.firmware[key] %}
+      <dt>{{ fw_labels[key] }}</dt><dd class="mono">{{ d.firmware[key] }}</dd>
+      {% endif %}{% endfor %}
+      {% for key, val in d.firmware.items() if key not in fw_labels %}
+      <dt>{{ key }}</dt><dd class="mono">{{ val }}</dd>
+      {% endfor %}
+    </dl>
+    {% else %}
+    <p class="muted">{{ t('dev.nostats') }}</p>
+    {% endif %}
+  </section>
+</div>
+</div>
+
 <div class="block t-motor" id="sec-history" data-jump="{{ t('hist.title') }}">
   <h2 class="section-title">{{ t('hist.title') }}</h2>
   {% if d.battery_history | length >= 2 %}
 <section class="card" id="bat-charts">
   <div class="chart-head"><h2>{{ t('bat.chart.charge') }}</h2><span class="muted small" id="bat-v-charge"></span></div>
+  <div class="legend"><span><i style="background:var(--motor)"></i>{{ t('bat.leg.end') }} ({{ t('bat.leg.solid') }})</span><span><i class="dash"></i>{{ t('bat.leg.start') }} ({{ t('bat.leg.dashed') }})</span></div>
   <div class="dchart" id="bat-c-charge"></div>
   <div class="chart-head"><h2>{{ t('bat.chart.temp') }}</h2><span class="muted small" id="bat-v-temp"></span></div>
+  <div class="legend"><span><i style="background:var(--alt)"></i>{{ t('bat.leg.maxtemp') }} ({{ t('bat.leg.solid') }})</span><span><i class="dash"></i>{{ t('bat.leg.starttemp') }} ({{ t('bat.leg.dashed') }})</span></div>
   <div class="dchart" id="bat-c-temp"></div>
   <div class="chart-head"><h2>{{ t('bat.chart.delta') }}</h2><span class="muted small" id="bat-v-delta"></span></div>
   <div class="dchart" id="bat-c-delta"></div>
