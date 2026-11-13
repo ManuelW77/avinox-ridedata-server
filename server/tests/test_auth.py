@@ -406,9 +406,22 @@ def start_oidc(c, idp, next_url="/rides"):
     return q
 
 
-def test_oidc_alone_does_not_enable_login(settings, idp):
+def test_env_oidc_alone_keeps_login_on(settings, idp):
+    # OIDC per Umgebung ohne Passwort-Benutzer: nach dem Update nicht plötzlich offen
     settings.oidc_issuer, settings.oidc_client_id = ISSUER, "avinox-test"
     with oidc_client(settings, idp) as c:
+        assert c.get("/rides").status_code == 303
+        assert c.get("/auth/oidc/login").status_code == 303
+        q = start_oidc(c, idp)
+        assert c.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]}).headers["location"] == "/rides"
+        assert c.post("/api/v1/auth/disable", headers={"Origin": "http://testserver"}).status_code == 409
+
+
+def test_db_oidc_alone_does_not_enable_login(settings):
+    # OIDC aus den Einstellungen zählt nicht allein (es gibt immer einen Passwort-Admin)
+    with make(settings) as c:
+        for k, v in (("oidc_enabled", True), ("oidc_issuer", ISSUER), ("oidc_client_id", "avinox-test")):
+            c.app.state.auth.db.set_setting(k, v)
         assert c.get("/rides").status_code == 200
         assert c.get("/auth/oidc/login").status_code == 404
 

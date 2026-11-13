@@ -323,7 +323,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     setup_lock = threading.Lock()
 
     def login_active() -> bool:
-        """Login nur, wenn eingeschaltet und es einen Benutzer gibt – sonst offen (LAN-Modus). OIDC allein zählt nicht."""
+        """Login, wenn eingeschaltet und es einen Benutzer gibt – sonst offen (LAN-Modus).
+
+        Ausnahme: OIDC per Umgebung (``AVINOX_OIDC_*``) hält den Login immer an, auch ohne
+        Passwort-Benutzer – sonst stünden solche Installationen nach dem Update plötzlich offen.
+        """
+        if oidc.env_locked and oidc.config().enabled:
+            return True
         return bool(store.db.get_setting("auth_enabled", False)) and auth_store.user_count() > 0
 
     def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
@@ -1110,7 +1116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/auth/disable", tags=["benutzer"])
     def auth_disable(admin: dict = Depends(users_admin_auth)):
         """Anmeldung ausschalten (nur Admins). Benutzer bleiben, alle Sessions enden."""
-        if auth_env:
+        if auth_env or (oidc.env_locked and oidc.config().enabled):
             bad("env_locked", 409)
         store.db.set_setting("auth_enabled", False)
         store.db.execute("DELETE FROM sessions")
