@@ -57,7 +57,7 @@
     <a class="ride-row" href="/rides/{{ r.id }}">
       <span class="when">
         {% if r.thumb %}<svg class="thumb" viewBox="0 0 64 40" width="64" height="40" aria-hidden="true"><path d="{{ r.thumb }}"/></svg>{% else %}<span class="thumb"></span>{% endif %}
-        <span class="when-text"><strong>{{ r.name }}</strong><span>{{ r.start_utc | localtime('%a %d.%m.%Y · %H:%M') if r.start_utc else t('ride_n', n=r.ride_id) }}{% if r.is_loop %} <i class="loop" aria-hidden="true">&#8635;</i>{% endif %}</span></span>
+        <span class="when-text"><strong>{{ r.name }}</strong><span>{{ r.start_utc | localtime('%a %d.%m.%Y · %H:%M') if r.start_utc else t('ride_n', n=r.ride_id) }}{% if r.is_loop %} <i class="loop" title="{{ t('loop_hint') }}" aria-label="{{ t('loop_hint') }}" role="img">&#8635;</i>{% endif %}</span></span>
       </span>
       <span class="n">{{ (r.distance_m / 1000) | num(1) }}<small>km</small></span>
       <span class="n">{{ r.duration_s | duration }}</span>
