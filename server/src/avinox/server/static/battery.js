@@ -97,7 +97,7 @@
           ctx.beginPath(); ctx.moveTo(b.left, y); ctx.lineTo(b.left + b.width, y); ctx.stroke();
           ctx.setLineDash([]); ctx.fillStyle = C.ink3; ctx.font = (11 * px) + "px " + cssVar("--font", "sans-serif");
           ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-          ctx.fillText((I["js.bat.typical"] || "typical (median)") + " " + fmt(m) + " mV", b.left + b.width - 4 * px, y - 3 * px);
+          ctx.fillText((I["bat.typical"] || "üblich (Median)") + " " + fmt(m) + " mV", b.left + b.width - 4 * px, y - 3 * px);
           ctx.restore();
         }] : [],
         setCursor: [(u) => show(def, u.cursor.idx == null ? null : u.cursor.idx)],
