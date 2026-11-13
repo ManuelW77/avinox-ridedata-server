@@ -68,7 +68,7 @@ services:
       - avinox-data:/data
     environment:
       AVINOX_DATA_DIR: /data
-      # Start-Admin (schaltet den Login ein)
+      # Optional: Start-Admin (schaltet den Login ein und fest). Ohne das lässt sich die Anmeldung in den Einstellungen einschalten
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "bitte-aendern"
 
@@ -88,7 +88,7 @@ Das Upload-Token für den ESP32 erzeugt der Server beim ersten Start:
 docker compose exec avinox cat /data/upload_token
 ```
 
-**Login:** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` legen beim Start einen Administrator an und schalten den Login ein (Anmeldeformular, weitere Benutzer unter Einstellungen). Optional geht die Anmeldung über OpenID Connect (`AVINOX_OIDC_*`, siehe [server/README.md](server/README.md)). **Achtung:** Ohne Benutzer und OIDC ist die Webseite für jeden im LAN offen. Nicht ohne Login ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
+**Login:** Standardmäßig ist die Anmeldung aus. Schalte sie unter **Einstellungen → Anmeldung** ein und lege dort Benutzername und Passwort fest (weitere Benutzer ebenfalls dort). Alternativ legen `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` beim Start einen Administrator an und schalten den Login fest ein. Optional geht die Anmeldung auch über OpenID Connect, einzurichten in den Einstellungen oder per `AVINOX_OIDC_*` (siehe [server/README.md](server/README.md)). **Achtung:** Solange die Anmeldung aus ist, ist die Webseite für jeden im LAN offen. Nicht ohne Login ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
 
 ### b) ESP32 einmalig flashen
 

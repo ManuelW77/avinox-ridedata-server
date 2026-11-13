@@ -28,15 +28,15 @@
   </div>
   {% elif not login_active %}
   <p class="notice small">{{ t('set.auth_off') }}</p>
-  <form id="setup-form" class="stack" autocomplete="off">
-    <p class="small"><strong>{{ t('set.setup_title') }}</strong></p>
-    <div class="form-row"><label for="su-code">{{ t('set.setup_code') }}</label><input type="text" id="su-code" autocomplete="off" required></div>
-    <p class="muted small">{{ t('set.setup_code_hint') }}</p>
-    <div class="form-row"><label for="su-name">{{ t('login.user') }}</label><input type="text" id="su-name" autocomplete="username" required></div>
-    <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="new-password" minlength="{{ min_password }}" required></div>
+  <form id="enable-form" class="stack" autocomplete="off" data-existing="{{ 1 if has_users else 0 }}">
+    <p class="small"><strong>{{ t('set.enable_title_existing') if has_users else t('set.enable_title') }}</strong></p>
+    <div class="form-row"><label for="su-name">{{ t('login.user') }}</label><input type="text" id="su-name" autocomplete="username" autocapitalize="none" required maxlength="64"></div>
+    <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="{{ 'current-password' if has_users else 'new-password' }}"{% if not has_users %} minlength="{{ min_password }}"{% endif %} required></div>
+    {% if not has_users %}
     <div class="form-row"><label for="su-pass2">{{ t('set.setup_repeat') }}</label><input type="password" id="su-pass2" autocomplete="new-password" minlength="{{ min_password }}" required></div>
     <p class="muted small">{{ t('set.setup_hint', n=min_password) }}</p>
-    <div class="actions"><button type="submit" class="btn">{{ t('set.setup_save') }}</button></div>
+    {% endif %}
+    <div class="actions"><button type="submit" class="btn">{{ t('set.enable_save') }}</button></div>
   </form>
   {% endif %}
   {% if oidc_name %}<p class="muted small">{{ t('set.auth_oidc', name=oidc_name) }}</p>{% endif %}
@@ -81,6 +81,35 @@
       <div class="form-row"><label for="nu-admin" class="switch-row"><input type="checkbox" class="switch" id="nu-admin"> <span>{{ t('set.user_admin') }}</span></label></div>
       <div class="actions"><button type="submit" class="btn">{{ t('set.user_create') }}</button><span id="user-status" class="muted small" role="status"></span></div>
     </form>
+  </div>
+  <div class="stack">
+    <p class="small"><strong>{{ t('set.oidc_title') }}</strong></p>
+    {% if oidc_cfg.env_locked %}<p class="notice small">{{ t('set.oidc_env') }}</p>{% endif %}
+    <form id="oidc-form" class="stack" autocomplete="off"{% if oidc_cfg.env_locked %} data-locked="1"{% endif %}>
+      <div class="form-row"><label for="oi-on" class="switch-row"><input type="checkbox" class="switch" id="oi-on"{% if oidc_cfg.enabled %} checked{% endif %}{% if oidc_cfg.env_locked %} disabled{% endif %}> <span>{{ t('set.oidc_on') }}</span></label></div>
+      <div class="form-row"><label for="oi-issuer">{{ t('set.oidc_issuer') }}</label><input type="url" id="oi-issuer" value="{{ oidc_cfg.issuer }}" placeholder="https://auth.example.test/application/o/avinox/" maxlength="300" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-client">{{ t('set.oidc_client') }}</label><input type="text" id="oi-client" value="{{ oidc_cfg.client_id }}" maxlength="256" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-secret">{{ t('set.oidc_secret') }}</label><input type="password" id="oi-secret" autocomplete="new-password" maxlength="512" placeholder="{{ t('set.oidc_secret_set') if oidc_cfg.has_secret else '' }}"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-name">{{ t('set.oidc_name') }}</label><input type="text" id="oi-name" value="{{ oidc_cfg.name if oidc_cfg.name != 'SSO' else '' }}" placeholder="SSO" maxlength="40"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-allowed">{{ t('set.oidc_allowed') }}</label><input type="text" id="oi-allowed" value="{{ oidc_cfg.allowed }}" maxlength="1000" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <div class="form-row"><label for="oi-admin">{{ t('set.oidc_admin') }}</label><input type="text" id="oi-admin" value="{{ oidc_cfg.admin }}" maxlength="1000" autocapitalize="none"{% if oidc_cfg.env_locked %} readonly{% endif %}></div>
+      <p class="muted small">{{ t('set.oidc_list_hint') }}</p>
+      <div class="form-row"><label for="oi-redirect">{{ t('set.oidc_redirect') }}</label><input type="text" id="oi-redirect" value="{{ oidc_cfg.redirect_uri }}" readonly></div>
+      <div class="actions">
+        {% if not oidc_cfg.env_locked %}<button type="submit" class="btn">{{ t('set.save') }}</button>{% endif %}
+        <button type="button" class="btn ghost" id="oidc-test">{{ t('set.oidc_test') }}</button>
+        <span id="oidc-status" class="muted small" role="status"></span>
+      </div>
+    </form>
+  </div>
+  <div class="stack">
+    <p class="small"><strong>{{ t('set.disable_title') }}</strong></p>
+    {% if auth_env_locked %}
+    <p class="muted small">{{ t('set.disable_env') }}</p>
+    {% else %}
+    <p class="muted small">{{ t('set.disable_text') }}</p>
+    <div class="actions"><button type="button" class="btn ghost danger" id="auth-disable">{{ t('set.disable_btn') }}</button></div>
+    {% endif %}
   </div>
   {% endif %}
 </section>
