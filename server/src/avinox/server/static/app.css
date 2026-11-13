@@ -604,3 +604,5 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 /* 3D-Ansicht öffnen: in der Antriebsfarbe hervorgehoben */
 .btn.btn-3d { background: var(--motor, #13877a); color: #fff; font-weight: 600; }
 .btn.btn-3d:hover { filter: brightness(1.08); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.btn-3d { color: #0f1a18; } }
+:root[data-theme="dark"] .btn.btn-3d { color: #0f1a18; }
