@@ -36,7 +36,7 @@ def current() -> str:
 _DE: dict[str, str] = {
     # --- Rahmen
     "nav.overview": "Übersicht", "nav.rides": "Fahrten", "nav.bike": "Bike & Akku", "nav.sync": "Sync", "nav.settings": "Einstellungen",
-    "lang.label": "Sprache", "footer.heart": "Herz", "footer.bike": "Fahrrad",
+    "lang.label": "Sprache", "theme.to_dark": "Dunkler Modus", "theme.to_light": "Heller Modus", "footer.heart": "Herz", "footer.bike": "Fahrrad",
     # --- gemeinsam
     "btn.upload": "Dateien hochladen",
     "empty.none": "Noch keine Fahrten.",
@@ -57,6 +57,7 @@ _DE: dict[str, str] = {
     "legend.rider": "Fahrer", "legend.motor": "Motor",
     "jump.overview": "Übersicht", "js.jump.label": "Schnellsprung zu Abschnitten",
     "dash.mix.title": "Verteilung im Zeitraum",
+    "rides.sec.list": "Alle Fahrten", "sync.sec.devices": "Geräte", "dev.sec.overview": "Überblick", "dev.sec.battery": "Akku",
     "ride.sec.course": "Strecke & Verlauf", "ride.sec.drive": "Antrieb", "ride.sec.power": "Leistung & Tempo", "ride.sec.hill": "Am Berg", "ride.sec.hill_sub": "↑ bergauf · ↓ bergab, nur in Bewegung", "ride.sec.stats": "Kennzahlen", "ride.sec.display": "Vom Display",
     "ride.grp.ride": "Strecke & Zeit", "ride.grp.rider": "Fahrer", "ride.grp.motor": "Motor & Akku",
     "dash.sec.recent": "Fahrten & Bilanz",
@@ -238,7 +239,7 @@ _DE: dict[str, str] = {
 
 _EN: dict[str, str] = {
     "nav.overview": "Overview", "nav.rides": "Rides", "nav.bike": "Bike & battery", "nav.sync": "Sync", "nav.settings": "Settings",
-    "lang.label": "Language", "footer.heart": "heart", "footer.bike": "bike",
+    "lang.label": "Language", "theme.to_dark": "Dark mode", "theme.to_light": "Light mode", "footer.heart": "heart", "footer.bike": "bike",
     "btn.upload": "Upload files",
     "empty.none": "No rides yet.",
     "empty.hint_html": 'Upload files from the display under <a href="/settings#upload">Settings</a> or import them with <code>avinox import &lt;drive&gt;</code>.',
@@ -257,6 +258,7 @@ _EN: dict[str, str] = {
     "legend.rider": "Rider", "legend.motor": "Motor",
     "jump.overview": "Overview", "js.jump.label": "Jump to section",
     "dash.mix.title": "Distribution in this period",
+    "rides.sec.list": "All rides", "sync.sec.devices": "Devices", "dev.sec.overview": "Overview", "dev.sec.battery": "Battery",
     "ride.sec.course": "Route & course", "ride.sec.drive": "Drivetrain", "ride.sec.power": "Power & speed", "ride.sec.hill": "On climbs", "ride.sec.hill_sub": "↑ uphill · ↓ downhill, while moving", "ride.sec.stats": "Key figures", "ride.sec.display": "From the display",
     "ride.grp.ride": "Distance & time", "ride.grp.rider": "Rider", "ride.grp.motor": "Motor & battery",
     "dash.sec.recent": "Rides & totals",

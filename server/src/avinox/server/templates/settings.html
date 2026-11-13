@@ -3,9 +3,10 @@
 {% block main %}
 <div class="lead"><div><h1>{{ t('set.title') }}</h1></div></div>
 
-<section class="card" id="language" style="margin-bottom:1rem">
-  <h2>{{ t('set.lang') }}</h2>
-  <p class="muted small">{{ t('set.lang_text') }}</p>
+<div class="block t-neutral block-first" id="language" data-jump="{{ t('set.lang') }}">
+  <h2 class="section-title">{{ t('set.lang') }}</h2>
+  <p class="muted small block-desc">{{ t('set.lang_text') }}</p>
+<section class="card">
   <form method="get" action="/settings" class="actions">
     <select name="lang" id="lang-select" aria-label="{{ t('set.lang') }}">
       <option value="de"{% if lang == 'de' %} selected{% endif %}>Deutsch</option>
@@ -14,10 +15,12 @@
     <button type="submit" class="btn">{{ t('set.save') }}</button>
   </form>
 </section>
+</div>
 
-<section class="card" style="margin-bottom:1rem">
-  <h2>{{ t('set.modes') }}</h2>
-  <p class="muted small">{{ t('set.modes_text_html') }}</p>
+<div class="block t-motor" id="sec-modes" data-jump="{{ t('set.modes') }}">
+  <h2 class="section-title">{{ t('set.modes') }}</h2>
+  <p class="muted small block-desc">{{ t('set.modes_text_html') }}</p>
+<section class="card">
   {% if levels %}
   <form id="modes-form" class="stack">
     {% for lvl in levels %}
@@ -32,10 +35,12 @@
   <p class="notice">{{ t('set.nomodes') }}</p>
   {% endif %}
 </section>
+</div>
 
-<section class="card" id="upload" style="margin-bottom:1rem">
-  <h2>{{ t('set.upload') }}</h2>
-  <p class="muted small">{{ t('set.upload_text_html') }}</p>
+<div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
+  <h2 class="section-title">{{ t('set.upload') }}</h2>
+  <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
+<section class="card">
   <p class="small"><strong>{{ t('set.accepted') }}</strong></p>
   <table class="plain small">
     <tbody>
@@ -61,10 +66,12 @@
   <p id="upload-done" hidden><a class="btn" href="/rides">{{ t('set.to_rides') }}</a></p>
   <script type="application/json" id="upload-patterns">{{ patterns | tojson }}</script>
 </section>
+</div>
 
-<section class="card" id="firmware" style="margin-bottom:1rem">
-  <h2>{{ t('set.fw') }}</h2>
-  <p class="muted small">{{ t('set.fw_text_html') }}</p>
+<div class="block t-neutral" id="firmware" data-jump="{{ t('set.fw') }}">
+  <h2 class="section-title">{{ t('set.fw') }}</h2>
+  <p class="muted small block-desc">{{ t('set.fw_text_html') }}</p>
+<section class="card">
   {% set cur = firmware | selectattr('is_current') | list %}
   {% if cur %}
   {% for f in cur %}
@@ -101,9 +108,11 @@
   </form>
   {% endif %}
 </section>
+</div>
 
+<div class="block t-neutral" id="sec-api" data-jump="{{ t('set.api') }}">
+  <h2 class="section-title">{{ t('set.api') }}</h2>
 <section class="card">
-  <h2>{{ t('set.api') }}</h2>
   <div class="form-row" style="margin-bottom:0.75rem;align-items:start">
     <label>{{ t('set.server_url') }}</label>
     <div>
@@ -148,5 +157,9 @@
   </dl>
   <p class="small">{{ t('set.api.full') }} <a href="/api/docs">/api/docs</a></p>
 </section>
+</div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', path='settings.js').path }}" defer></script>{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
+<script src="{{ url_for('static', path='settings.js').path }}" defer></script>
+{% endblock %}

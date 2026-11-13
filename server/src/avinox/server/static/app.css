@@ -21,7 +21,7 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #15191d;
     --surface: #1d2227;
     --surface-2: #262c32;
@@ -38,6 +38,23 @@
     --down: #e98d64;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #15191d;
+  --surface: #1d2227;
+  --surface-2: #262c32;
+  --ink: #e9ece9;
+  --ink-2: #a9b0ad;
+  --ink-3: #7c8481;
+  --line: #333a40;
+  --rider: #f08a3e;
+  --motor: #35b8a6;
+  --alt: #9da2d6;
+  --hill: #6cc46a;
+  --warn: #f07b52;
+  --up: #6cc08b;
+  --down: #e98d64;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -67,6 +84,16 @@ h3 { font-size: 0.95rem; color: var(--ink-2); font-weight: 600; margin-bottom: 0
   text-decoration: none; color: var(--ink-2); padding: 0.4rem 0.75rem; border-radius: 999px;
 }
 .top nav a[aria-current="page"], .top nav a:hover { background: var(--surface-2); color: var(--ink); }
+.theme-toggle {
+  width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; flex: none;
+}
+.theme-toggle:hover { background: var(--surface-2); color: var(--ink); }
+.theme-toggle:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
+.theme-toggle svg { width: 18px; height: 18px; }
+.theme-toggle .i-sun { display: none; }
+.theme-toggle[data-effective="dark"] .i-sun { display: block; }
+.theme-toggle[data-effective="dark"] .i-moon { display: none; }
 
 main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 .lead { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0.75rem 0 1.25rem; }
@@ -181,7 +208,8 @@ code, .mono { font-family: var(--mono); font-size: 0.85em; }
 #charts { overflow: hidden; }
 @media (max-width: 600px) {
   .top { flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; }
-  .top nav { margin-left: 0; width: 100%; }
+  .top nav { margin-left: 0; width: 100%; order: 3; }
+  .theme-toggle { margin-left: auto; order: 2; }
   main { padding: 0.25rem 1rem 3rem; }
   .cols-2, .cols-3 { grid-template-columns: minmax(0, 1fr); }
   #map { height: 340px; }
