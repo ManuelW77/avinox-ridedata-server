@@ -569,7 +569,7 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .maplibregl-map { font-family: inherit; }
 
 /* 3D-Ansicht: Vollbild über allem */
-.view3d { position: fixed; inset: 0; z-index: 50; background: var(--bg); color: var(--ink); }
+.view3d { position: fixed; inset: 0; z-index: 1100; background: var(--bg); color: var(--ink); }
 .view3d[hidden] { display: none; }
 #map3d { position: absolute; inset: 0; }
 .view3d-bar {
@@ -601,3 +601,6 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .view3d-hud small { font-size: 0.7rem; color: var(--ink-2); }
 .view3d-hud b { font-size: 1rem; font-weight: 650; }
 .view3d-seek { width: 100%; accent-color: var(--ink); }
+/* 3D-Ansicht öffnen: in der Antriebsfarbe hervorgehoben */
+.btn.btn-3d { background: var(--motor, #13877a); color: #fff; font-weight: 600; }
+.btn.btn-3d:hover { filter: brightness(1.08); }

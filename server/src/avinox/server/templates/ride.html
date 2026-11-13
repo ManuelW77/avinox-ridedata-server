@@ -61,7 +61,7 @@
     <h2 style="margin:0">{{ t('ride.track') }}</h2>
     {% if a.gps.points > 1 %}
     <div class="map-tools">
-    <button type="button" class="btn ghost small" id="open3d" hidden>{{ t('ride.view3d') }}</button>
+    <button type="button" class="btn small btn-3d" id="open3d" hidden>{{ t('ride.view3d') }}</button>
     <div class="segmented" id="color-by" role="group" aria-label="{{ t('ride.color_by') }}">
       <button type="button" data-key="speed" aria-pressed="true">{{ t('ride.c.speed') }}</button>
       <button type="button" data-key="rider">{{ t('ride.c.rider') }}</button>
