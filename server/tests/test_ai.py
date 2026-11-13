@@ -396,3 +396,40 @@ def test_upload_wakes_scan(client, store):
             break
         time.sleep(0.05)
     assert store.ai_counts()["done"] == 5
+
+
+# ------------------------------------------------------------ Sicherheit
+
+def test_settings_writes_admin_only_with_login(tmp_path, monkeypatch):
+    for k in ("AVINOX_WEB_USER", "AVINOX_WEB_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(ai, "_post", lambda *a, **k: pytest.fail("echtes Netz"))
+    settings = load_settings(tmp_path / "data")
+    settings.web_user, settings.web_password = "admin", "admin-passwort-1"
+    app = create_app(settings)
+    app.state.ai_paused = True
+    with TestClient(app) as c:
+        app.state.auth.create_user("anna", "anna-passwort")  # kein Admin
+        anna, admin = ("anna", "anna-passwort"), ("admin", "admin-passwort-1")
+        assert c.get("/api/v1/settings/ai", auth=anna).status_code == 200
+        assert c.put("/api/v1/settings/ai", json={"base_url": "https://evil.example/v1"}, auth=anna).status_code == 403
+        assert c.post("/api/v1/settings/ai/test", auth=anna).status_code == 403
+        assert c.post("/api/v1/settings/ai/fill", auth=anna).status_code == 403
+        assert c.put("/api/v1/settings/ai", json={"enabled": True, "api_key": KEY}, auth=admin).status_code == 200
+
+
+def test_key_cleared_when_host_changes(client):
+    configure(client)
+    d = client.put("/api/v1/settings/ai", json={"base_url": "https://openrouter.ai/api/v2"}).json()
+    assert d["has_key"]  # gleicher Host: Schlüssel bleibt
+    d = client.put("/api/v1/settings/ai", json={"base_url": "https://other.example/v1"}).json()
+    assert not d["has_key"]  # neuer Host ohne neuen Schlüssel: gelöscht
+    d = client.put("/api/v1/settings/ai", json={"base_url": "https://third.example/v1", "api_key": "sk-neu-9876"}).json()
+    assert d["has_key"] and d["key_hint"].endswith("9876")
+    d = client.put("/api/v1/settings/ai", json={"provider": "mistral"}).json()
+    assert not d["has_key"]  # Anbieterwechsel setzt neue Adresse → Schlüssel weg
+
+
+@pytest.mark.parametrize("url", ["https://x.example/v1?a=1", "https://x.example/v1#f", "https://user:pw@x.example/v1"])
+def test_base_url_rejects_query_fragment_userinfo(client, url):
+    assert client.put("/api/v1/settings/ai", json={"base_url": url}).status_code == 400

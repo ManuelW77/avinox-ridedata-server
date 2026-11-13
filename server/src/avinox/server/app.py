@@ -414,6 +414,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     firmware_admin_auth = admin_required(FW_ADMIN_HINT)
     users_admin_auth = admin_required(USERS_HINT)
 
+    def settings_admin_auth(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict | None:
+        """Mit Login nur Admins (gespeicherte Schlüssel, Adressen, Kosten); ohne Login ist der Server ohnehin offen."""
+        user = read_auth(request, cred)
+        if login_active() and (not user or not user["is_admin"]):
+            raise HTTPException(403, "Nur für Administratoren")
+        return user
+
     def check_length(request: Request, limit: int) -> None:
         """Größe vor dem Lesen prüfen: ohne Content-Length 411, zu groß 413."""
         raw = request.headers.get("content-length")
@@ -758,7 +765,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_ai():
         return ai_state()
 
-    @app.put("/api/v1/settings/ai", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    @app.put("/api/v1/settings/ai", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
     def put_ai(payload: dict):
         try:
             ai.update_settings(store.db, payload)
@@ -767,7 +774,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ai_queue.wake.set()
         return ai_state()
 
-    @app.post("/api/v1/settings/ai/test", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    @app.post("/api/v1/settings/ai/test", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
     def test_ai():
         try:
             if app.state.ai_call:
@@ -777,7 +784,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ai.AiError as exc:
             raise ai_http_error(exc) from exc
 
-    @app.post("/api/v1/settings/ai/fill", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    @app.post("/api/v1/settings/ai/fill", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
     def fill_ai():
         n = ai.enqueue_fill(store, ai_queue, ai.lang_of(store.db)) if ai.is_active(store.db) else 0
         return {"queued": n, **ai_state()}

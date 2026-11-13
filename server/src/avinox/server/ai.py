@@ -18,6 +18,7 @@ import re
 import threading
 from collections import deque
 from datetime import date, datetime
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -134,6 +135,8 @@ def update_settings(db, payload: dict) -> None:
         base_url = payload["base_url"].strip().rstrip("/")
         if base_url and not re.match(r"^https?://[^\s/]+", base_url):
             raise AiError("invalid", "base_url muss mit http:// oder https:// beginnen")
+        if base_url and (urlsplit(base_url).query or urlsplit(base_url).fragment or "@" in urlsplit(base_url).netloc):
+            raise AiError("invalid", "base_url darf keine Zugangsdaten, ? oder # enthalten")
     if "provider" in payload and payload["provider"] != (_get(db, "provider") or "openrouter"):
         preset = PRESET_BY_ID[payload["provider"]]
         if "base_url" not in payload and preset["base_url"]:
@@ -143,6 +146,9 @@ def update_settings(db, payload: dict) -> None:
     if "provider" in payload:
         _set(db, "provider", payload["provider"])
     if base_url is not None:
+        # Schlüssel gehört zum Anbieter: neuer Host ohne neuen Schlüssel → alten löschen (sonst ginge er an die neue Adresse)
+        if "api_key" not in payload and urlsplit(base_url).netloc != urlsplit(base_url_of(db)).netloc:
+            _set(db, "api_key", None)
         _set(db, "base_url", base_url)
     if "model" in payload:
         _set(db, "model", payload["model"].strip())
