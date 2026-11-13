@@ -1110,8 +1110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def auth_enable(request: Request, payload: dict):
         """Anmeldung einschalten und sofort anmelden.
 
-        Ohne Benutzer wird ein Admin angelegt. Gibt es schon Benutzer (Login war vorher an), muss die
-        Eingabe zu einem vorhandenen Admin mit Passwort passen.
+        Der erste Administrator entsteht nur per Umgebung (``AVINOX_WEB_USER``/``AVINOX_WEB_PASSWORD``):
+        Ohne Benutzer wird abgelehnt (409 ``no_admin``) und nichts angelegt. Gibt es Benutzer (Login war
+        vorher an), muss die Eingabe zu einem vorhandenen Admin mit Passwort passen.
         """
         csrf_guard(request, None)
         if login_active():
@@ -1124,15 +1125,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if login_active():
                 bad("already_on", 409)
             if auth_store.user_count() == 0:
-                name = valid_name(name)
-                if problem := password_problem(password):
-                    bad(problem)
-                user = auth_store.create_user(name, password, True)
-            else:
-                user = auth_store.check_password(name, password[:512])
-                if not user or not user["is_admin"]:
-                    throttle.fail(*key)
-                    bad("bad_login", 403)
+                bad("no_admin", 409)
+            user = auth_store.check_password(name, password[:512])
+            if not user or not user["is_admin"]:
+                throttle.fail(*key)
+                bad("bad_login", 403)
             store.db.set_setting("auth_enabled", True)
         throttle.clear(*key)
         token, max_age = auth_store.create_session(user["id"], True)
