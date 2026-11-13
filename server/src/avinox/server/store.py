@@ -511,25 +511,54 @@ class Store:
                 break
             if not self._hr_due(row, now):
                 continue
-            start = datetime.fromisoformat(row["start_utc"])
             try:
-                res = fetch(start, start + timedelta(seconds=row["duration_s"]))
+                self._hr_fetch_row(row, fetch, now)
             except healthlog.HealthLogError as exc:
                 log.warning("HealthLog-Puls nicht abrufbar (%s), später erneut", exc.code)
                 return done
-            except Exception as exc:  # unerwartete Antwort: Fahrt vermerken, Rest weiter
-                log.exception("HealthLog-Puls für %s", row["path"])
-                self._save_hr(row["path"], "error", detail=str(exc)[:200], now=now)
-                done += 1
-                continue
-            if res.points:
-                self._save_hr(row["path"], "ok", res.source, res.workout_id, res.points, now=now)
-                with self._lock:
-                    self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
-            else:
-                self._save_hr(row["path"], "none", now=now)
             done += 1
         return done
+
+    def _hr_fetch_row(self, row, fetch, now: datetime) -> tuple[str, str | None]:
+        """Holt und speichert den Puls einer Fahrt. Rückgabe (status, source); HealthLogError wird weitergereicht."""
+        start = datetime.fromisoformat(row["start_utc"])
+        try:
+            res = fetch(start, start + timedelta(seconds=row["duration_s"]))
+        except healthlog.HealthLogError:
+            raise
+        except Exception as exc:  # unerwartete Antwort: Fahrt vermerken
+            log.exception("HealthLog-Puls für %s", row["path"])
+            self._save_hr(row["path"], "error", detail=str(exc)[:200], now=now)
+            return "error", None
+        if res.points:
+            self._save_hr(row["path"], "ok", res.source, res.workout_id, res.points, now=now)
+            with self._lock:
+                self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
+            return "ok", res.source
+        self._save_hr(row["path"], "none", now=now)
+        return "none", None
+
+    def healthlog_retry_all(self) -> int:
+        """Vergisst alle Fehlschläge (none/error), damit sie erneut abgefragt werden; ok bleibt. Rückgabe = Anzahl."""
+        n = self.db.one("SELECT COUNT(*) AS n FROM ride_hr WHERE status IN ('none', 'error')")["n"]
+        self.db.execute("DELETE FROM ride_hr WHERE status IN ('none', 'error')")
+        return n
+
+    def healthlog_fetch_ride(self, ride_pk: int, fetch=None) -> dict | None:
+        """Holt den Puls für eine Fahrt sofort (überschreibt einen vorhandenen). None = Fahrt unbekannt.
+        Rückgabe {status: ok|none|error|belt|no_time, source}; HealthLogError wird weitergereicht."""
+        row = self.db.one(
+            "SELECT id, file_id, path, start_utc, duration_s, json_extract(analysis_json, '$.hr_source') AS hr_source "
+            "FROM rides WHERE id = ?", (ride_pk,))
+        if not row:
+            return None
+        if row["hr_source"] == "belt":
+            return {"status": "belt", "source": None}
+        if not row["start_utc"]:
+            return {"status": "no_time", "source": None}
+        fetch = fetch or (lambda s, e: healthlog.fetch_heart_rate(self.db, s, e))
+        status, source = self._hr_fetch_row(row, fetch, datetime.now(UTC))
+        return {"status": status, "source": source}
 
     def _save_hr(self, path: str, status: str, source=None, workout_id=None, points=None, detail=None, now=None) -> None:
         self.db.execute(

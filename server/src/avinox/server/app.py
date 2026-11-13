@@ -592,6 +592,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hl_wake.set()
         return {**healthlog_state(), **result}
 
+    @app.post("/api/v1/settings/healthlog/retry", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def retry_healthlog():
+        n = store.healthlog_retry_all()
+        hl_wake.set()
+        return {**healthlog_state(), "retried": n}
+
+    @app.post("/api/v1/rides/{ride_pk}/healthlog", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def fetch_ride_healthlog(ride_pk: int):
+        ride_or_404(ride_pk)
+        if not healthlog.is_connected(store.db):
+            raise HTTPException(409, {"error": "not_connected", "message": "HealthLog ist nicht verbunden"})
+        try:
+            return store.healthlog_fetch_ride(ride_pk)
+        except healthlog.HealthLogError as exc:
+            code = {"unreachable": 502, "bad_response": 502}.get(exc.code, 401)
+            raise HTTPException(code, {"error": exc.code, "message": str(exc)}) from exc
+
     @app.post("/api/v1/settings/healthlog/disconnect", dependencies=[Depends(read_auth)], tags=["einstellungen"])
     def disconnect_healthlog():
         healthlog.disconnect(store.db)
@@ -676,7 +693,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with localized(request):
             ride = ride_or_404(ride_pk)
         names = {**{str(k): v for k, v in ASSIST_LEVELS.items()}, **{str(k): v for k, v in store.mode_names().items()}}
-        return page(request, "ride.html", ride=ride, a=ride["analysis"], s=ride["analysis"]["summary"], mode_names=names)
+        return page(request, "ride.html", ride=ride, a=ride["analysis"], s=ride["analysis"]["summary"], mode_names=names,
+                    hl_active=healthlog.is_active(store.db))
 
     @app.get("/device", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def device_page(request: Request):

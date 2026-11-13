@@ -48,6 +48,7 @@
     {% if s.avg_heart_rate_bpm %}{{ figure(s.avg_heart_rate_bpm, t('ride.f.hr'), 'bpm') }}{% endif %}
   </div>
   {% if a.hr_source %}<p class="muted small" id="hr-source">{{ t('ride.hr.healthlog' if a.hr_source == 'healthlog_workout' else 'ride.hr.' ~ a.hr_source) }}</p>{% endif %}
+  {% if hl_active and a.hr_source != 'belt' %}<p class="small"><button type="button" class="btn ghost small" id="hl-fetch" data-ride="{{ ride.id }}">{{ t('ride.hl_fetch') }}</button></p>{% endif %}
   <h3 class="group-title g-motor t-motor">{{ t('ride.grp.motor') }}</h3>
   <div class="figures">
     {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}
@@ -258,4 +259,5 @@
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>
+<script src="{{ url_for('static', path='ride-healthlog.js').path }}" defer></script>
 {% endblock %}

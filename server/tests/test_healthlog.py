@@ -348,3 +348,51 @@ def test_connect_route_mfa_and_errors(client, fake):
     r = client.post("/api/v1/settings/healthlog/connect", json=body)
     assert r.status_code == 401 and r.json()["detail"]["error"] == "invalid_credentials"
     assert client.put("/api/v1/settings/healthlog", json={"url": "nope"}).status_code == 400
+
+
+def test_retry_all_and_fetch_ride(store):
+    store.add_file("ride_rec/4242/ride_rec_1000.proto", hr_free_ride())
+    pk = store.list_rides()[0]["id"]
+    path = store.db.one("SELECT path FROM rides WHERE id = ?", (pk,))["path"]
+    store._save_hr(path, "none")
+    store._save_hr("x/err", "error")
+    store._save_hr("x/ok", "ok", "healthlog_workout", "w", [(1, 100, "w")])
+    assert store.healthlog_retry_all() == 2
+    assert [r["status"] for r in store.db.query("SELECT status FROM ride_hr")] == ["ok"]
+    pts = [(T0 + t, 100 + t, "w") for t in range(0, 100, 10)]
+    assert store.healthlog_fetch_ride(pk, fetch=lambda s, e: fake_result(pts)) == {"status": "ok", "source": "healthlog_workout"}
+    # überschreibt vorhandenen ok-Eintrag
+    pts2 = [(T0 + t, 150, "w") for t in range(0, 100, 10)]
+    assert store.healthlog_fetch_ride(pk, fetch=lambda s, e: fake_result(pts2))["status"] == "ok"
+    assert json.loads(store.db.one("SELECT points_json FROM ride_hr WHERE path = ?", (path,))["points_json"])[0][1] == 150
+    assert store.healthlog_fetch_ride(pk, fetch=lambda s, e: fake_result([]))["status"] == "none"
+    assert store.healthlog_fetch_ride(99999) is None
+
+
+def test_fetch_ride_rejects_belt(store):
+    store.add_file("ride_rec/4242/ride_rec_1000.proto", ride([gps_sample(t, 5 * t) for t in range(10)], start=T0, end=T0 + 10))
+    pk = store.list_rides()[0]["id"]
+    assert store.healthlog_fetch_ride(pk, fetch=lambda s, e: pytest.fail("no call"))["status"] == "belt"
+
+
+def test_retry_and_ride_routes(client, fake, monkeypatch):
+    assert client.post("/api/v1/settings/healthlog/retry").json()["retried"] == 0
+    assert client.post("/api/v1/rides/999/healthlog").status_code == 404
+    st = client.app.state.store
+    st.add_file("ride_rec/4242/ride_rec_1000.proto", hr_free_ride())
+    pk = st.list_rides()[0]["id"]
+    assert client.post(f"/api/v1/rides/{pk}/healthlog").status_code == 409  # nicht verbunden
+    fake.routes[("POST", "/auth/login")] = (200, bundle(9))
+    client.put("/api/v1/settings/healthlog", json={"url": URL})
+    client.post("/api/v1/settings/healthlog/connect", json={"username": "tester", "password": "pw"})
+    pts = [(T0 + t, 100 + t, "w") for t in range(0, 100, 10)]
+    monkeypatch.setattr(hl, "fetch_heart_rate", lambda db, s, e: fake_result(pts))
+    r = client.post(f"/api/v1/rides/{pk}/healthlog")
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+
+    def boom(db, s, e):
+        raise hl.HealthLogError("unreachable")
+
+    monkeypatch.setattr(hl, "fetch_heart_rate", boom)
+    r = client.post(f"/api/v1/rides/{pk}/healthlog")
+    assert r.status_code == 502 and r.json()["detail"]["error"] == "unreachable"

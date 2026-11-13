@@ -50,6 +50,7 @@
       $("hl-counts").textContent = d.connected ? tr("hl_counts", { ok: d.ok, open: d.open }) : "";
       $("hl-form").hidden = !!d.connected;
       $("hl-disconnect").hidden = !d.connected;
+      $("hl-retry").hidden = !d.connected;
     };
     const HL_ERR = { invalid_url: "hl_err.invalid_url", unreachable: "hl_err.unreachable", bad_response: "hl_err.bad_response", invalid_credentials: "hl_err.invalid_credentials", mfa_invalid: "hl_err.mfa_invalid" };
     const errText = (res, data) => { const code = data.detail && data.detail.error; return HL_ERR[code] ? tr(HL_ERR[code]) : tr("error_n", { n: res.status }); };
@@ -81,6 +82,13 @@
         $("hl-pass").value = ""; $("hl-code").value = ""; $("hl-code-row").hidden = true;
         showHl(data); toast(tr("hl_connected_toast"));
       } catch (e) { hlMsg(tr("error_msg", { m: e.message })); }
+    });
+    $("hl-retry").addEventListener("click", async () => {
+      const res = await fetch("/api/v1/settings/healthlog/retry", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(errText(res, data), "error"); return; }
+      showHl(data);
+      const m = $("hl-retry-msg"); m.textContent = tr("hl_retry_done", { n: data.retried }); m.hidden = false;
     });
     $("hl-disconnect").addEventListener("click", async () => {
       const res = await fetch("/api/v1/settings/healthlog/disconnect", { method: "POST" });
