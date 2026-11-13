@@ -53,6 +53,7 @@
   const prevTiny = () => ((dash.comparison.rides || {}).previous || 0) < MIN_COMPARE_RIDES;
 
   function deltaHtml(key, c, judge, fmtPrev) {
+    if (dash.period === "all") return "";
     if (!c || c.current == null || c.previous == null) return '<span class="d none">' + tr("no_compare") + '</span>';
     if (c.previous && prevTiny() && fmtPrev) return '<span class="d none">' + tr("prev_value", { v: fmtPrev(c.previous) }) + '</span>';
     if (POINTS[key]) {
@@ -88,7 +89,9 @@
 
     const d = cmp.distance_km;
     let delta = "";
-    if (d.previous && !cur.rides) {
+    if (dash.period === "all") {
+      delta = "";
+    } else if (d.previous && !cur.rides) {
       delta = tr("hero_prev", { versus: dash.versus.replace(tr("versus_prefix"), ""), km: fmt(d.previous, 1) });
     } else if (d.previous && prevTiny()) {
       delta = `<span class="d none">${tr("prev_value", { v: fmt(d.previous, 1) + " km" })}</span>`;
@@ -285,6 +288,7 @@
     u.over.addEventListener("click", () => {
       const i = u.cursor.idx;
       if (i == null) return;
+      if (dash.period === "all") { load("year", n - 1 - i); return; }
       const off = dash.offset + (n - 1 - i);
       if (off !== dash.offset) load(dash.period, off);
     });

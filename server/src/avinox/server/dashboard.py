@@ -16,9 +16,9 @@ from ..analysis import ASSIST_LEVELS, GRADIENT_BINS, _label
 from . import i18n
 from .i18n import t
 
-PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5}
+PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5, "all": 100}
 # Mindestanzahl Balken in den Diagrammen, damit eine einzelne Fahrt nicht die ganze Breite füllt
-MIN_BUCKETS: dict[str, int] = {"day": 6, "week": 6, "month": 6, "year": 2}
+MIN_BUCKETS: dict[str, int] = {"day": 6, "week": 6, "month": 6, "year": 2, "all": 2}
 """Zeitraum -> Anzahl der Balken in der Zeitreihe."""
 
 MIN_KM_BEST = 1.0
@@ -429,9 +429,65 @@ def mix(rows: list[dict]) -> dict:
     }
 
 
+def _build_all(rows: list[dict], today: date, lang: str) -> dict:
+    """Zeitraum „Gesamt“: alle datierten Fahrten, Balken je Jahr, kein Blättern, kein Vorzeitraum-Vergleich."""
+    dated = [r["_local"] for r in rows if r["_local"]]
+    this_year = period_start(today, "year")
+    first_year = period_start(min(dated), "year") if dated else this_year
+    n = min(PERIODS["all"], max(steps_between(this_year, first_year, "year") + 1, MIN_BUCKETS["year"]))
+    starts = [shift(this_year, "year", i - n + 1) for i in range(n)]
+    index = {s: i for i, s in enumerate(starts)}
+    accs = [_empty() for _ in starts]
+    all_acc = _empty()
+    for r in rows:
+        if r["_local"] is None:
+            continue
+        _add(all_acc, r)
+        i = index.get(period_start(r["_local"], "year"))
+        if i is not None:
+            _add(accs[i], r)
+    series = [{"key": period_key(s, "year"), "label": period_label(s, "year", lang), "title": period_title(s, "year", lang),
+               "start": s.isoformat(), "end": period_end(s, "year").isoformat(), **_finish(acc)} for s, acc in zip(starts, accs)]
+    cur = _finish(all_acc)
+    title = t("title.all", lang, d=i18n.date_text(min(dated), lang)) if dated else t("cur.all", lang)
+    cur.update(title=title, label=t("cur.all", lang))
+    name = t("cur.all", lang)
+    cmp = {k: {"current": cur.get(k), "previous": None, "delta": None, "delta_pct": None} for k in COMPARE_KEYS}
+    total_acc = _empty()
+    for r in rows:
+        _add(total_acc, r)
+    total = _finish(total_acc)
+    total["first_date"] = min(dated).isoformat() if dated else None
+    total["last_date"] = max(dated).isoformat() if dated else None
+    total["undated_rides"] = sum(1 for r in rows if r["_local"] is None)
+    real = [r for r in rows if r["distance_km"] >= MIN_KM_BEST]
+    recent = [{
+        "id": r["id"], "ride_id": r["ride_id"], "start_utc": r["start_utc"],
+        "date": r["_local"].isoformat() if r["_local"] else None,
+        "distance_km": round(r["distance_km"], 2), "moving_time_s": r["moving_time_s"], "ascent_m": r["ascent_m"],
+        "rider_kj": r["rider_kj"], "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
+    } for r in rows[:5]]
+    return {
+        "period": "all", "offset": 0, "max_offset": 0, "last_offset": 0 if dated else None,
+        "today": today.isoformat(),
+        "current": {**cur, "name": name},
+        "previous": {**_finish(_empty()), "name": t("period.before", lang)},
+        "versus": "",
+        "comparison": cmp,
+        "headline": t("headline", lang, name=name, km=num(cur["distance_km"], 1, lang)),
+        "series": series,
+        "mix": mix([r for r in rows if r["_local"]]),
+        "highlights": ride_bests(real, lang) + period_bests(real, today, lang),
+        "total": total,
+        "recent": recent,
+    }
+
+
 def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "de") -> dict:
     if period not in PERIODS:
         raise ValueError(f"Unbekannter Zeitraum: {period}")
+    if period == "all":
+        return _build_all(rows, today, lang)
     dated = [r["_local"] for r in rows if r["_local"]]
     # Ältester sinnvoller Offset: der Zeitraum der ersten Fahrt (hält auch Datumsrechnung im gültigen Bereich)
     oldest = max(0, steps_between(period_start(today, period), period_start(min(dated), period), period)) if dated else 0

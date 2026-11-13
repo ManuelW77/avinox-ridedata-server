@@ -480,7 +480,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.stats()
 
     @app.get("/api/v1/dashboard", dependencies=[Depends(read_auth)], tags=["statistik"])
-    def dashboard_api(request: Request, period: str = Query("week", pattern="^(day|week|month|year)$"), offset: int = Query(0, ge=0, le=10000)):
+    def dashboard_api(request: Request, period: str = Query("week", pattern="^(day|week|month|year|all)$"), offset: int = Query(0, ge=0, le=10000)):
         """Übersicht: Zeitreihe je Tag/Woche/Monat/Jahr, Vergleich zum Zeitraum davor, Bestwerte, Gesamt.
 
         Texte (Titel, Sätze) in der Sprache aus ``?lang=``, Cookie oder ``Accept-Language``.
