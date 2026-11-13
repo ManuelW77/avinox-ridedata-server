@@ -12,7 +12,7 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 
 **ESP32 an den USB-Port des Displays stecken, einmal WLAN einrichten, fertig.** Jede Fahrt landet danach automatisch auf dem eigenen Server.
 
-**Alle Daten bleiben lokal** im eigenen Netz. Kein Cloud-Konto, keine Weitergabe.
+**Alle Daten bleiben lokal** im eigenen Netz. Kein Cloud-Konto, keine Weitergabe. Nur wer die KI-Auswertung mit einem Cloud-Anbieter einschaltet, schickt Kennzahlen (keine GPS-Daten) an diesen Anbieter. Mit Ollama bleibt alles lokal.
 
 ## Was man bekommt
 
@@ -24,6 +24,8 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 - **Akku-Zustand in einem Satz:** „Dein Akku ist in gutem Zustand“ samt Hinweisen. Dahinter Ladevorgänge und volle Zyklen, Gesundheitstrend (nutzbare Wh), Zellbalance, Spannungseinbruch unter Last und Diagramme zu Ladestand, Temperatur, Zellabweichung und Strom.
 - **Fahrtenliste** mit automatischen Namen (z. B. „Runde um …“, abschaltbar), Umbenennen, Suche, Filter und Routen-Vorschau.
 - **Export** als GPX (mit Leistung, Trittfrequenz, Puls), GeoJSON und JSON.
+- **KI-Auswertung (optional):** Ein Sprachmodell schreibt kurze Texte und Tipps zu jeder Fahrt und zu Zeiträumen, sichtbar auf der Fahrtseite und in der Übersicht. Anbieter frei wählbar (OpenRouter, OpenAI, Anthropic, Mistral, Groq, Ollama lokal oder eigene Adresse). Gesendet werden nur Kennzahlen, nie GPS-Daten, Orte, Namen oder Seriennummern.
+- **Fragen per Claude oder ChatGPT (MCP, optional):** Der Server bietet einen nur lesenden MCP-Zugang. Claude oder ChatGPT können damit Fahrten, Zeiträume, Bestwerte und den Akku-Zustand abfragen. Zugang nur mit Token, ohne GPS-Daten und Seriennummern.
 - **Bequem:** heller und dunkler Modus, Deutsch und Englisch, eigene Namen für Unterstützungsmodi, Dateien auch per Upload im Browser, Firmware-Updates für den ESP32 per WLAN, Sync-Seite mit den Berichten des ESP32.
 
 ## Screenshots
@@ -89,6 +91,10 @@ docker compose exec avinox cat /data/upload_token
 ```
 
 **Login:** Standardmäßig ist die Anmeldung aus. Den ersten Administrator legen `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` beim Start an (das schaltet den Login fest ein); über die Weboberfläche geht das nicht. Weitere Benutzer legst du unter **Einstellungen → Anmeldung** an. Optional geht die Anmeldung auch über OpenID Connect, einzurichten in den Einstellungen oder per `AVINOX_OIDC_*` (siehe [server/README.md](server/README.md)). **Achtung:** Solange die Anmeldung aus ist, ist die Webseite für jeden im LAN offen. Nicht ohne Login ins Internet stellen. Alle Einstellungen: [server/README.md](server/README.md).
+
+**KI-Auswertung:** Standardmäßig aus. Unter **Einstellungen → KI-Auswertung** Anbieter wählen, Schlüssel eintragen, Verbindung testen und einschalten. Der Schlüssel bleibt in der Datenbank und wird nie angezeigt. Neue Fahrten werden danach automatisch ausgewertet, ältere per Knopf in den Einstellungen. Details: [server/README.md](server/README.md).
+
+**MCP:** Standardmäßig aus. Unter **Einstellungen → MCP (Claude, ChatGPT)** einschalten. Dort stehen die Adresse (`/mcp`), das Token und Anleitungen für Claude und ChatGPT. Wer das Token hat, liest alle Fahrdaten. claude.ai und ChatGPT verbinden sich aus dem Internet, der Server muss dafür per HTTPS öffentlich erreichbar sein (Reverse Proxy oder Tunnel). Details: [server/README.md](server/README.md).
 
 ### b) ESP32 einmalig flashen
 
