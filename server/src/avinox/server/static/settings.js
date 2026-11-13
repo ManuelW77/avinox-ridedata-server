@@ -47,7 +47,7 @@
       $("hl-url").value = d.url || $("hl-url").value;
       $("hl-enabled").checked = !!d.enabled;
       $("hl-status").textContent = d.connected ? tr("hl_connected", { u: d.username }) : tr("hl_not_connected");
-      $("hl-counts").textContent = d.connected ? tr("hl_counts", { ok: d.ok, open: d.open }) : "";
+      $("hl-counts").textContent = d.connected ? "· " + tr("hl_counts", { ok: d.ok, open: d.open }) : "";
       $("hl-form").hidden = !!d.connected;
       $("hl-disconnect").hidden = !d.connected;
       $("hl-retry").hidden = !d.connected;
