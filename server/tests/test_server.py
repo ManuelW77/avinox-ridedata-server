@@ -408,7 +408,7 @@ def test_used_keys_exist():
 
     base = Path(i18n.__file__).parent
     known = set(i18n.TEXTS["de"])
-    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.")
+    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.", "bh.hint.")
     for path in [*base.glob("templates/*.html"), base / "app.py", base / "dashboard.py"]:
         for key in re.findall(r"\bt\(\s*['\"]([a-z0-9_.]+)['\"]", path.read_text()):
             assert key in known or key.startswith(dynamic), (path.name, key)
@@ -438,3 +438,9 @@ def test_settings_language_select(client):
     assert 'id="lang-select"' in r.text
     assert '<option value="en" selected' in r.text
     assert client.cookies.get("lang") == "en" or "lang=en" in r.headers.get("set-cookie", "")
+
+
+def test_device_page_renders_battery_health(client):
+    page = client.get("/device").text
+    assert "Hinweise" in page and "Alles unauff" in page
+    assert client.get("/api/v1/device").json()["battery_health"]["charge_count"] == 0

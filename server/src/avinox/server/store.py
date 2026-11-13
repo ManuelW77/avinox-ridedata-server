@@ -17,6 +17,7 @@ import threading
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from .. import battery
 from ..analysis import CUSTOM_MODE_MIN, analyze
 from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
@@ -437,6 +438,17 @@ class Store:
             for s in sessions
             if s.battery
         ]
+        battery_in = [
+            {"time": s.end_time.isoformat() if s.end_time else None, **s.battery, "temp_s": s.battery_temp_s, "thermal_limit": s.thermal_limit}
+            for s in sessions
+            if s.battery
+        ]
+        ride_rows = self.db.query(
+            "SELECT start_utc AS time, json_extract(analysis_json, '$.battery.motor_wh_per_pct') AS motor_wh_per_pct, "
+            "json_extract(analysis_json, '$.battery.used_pct') AS used_pct FROM rides WHERE start_utc IS NOT NULL AND json_extract(analysis_json, '$.battery.motor_wh_per_pct') IS NOT NULL "
+            "ORDER BY start_utc"
+        )
+        info["battery_health"] = battery.health(battery_in, [dict(r) for r in ride_rows])
         hms = self.db.one("SELECT id FROM files WHERE kind = 'hms' ORDER BY id DESC LIMIT 1")
         info["hms"] = (
             [{"code": e.code, "time": e.time.isoformat() if e.time else None} for e in parse_hms(self.read_raw(hms["id"]))] if hms else []

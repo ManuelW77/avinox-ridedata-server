@@ -44,6 +44,103 @@
 <div class="block t-motor" id="sec-battery" data-jump="{{ t('dev.sec.battery') }}">
   <h2 class="section-title">{{ t('dev.sec.battery') }}</h2>
 
+  {% set bh = d.battery_health %}
+  <section class="card">
+    <h2>{{ t('bh.hints.title') }}</h2>
+    <p class="muted small">{{ t('bh.hints.text') }}</p>
+    <ul class="hint-list">
+      {% for h in bh.hints %}
+      <li><span class="dot {{ h.level }}"></span><span>{{ t('bh.hint.' ~ h.key, **h.params) }}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>{{ t('bh.charge.title') }}</h2>
+    <p class="muted small">{{ t('bh.charge.text') }}</p>
+    {% if bh.charge_count or bh.full_cycles %}
+    <dl class="kv">
+      <dt>{{ t('bh.charge.count') }}</dt><dd>{{ bh.charge_count }}</dd>
+      <dt>{{ t('bh.charge.cycles') }}</dt><dd>{{ bh.full_cycles | num(1) }}</dd>
+    </dl>
+    {% if bh.charges %}
+    <h3 class="small">{{ t('bh.charge.last') }}</h3>
+    <ul class="plain">
+      {% for c in (bh.charges | reverse | list)[:5] %}
+      <li>{{ c.time | localtime('%d.%m.%y') if c.time else '–' }}: {{ c.from_pct }} % → {% if c.to_pct is not none %}{{ c.to_pct }} %{% else %}{{ t('bh.charge.atleast', to=c.min_to_pct) }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}
+    <p class="muted">{{ t('bh.few') }}</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>{{ t('bh.soh.title') }}</h2>
+    <p class="muted small">{{ t('bh.soh.text') }}</p>
+    {% set pts = bh.soh.points %}
+    {% if pts | length >= 2 %}
+    {% set peak = pts | map(attribute='wh') | max %}
+    <dl class="kv">
+      <dt>{{ t('bh.soh.first') }}</dt><dd>{{ bh.soh.first_wh | num }} Wh</dd>
+      <dt>{{ t('bh.soh.last') }}</dt><dd>{{ bh.soh.last_wh | num }} Wh</dd>
+      {% if bh.soh.change_pct is not none %}<dt>{{ t('bh.soh.change') }}</dt><dd>{{ bh.soh.change_pct | num(1) }} %</dd>{% endif %}
+    </dl>
+    <div class="bars wide">
+      {% for p in pts[-30:] %}
+      <div class="bar">
+        <span class="label">{{ p.time | localtime('%d.%m.%y') if p.time else '–' }}</span>
+        <span class="track"><span class="fill" style="width: {{ (100 * p.wh / peak) if peak else 0 }}%"></span></span>
+        <span class="val">{{ p.wh | num }} Wh</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{{ t('bh.few') }}</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>{{ t('bh.balance.title') }}</h2>
+    <p class="muted small">{{ t('bh.balance.text') }}</p>
+    {% set rp = bh.rest_balance.points %}
+    {% if rp %}
+    {% set peak = rp | map(attribute='delta_mv') | max %}
+    <div class="bars wide">
+      {% for p in rp[-30:] %}
+      <div class="bar">
+        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else '–' }}</span>
+        <span class="track"><span class="fill" style="width: {{ (100 * p.delta_mv / peak) if peak else 0 }}%"></span></span>
+        <span class="val">{{ p.delta_mv | num }} mV</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{{ t('bh.few') }}</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>{{ t('bh.sag.title') }}</h2>
+    <p class="muted small">{{ t('bh.sag.text') }}</p>
+    {% set sp = bh.sag %}
+    {% if sp %}
+    {% set peak = sp | map(attribute='mv_per_a') | max %}
+    <div class="bars wide mini">
+      {% for p in sp[-30:] %}
+      <div class="bar">
+        <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else '–' }}</span>
+        <span class="track"><span class="fill" style="width: {{ (100 * p.mv_per_a / peak) if peak else 0 }}%"></span></span>
+        <span class="val">{{ p.mv_per_a | num(1) }} {{ t('bh.sag.unit') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{{ t('bh.few') }}</p>
+    {% endif %}
+  </section>
+
   <section class="card">
     <h2>{{ t('cell.title') }}</h2>
     <p class="muted small">{{ t('cell.text') }}</p>
