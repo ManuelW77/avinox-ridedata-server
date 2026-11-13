@@ -4,7 +4,7 @@ import re
 import time
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from joserfc import jwt
@@ -362,19 +362,19 @@ class FakeIdp:
         claims = {"iss": ISSUER, "aud": "avinox-test", "iat": now, "exp": now + 300, "nonce": self.nonce, **self.claims, **self.override, **over}
         return jwt.encode({"alg": "RS256", "kid": "k1"}, {k: v for k, v in claims.items() if v is not None}, self.sign_key or self.key)
 
-    def __call__(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx2.Request) -> httpx2.Response:
         if self.down:
-            raise httpx.ConnectError("idp down")
+            raise httpx2.ConnectError("idp down")
         url = str(request.url)
         if url == f"{ISSUER}/.well-known/openid-configuration":
-            return httpx.Response(200, json={"issuer": ISSUER, "authorization_endpoint": f"{ISSUER}/authorize", "token_endpoint": f"{ISSUER}/token",
+            return httpx2.Response(200, json={"issuer": ISSUER, "authorization_endpoint": f"{ISSUER}/authorize", "token_endpoint": f"{ISSUER}/token",
                                               "jwks_uri": f"{ISSUER}/jwks", "token_endpoint_auth_methods_supported": ["client_secret_post"]})
         if url == f"{ISSUER}/jwks":
-            return httpx.Response(200, json={"keys": [self.key.as_dict(private=False)]})
+            return httpx2.Response(200, json={"keys": [self.key.as_dict(private=False)]})
         if url == f"{ISSUER}/token":
             self.token_requests.append({k: v[0] for k, v in parse_qs(request.content.decode()).items()})
-            return httpx.Response(200, json={"access_token": "at", "token_type": "Bearer", "expires_in": 300, "id_token": self.id_token()})
-        return httpx.Response(404)
+            return httpx2.Response(200, json={"access_token": "at", "token_type": "Bearer", "expires_in": 300, "id_token": self.id_token()})
+        return httpx2.Response(404)
 
 
 @pytest.fixture
@@ -391,7 +391,7 @@ def oidc_settings(settings):
 
 def oidc_client(settings, idp):
     c = make(settings)
-    c.app.state.oidc.transport = httpx.MockTransport(idp)
+    c.app.state.oidc.transport = httpx2.MockTransport(idp)
     return c
 
 
