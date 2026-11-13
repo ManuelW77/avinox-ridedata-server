@@ -175,6 +175,35 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="sec-mcp" data-jump="{{ t('set.mcp') }}">
+  <h2 class="section-title">{{ t('set.mcp') }}</h2>
+  <p class="muted small block-desc">{{ t('set.mcp_text') }}</p>
+<section class="card stack ai-form">
+  <div class="form-row">
+    <label for="mcp-enabled" class="switch-row"><input type="checkbox" class="switch" id="mcp-enabled"> <span>{{ t('set.mcp_toggle') }}</span></label>
+  </div>
+  <div id="mcp-body" hidden class="stack">
+    <div class="form-row"><label for="mcp-url">{{ t('set.mcp_url') }}</label>
+      <div class="actions"><input type="text" id="mcp-url" readonly style="flex:1" autocomplete="off">
+        <button type="button" class="btn ghost" data-mcp-copy="mcp-url">{{ t('set.mcp_copy') }}</button></div></div>
+    <div class="form-row"><label for="mcp-token">{{ t('set.mcp_token') }}</label>
+      <div class="actions"><input type="password" id="mcp-token" readonly style="flex:1" autocomplete="off">
+        <button type="button" class="btn ghost" id="mcp-show">{{ t('set.mcp_show') }}</button>
+        <button type="button" class="btn ghost" data-mcp-copy="mcp-token">{{ t('set.mcp_copy') }}</button>
+        <button type="button" class="btn ghost danger" id="mcp-new">{{ t('set.mcp_new') }}</button></div></div>
+    <h3>{{ t('set.mcp_claude') }}</h3>
+    <p class="small">{{ t('set.mcp_claude_text') }}</p>
+    <h3>{{ t('set.mcp_chatgpt') }}</h3>
+    <p class="small">{{ t('set.mcp_chatgpt_text') }}</p>
+    <h3>{{ t('set.mcp_code') }}</h3>
+    <div class="actions"><input type="text" id="mcp-cmd" readonly style="flex:1" autocomplete="off">
+      <button type="button" class="btn ghost" data-mcp-copy="mcp-cmd">{{ t('set.mcp_copy') }}</button></div>
+    <p class="muted small">{{ t('set.mcp_net') }}</p>
+    <p class="muted small">{{ t('set.mcp_privacy') }}</p>
+  </div>
+</section>
+</div>
+
 <div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
   <h2 class="section-title">{{ t('set.upload') }}</h2>
   <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
