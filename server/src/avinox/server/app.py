@@ -447,6 +447,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ride = ride_or_404(ride_pk)
         return {"name": ride["name"], "name_custom": ride["name_custom"]}
 
+    @app.delete("/api/v1/rides/{ride_pk}", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def delete_ride(ride_pk: int):
+        if not store.delete_ride(ride_pk):
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        return {"ok": True}
+
     @app.get("/api/v1/rides/{ride_pk}/geojson", dependencies=[Depends(read_auth)], tags=["fahrten"])
     def ride_geojson(ride_pk: int):
         text = store.ride_geojson(ride_pk)

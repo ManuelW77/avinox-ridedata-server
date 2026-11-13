@@ -87,6 +87,12 @@ CREATE TABLE IF NOT EXISTS firmware (
     UNIQUE (project, version)
 );
 
+-- Gelöschte Fahrten: Pfad = rides.path; gesperrt für jede Größe dieses Pfads (kein Wiederauftauchen bei Sync/Neuberechnung)
+CREATE TABLE IF NOT EXISTS deleted_rides (
+    path        TEXT PRIMARY KEY,
+    deleted_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ride_meta (
     path        TEXT PRIMARY KEY,   -- = rides.path (bleibt bei Neuberechnung stabil)
     custom_name TEXT,               -- von Hand gesetzt, NULL = automatisch
