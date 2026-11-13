@@ -16,6 +16,7 @@
     </p>
   </div>
   <div class="actions">
+    <button type="button" class="btn ghost danger" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/gpx">GPX</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
@@ -233,8 +234,6 @@
   </div>
 </div>
 {% endif %}
-
-<p class="ride-delete"><button type="button" class="btn ghost danger small" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button></p>
 
 <script type="application/json" id="ride-data">{{ {"id": ride.id, "series": a.series, "modes": mode_names, "map_style": map_style, "preview": a.gps.preview} | tojson }}</script>
 {% endblock %}
