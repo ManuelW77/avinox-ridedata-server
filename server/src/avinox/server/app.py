@@ -480,12 +480,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return store.stats()
 
     @app.get("/api/v1/dashboard", dependencies=[Depends(read_auth)], tags=["statistik"])
-    def dashboard_api(request: Request, period: str = Query("week", pattern="^(day|week|month|year|all)$"), offset: int = Query(0, ge=0, le=10000)):
+    def dashboard_api(request: Request, period: str = Query("week", pattern="^(day|week|month|year|all)$"), offset: int = Query(0, ge=0, le=10000),
+                      compare: str = Query("elapsed", pattern="^(elapsed|full)$")):
         """Übersicht: Zeitreihe je Tag/Woche/Monat/Jahr, Vergleich zum Zeitraum davor, Bestwerte, Gesamt.
 
         Texte (Titel, Sätze) in der Sprache aus ``?lang=``, Cookie oder ``Accept-Language``.
         """
-        return store.dashboard(period, offset, lang=lang_of(request))
+        return store.dashboard(period, offset, lang=lang_of(request), compare_mode=compare)
 
     @app.get("/api/v1/device", dependencies=[Depends(read_auth)], tags=["statistik"])
     def device():
@@ -572,17 +573,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return resp
 
     @app.get("/", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
-    def dashboard_page(request: Request, period: str | None = None, offset: int | None = None):
+    def dashboard_page(request: Request, period: str | None = None, offset: int | None = None,
+                       compare: str = Query("elapsed", pattern="^(elapsed|full)$")):
         lang = lang_of(request)
         if period not in PERIODS:
             period = "month" if period is None else "week"
         if offset is None and request.query_params.get("period") is None:
             # Ohne Vorgaben: der Zeitraum der letzten Fahrt (sonst ist die Seite bei älteren Fahrten leer)
-            dash = store.dashboard(period, 0, lang=lang)
+            dash = store.dashboard(period, 0, lang=lang, compare_mode=compare)
             if dash["last_offset"]:
-                dash = store.dashboard(period, dash["last_offset"], lang=lang)
+                dash = store.dashboard(period, dash["last_offset"], lang=lang, compare_mode=compare)
         else:
-            dash = store.dashboard(period, max(0, min(offset or 0, 10000)), lang=lang)
+            dash = store.dashboard(period, max(0, min(offset or 0, 10000)), lang=lang, compare_mode=compare)
         return page(request, "dashboard.html", dash=dash, lang=lang)
 
     @app.get("/rides", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)

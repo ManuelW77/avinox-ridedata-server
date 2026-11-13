@@ -18,7 +18,7 @@ from .i18n import t
 
 PERIODS: dict[str, int] = {"day": 30, "week": 26, "month": 24, "year": 5, "all": 100}
 # Mindestanzahl Balken in den Diagrammen, damit eine einzelne Fahrt nicht die ganze Breite füllt
-MIN_BUCKETS: dict[str, int] = {"day": 6, "week": 6, "month": 6, "year": 2, "all": 2}
+MIN_BUCKETS: dict[str, int] = {"day": 2, "week": 2, "month": 2, "year": 2, "all": 2}
 """Zeitraum -> Anzahl der Balken in der Zeitreihe."""
 
 MIN_KM_BEST = 1.0
@@ -180,6 +180,7 @@ def _finish(acc: dict) -> dict:
         "moving_time_s": acc["moving_time_s"],
         "ascent_m": round(acc["ascent_m"]),
         "rider_kj": round(acc["rider_kj"], 1),
+        "rider_wh": round(acc["rider_kj"] / 3.6, 1),
         "motor_kj": round(acc["motor_kj"], 1),
         "motor_wh": round(acc["motor_wh"], 1),
         "motor_share_pct": round(100 * acc["motor_kj"] / energy, 1) if energy else None,
@@ -189,7 +190,7 @@ def _finish(acc: dict) -> dict:
     }
 
 
-COMPARE_KEYS = ("rides", "distance_km", "moving_time_s", "ascent_m", "rider_kj", "motor_wh", "motor_share_pct",
+COMPARE_KEYS = ("rides", "distance_km", "moving_time_s", "ascent_m", "rider_kj", "rider_wh", "motor_wh", "motor_share_pct",
                 "calories_kcal", "battery_used_pct", "avg_rider_power_w")
 
 
@@ -233,6 +234,13 @@ def _value_text(value: float, unit: str, digits: int, lang: str = "de") -> str:
     return f"{num(value, digits, lang)} {unit}"
 
 
+def _texts(value: float, unit: str, digits: int, lang: str) -> tuple[str, str | None]:
+    """Anzeigetext und Alternativtext: Energie wird in Wh gezeigt, kJ als Alternative."""
+    if unit == "kJ":
+        return _value_text(value / 3.6, "Wh", 0, lang), _value_text(value, "kJ", 0, lang)
+    return _value_text(value, unit, digits, lang), None
+
+
 def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
     out = []
     for key, group, field, unit, digits, pick, min_km in RIDE_BESTS:
@@ -245,11 +253,12 @@ def ride_bests(rows: list[dict], lang: str = "de") -> list[dict]:
             continue
         best = pick(cands, key=lambda r: r[field])
         unit = t("unit.km_per_pct", lang) if unit == "km je 1 % Akku" else unit
-        vt = _value_text(best[field], unit, digits, lang)
+        vt, alt = _texts(best[field], unit, digits, lang)
+        d = best["_local"].isoformat() if best["_local"] else None
         out.append({
             "key": key, "group": group, "title": t(f"best.{key}.title", lang), "ride": best["id"],
             "date": best["_local"].isoformat() if best["_local"] else None,
-            "value": best[field], "unit": unit, "value_text": vt, "when_text": _when(best, lang),
+            "value": best[field], "unit": unit, "value_text": vt, "value_alt_text": alt, "start": d, "end": d, "when_text": _when(best, lang),
             "sentence": t(f"best.{key}.s", lang, when=_when(best, lang), v=vt),
         })
     return out
@@ -281,7 +290,7 @@ def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
             if round(value, digits) <= round(finer[field], digits):
                 continue
             finer[field] = value
-            vt = _value_text(value, unit, digits, lang)
+            vt, alt = _texts(value, unit, digits, lang)
             when = {"day": t("when.on", lang, d=day_text(start, lang)),
                     "week": t("when.week", lang, w=start.isocalendar()[1], y=start.isocalendar()[0]),
                     "month": t("when.month", lang, m=i18n.MONTHS[i18n.norm(lang)][start.month - 1], y=start.year)}[period]
@@ -291,7 +300,8 @@ def period_bests(rows: list[dict], today: date, lang: str = "de") -> list[dict]:
                 "key": f"{period}_{field}", "group": "period", "period": period,
                 "title": t(f"bestp.title.{field}", lang, t=t(f"bestp.title.{period}", lang)),
                 "offset": steps_between(period_start(today, period), start, period),
-                "label": period_title(start, period, lang), "value": value, "unit": unit, "value_text": vt, "rides": s["rides"],
+                "label": period_title(start, period, lang), "value": value, "unit": unit, "value_text": vt, "value_alt_text": alt, "rides": s["rides"],
+                "start": start.isoformat(), "end": period_end(start, period).isoformat(),
                 "sentence": t("bestp.sentence", lang, when=when, noun=t(f"bestp.noun.{period}", lang), what=t(f"bestp.what.{field}", lang), v=vt, n=s["rides"]),
             })
     return out
@@ -429,7 +439,7 @@ def mix(rows: list[dict]) -> dict:
     }
 
 
-def _build_all(rows: list[dict], today: date, lang: str) -> dict:
+def _build_all(rows: list[dict], today: date, lang: str, compare_mode: str = "elapsed") -> dict:
     """Zeitraum „Gesamt“: alle datierten Fahrten, Balken je Jahr, kein Blättern, kein Vorzeitraum-Vergleich."""
     dated = [r["_local"] for r in rows if r["_local"]]
     this_year = period_start(today, "year")
@@ -465,7 +475,7 @@ def _build_all(rows: list[dict], today: date, lang: str) -> dict:
         "id": r["id"], "ride_id": r["ride_id"], "start_utc": r["start_utc"],
         "date": r["_local"].isoformat() if r["_local"] else None,
         "distance_km": round(r["distance_km"], 2), "moving_time_s": r["moving_time_s"], "ascent_m": r["ascent_m"],
-        "rider_kj": r["rider_kj"], "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
+        "rider_kj": r["rider_kj"], "rider_wh": round((r["rider_kj"] or 0) / 3.6, 1), "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
     } for r in rows[:5]]
     return {
         "period": "all", "offset": 0, "max_offset": 0, "last_offset": 0 if dated else None,
@@ -473,6 +483,9 @@ def _build_all(rows: list[dict], today: date, lang: str) -> dict:
         "current": {**cur, "name": name},
         "previous": {**_finish(_empty()), "name": t("period.before", lang)},
         "versus": "",
+        "compare_mode": compare_mode,
+        "compare_partial": False,
+        "previous_until": None,
         "comparison": cmp,
         "headline": t("headline", lang, name=name, km=num(cur["distance_km"], 1, lang)),
         "series": series,
@@ -483,11 +496,11 @@ def _build_all(rows: list[dict], today: date, lang: str) -> dict:
     }
 
 
-def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "de") -> dict:
+def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "de", compare_mode: str = "elapsed") -> dict:
     if period not in PERIODS:
         raise ValueError(f"Unbekannter Zeitraum: {period}")
     if period == "all":
-        return _build_all(rows, today, lang)
+        return _build_all(rows, today, lang, compare_mode)
     dated = [r["_local"] for r in rows if r["_local"]]
     # Ältester sinnvoller Offset: der Zeitraum der ersten Fahrt (hält auch Datumsrechnung im gültigen Bereich)
     oldest = max(0, steps_between(period_start(today, period), period_start(min(dated), period), period)) if dated else 0
@@ -533,10 +546,24 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
         "id": r["id"], "ride_id": r["ride_id"], "start_utc": r["start_utc"],
         "date": r["_local"].isoformat() if r["_local"] else None,
         "distance_km": round(r["distance_km"], 2), "moving_time_s": r["moving_time_s"], "ascent_m": r["ascent_m"],
-        "rider_kj": r["rider_kj"], "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
+        "rider_kj": r["rider_kj"], "rider_wh": round((r["rider_kj"] or 0) / 3.6, 1), "motor_wh": r["motor_wh"], "motor_share_pct": r["motor_share_pct"],
     } for r in rows[:5]]
 
     in_period = [r for r in rows if r["_local"] and period_start(r["_local"], period) == current]
+    # Laufender Zeitraum: Vorzeitraum nur bis zum gleichen Stand zählen (previous_until auch im Modus „full“ für den Tooltip)
+    previous_until = None
+    partial = False
+    if offset == 0 and period in ("week", "month", "year"):
+        elapsed_days = (today - current).days
+        until = min(prev_start + timedelta(days=elapsed_days), period_end(prev_start, period))
+        previous_until = until.isoformat()
+        if compare_mode == "elapsed":
+            partial = True
+            pacc = _empty()
+            for r in rows:
+                if r["_local"] and prev_start <= r["_local"] <= until:
+                    _add(pacc, r)
+            prev = {**prev, **_finish(pacc)}
     cmp = compare(cur, prev)
     d = cmp["distance_km"]
     versus = t(f"versus.{period}", lang)
@@ -554,6 +581,9 @@ def build(rows: list[dict], period: str, offset: int, today: date, lang: str = "
         "current": {**cur, "name": cur_name},
         "previous": {**prev, "name": t("period.before", lang)},
         "versus": versus,
+        "compare_mode": compare_mode,
+        "compare_partial": partial,
+        "previous_until": previous_until,
         "comparison": cmp,
         "headline": headline,
         "series": series,

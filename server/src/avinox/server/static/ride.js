@@ -109,10 +109,30 @@
     return i;
   }
 
-  function legend(items) {
+  function legend(items, ends) {
     const el = document.getElementById("map-legend");
     if (!el) return;
     el.textContent = "";
+    if (ends) {
+      const lo = document.createElement("span");
+      lo.textContent = ends[0];
+      el.appendChild(lo);
+      items.forEach(([color, , tip]) => {
+        const i = document.createElement("i");
+        i.style.background = color;
+        i.style.width = "22px";
+        i.style.height = "12px";
+        i.style.margin = "0";
+        i.title = tip;
+        el.appendChild(i);
+      });
+      const hi = document.createElement("span");
+      hi.textContent = ends[1];
+      el.appendChild(hi);
+      el.style.gap = "0.3rem";
+      return;
+    }
+    el.style.gap = "";
     items.forEach(([color, text]) => {
       const span = document.createElement("span");
       const i = document.createElement("i");
@@ -131,7 +151,7 @@
     const fi = t.fields.indexOf(cfg.field);
     const vals = t.samples.map((s) => (s && fi >= 0 ? s[fi] : null));
     const grey = cssVar("--ink-3", "#8a908c");
-    let colorFor, items = [];
+    let colorFor, items = [], ends = null;
 
     if (key === "mode") {
       const seen = new Map();
@@ -151,15 +171,17 @@
         const edges = [br.min, ...br.cuts, br.max];
         for (let i = 0; i < 5; i++) {
           if (i > 0 && edges[i] === edges[i + 1] && edges[i] === edges[i - 1]) continue;
-          items.push([SCALE[i], fmt(edges[i], cfg.digits) + "–" + fmt(edges[i + 1], cfg.digits) + " " + cfg.unit]);
+          const range = fmt(edges[i], cfg.digits) + "–" + fmt(edges[i + 1], cfg.digits) + " " + cfg.unit;
+          items.push([SCALE[i], range, range]);
         }
+        ends = { speed: tr("lg.speed"), rider: tr("lg.rider"), motor: tr("lg.motor"), alt: tr("lg.alt") }[key].split("|");
         buildSegments(t, vals.map((v) => classOf(v, br.cuts)), (c) => (c === -1 ? grey : SCALE[c]));
       } else {
         buildSegments(t, vals.map(() => -1), () => grey);
         items.push([grey, tr("no_values")]);
       }
     }
-    legend(items);
+    legend(items, ends);
   }
 
   function buildSegments(t, classes, palette) {
@@ -399,6 +421,7 @@
         axes: [xAxis].concat(d.axes || [axis({ values: yVals, size: 50 })]),
         hooks: {
           setCursor: [(u) => {
+            box.classList.toggle("hovering", u.cursor.idx != null);
             const i = u.cursor.idx;
             if (i == null || di < 0) { if (u.cursor.left < 0) hideMarker(); return; }
             const r = chartRows[i];
