@@ -95,7 +95,7 @@
 {% set cad_gear = {} %}{% for g, m in (a.gears.per_gear or {}).items() %}{% if m.avg_cadence_rpm and (m.moving_seconds or 0) >= 30 %}{% set _ = cad_gear.update({g: m.avg_cadence_rpm}) %}{% endif %}{% endfor %}
 <div class="grid cols-drive{{ '' if cad_gear else ' two' }}">
   <section class="card">
-    <h2>{{ t('ride.modes') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2>
+    <div class="chart-head"><h2>{{ t('ride.modes') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2><span class="muted small">{{ t('ride.changes', n=a.assist.changes) }}</span></div>
     {% set mv_modes = {} %}{% for n, m in a.assist.per_mode.items() %}{% set _ = mv_modes.update({n: m.moving_seconds if m.moving_seconds is defined else m.seconds}) %}{% endfor %}
     {{ bars(mv_modes, 'motor') }}
     <table class="plain" style="margin-top:0.9rem">
@@ -104,13 +104,12 @@
       <tr{% if m.distance_m < 500 %} class="muted"{% endif %}><td>{{ name }}</td><td class="n">{{ (m.distance_m / 1000) | num(1) }} km</td><td class="n">{{ m.avg_moving_speed_kmh | num(1) }}</td><td class="n">{{ m.avg_motor_power_w | num }} W</td><td class="n">{{ m.avg_rider_power_w | num }} W</td></tr>
       {% endfor %}
     </table>
-    <p class="muted small" style="margin-top:0.6rem">{{ t('ride.changes', n=a.assist.changes) }}{% if a.assist.seconds_per_mode.keys() | select('match', 'eigen_') | list %}{{ t('ride.custom_modes_html') }}{% endif %}</p>
+    {% if a.assist.seconds_per_mode.keys() | select('match', 'eigen_') | list %}<p class="muted small" style="margin-top:0.6rem">{{ t('ride.custom_modes_html') | trim }}</p>{% endif %}
   </section>
   <section class="card">
-    <h2>{{ t('ride.gears') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2>
+    <div class="chart-head"><h2>{{ t('ride.gears') }} <span class="muted small">{{ t('ride.while_moving') }}</span></h2><span class="muted small">{{ t('ride.gear_changes', n=a.gears.changes) }}</span></div>
     {% set mv_gears = {} %}{% for n, m in (a.gears.per_gear or {}).items() %}{% set _ = mv_gears.update({n: m.moving_seconds if m.moving_seconds is defined else m.seconds}) %}{% endfor %}
     {{ bars(mv_gears if mv_gears else a.gears.seconds_per_gear, '', 's', 0, {}) }}
-    <p class="muted small" style="margin-top:0.6rem">{{ t('ride.gear_changes', n=a.gears.changes) }}</p>
   </section>
   {% if cad_gear %}<section class="card"><h2>{{ t('ride.d.cad_gear') }} <span class="muted small">{{ t('ride.d.cad_gear_sub') }}</span></h2>{{ bars(cad_gear, 'rider', t('ride.d.rpm'), 0, {}) }}</section>{% endif %}
 </div>
