@@ -10,6 +10,7 @@
   --line: #dcd8cf;
   --rider: #d9661a;
   --motor: #13877a;
+  --hr: #d02a5e;
   --alt: #6b6f9a;
   --hill: #3f8a3a;
   --warn: #b3411b;
@@ -33,6 +34,7 @@
     --line: #333a40;
     --rider: #f08a3e;
     --motor: #35b8a6;
+    --hr: #ff7a98;
     --alt: #9da2d6;
     --hill: #6cc46a;
     --warn: #f07b52;
@@ -53,6 +55,7 @@
   --line: #333a40;
   --rider: #f08a3e;
   --motor: #35b8a6;
+  --hr: #ff7a98;
   --alt: #9da2d6;
   --hill: #6cc46a;
   --warn: #f07b52;
@@ -193,6 +196,7 @@ button.bar[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 1
 .bar .fill { display: block; height: 100%; min-width: 2px; border-radius: 999px; background: var(--ink-3); }
 .bar .fill.rider { background: var(--rider); }
 .bar .fill.motor { background: var(--motor); }
+.bar .fill.hr { background: var(--hr); }
 .bar .track-pair { display: grid; gap: 3px; }
 .bar .track-pair .track { height: 6px; }
 .bar .label { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -435,7 +439,7 @@ html { scroll-behavior: smooth; }
 :is(.t-ride, .t-motor, .t-rider, .t-hill, .t-neutral) > .group-title { color: color-mix(in srgb, var(--accent) 55%, var(--ink)); }
 
 /* Mengen-Balken am Berg in der Mengenfarbe */
-.t-hill .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+.t-hill .bar .fill:not(.rider):not(.motor):not(.hr) { background: var(--alt); }
 .t-ride .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
 
 /* Fahrt umbenennen */

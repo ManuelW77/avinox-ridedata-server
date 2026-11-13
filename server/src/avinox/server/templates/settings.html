@@ -49,6 +49,32 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="sec-hl" data-jump="{{ t('set.hl') }}">
+  <h2 class="section-title">{{ t('set.hl') }}</h2>
+  <p class="muted small block-desc">{{ t('set.hl_text') }}</p>
+<section class="card">
+  <div class="form-row">
+    <label for="hl-url">{{ t('set.hl_url') }}</label>
+    <input type="url" id="hl-url" placeholder="https://" autocomplete="off">
+  </div>
+  <div class="form-row">
+    <label for="hl-enabled" class="switch-row"><input type="checkbox" class="switch" id="hl-enabled"> <span>{{ t('set.hl_toggle') }}</span></label>
+  </div>
+  <p class="small" id="hl-status" role="status"></p>
+  <p class="muted small" id="hl-counts"></p>
+  <form id="hl-form" class="stack" autocomplete="off">
+    <div class="form-row"><label for="hl-user">{{ t('set.hl_user') }}</label><input type="text" id="hl-user" autocomplete="off"></div>
+    <div class="form-row"><label for="hl-pass">{{ t('set.hl_pass') }}</label><input type="password" id="hl-pass" autocomplete="new-password"></div>
+    <div class="form-row" id="hl-code-row" hidden><label for="hl-code">{{ t('set.hl_code') }}</label><input type="text" id="hl-code" inputmode="numeric" autocomplete="one-time-code"></div>
+    <p class="notice" id="hl-msg" role="status" hidden></p>
+    <div class="actions"><button type="submit" class="btn" id="hl-connect">{{ t('set.hl_connect') }}</button></div>
+  </form>
+  <p class="notice" id="hl-retry-msg" role="status" hidden></p>
+  <div class="actions"><button type="button" class="btn ghost" id="hl-retry" hidden>{{ t('set.hl_retry') }}</button></div>
+  <div class="actions"><button type="button" class="btn ghost" id="hl-disconnect" hidden>{{ t('set.hl_disconnect') }}</button></div>
+</section>
+</div>
+
 <div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
   <h2 class="section-title">{{ t('set.upload') }}</h2>
   <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
