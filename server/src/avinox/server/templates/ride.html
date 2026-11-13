@@ -132,7 +132,7 @@
   <section class="card"><h2>{{ t('ride.d.motor') }} <span class="muted small">{{ t('ride.in_motion') }}</span></h2>{{ bars(a.distributions.motor_power_s, 'motor', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.cadence') }} <span class="muted small">{{ t('ride.cadence_moving') }}</span></h2>{{ bars(a.distributions.cadence_s, 'rider', drop_zero=true) }}</section>
   <section class="card"><h2>{{ t('ride.d.speed') }} <span class="muted small">{{ t('ride.speed_moving') }}</span></h2>{{ bars(a.distributions.speed_s, drop_zero=true) }}</section>
-  {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'rider') }}</section>{% endif %}
+  {% if a.distributions.heart_rate_s %}<section class="card"><h2>{{ t('ride.d.hr') }} <span class="muted small">bpm</span></h2>{{ bars(a.distributions.heart_rate_s, 'hr') }}</section>{% endif %}
 </div>
 </div>
 
