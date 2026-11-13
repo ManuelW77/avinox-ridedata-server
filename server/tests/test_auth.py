@@ -564,44 +564,51 @@ def enable(c, body=None, headers=XRW):
     return c.post("/api/v1/auth/enable", json=body or SETUP, headers=headers)
 
 
+def enable_admin(c):
+    """Ersten Admin wie beim Start per Umgebung anlegen (die Weboberfläche kann das nicht), dann einschalten."""
+    c.app.state.auth.create_user(SETUP["username"], SETUP["password"], True)
+    return enable(c)
+
+
 def test_login_off_by_default(settings):
     c = make(settings)
     assert c.get("/settings").status_code == 200
     html = c.get("/settings").text
-    assert 'id="enable-form"' in html and 'id="su-pass2"' in html and "su-code" not in html
+    assert 'id="need-admin"' in html and "AVINOX_WEB_USER" in html and 'id="enable-form"' not in html
     assert c.get("/login", params={"next": "/rides"}).headers["location"] == "/rides"
     assert not hasattr(c.app.state, "setup_code")
 
 
-def test_enable_creates_admin_and_logs_in(settings):
+def test_enable_without_user_is_rejected(settings):
     c = make(settings)
     r = enable(c)
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "no_admin"
+    assert c.app.state.auth.user_count() == 0 and "set-cookie" not in r.headers
+    assert c.get("/api/v1/rides").status_code == 200  # bleibt offen
+
+
+def test_enable_with_env_admin_works(settings):
+    c = make(settings)
+    c.app.state.auth.create_user("erster", "erster-passwort-1", True)  # wie der Start-Admin aus der Umgebung
+    r = enable(c)
     assert r.status_code == 200 and r.json() == {"ok": True} and "avinox_session=" in r.headers["set-cookie"]
-    assert c.app.state.auth.by_name("erster")["is_admin"] == 1
     assert c.get("/settings").status_code == 200
     assert 'id="enable-form"' not in c.get("/settings").text and 'id="oidc-form"' in c.get("/settings").text
     assert make(settings).get("/settings").status_code == 303
     assert enable(c).status_code == 409  # schon an
 
 
-def test_enable_validates_new_admin(settings):
-    c = make(settings)
-    assert enable(c, {"username": "erster", "password": "kurz"}).status_code == 400
-    assert enable(c, {"username": "ungültig name!", "password": "erster-passwort-1"}).status_code == 400
-    assert c.app.state.auth.user_count() == 0
-
-
 def test_enable_csrf(settings):
     c = make(settings)
+    c.app.state.auth.create_user("erster", "erster-passwort-1", True)
     assert enable(c, headers={"Origin": "http://evil.example"}).status_code == 403
     assert enable(c, headers={}).status_code == 403
-    assert c.app.state.auth.user_count() == 0
     assert enable(c, headers={"Origin": "http://testserver"}).status_code == 200
 
 
 def test_disable_admin_only_then_open(settings):
     admin = make(settings)
-    assert enable(admin).status_code == 200
+    assert enable_admin(admin).status_code == 200
     admin.app.state.auth.create_user("fahrer", "fahrer-passwort")
     other = TestClient(admin.app, follow_redirects=False)
     assert login(other, "fahrer", "fahrer-passwort").status_code == 303
@@ -617,7 +624,7 @@ def test_disable_admin_only_then_open(settings):
 
 def test_reenable_needs_existing_admin(settings):
     admin = make(settings)
-    enable(admin)
+    enable_admin(admin)
     admin.app.state.auth.create_user("fahrer", "fahrer-passwort")
     assert admin.post("/api/v1/auth/disable", headers=XRW).status_code == 200
     anon = TestClient(admin.app, follow_redirects=False)
@@ -634,7 +641,7 @@ def test_reenable_needs_existing_admin(settings):
 
 def test_enable_is_throttled(settings):
     c = make(settings)
-    enable(c)
+    enable_admin(c)
     c.post("/api/v1/auth/disable", headers=XRW)
     anon = TestClient(c.app, follow_redirects=False)
     for _ in range(10):
@@ -674,7 +681,7 @@ def test_existing_users_with_flag_off_stay_open(settings):
 
 def test_disable_button_in_settings(settings):
     c = make(settings)
-    enable(c)
+    enable_admin(c)
     html = c.get("/settings").text
     assert 'id="auth-disable"' in html and 'id="oidc-form"' in html
     assert "http://testserver/auth/oidc/callback" in html
@@ -686,7 +693,7 @@ OIDC_BODY = {"enabled": True, "issuer": ISSUER + "/", "client_id": "avinox-test"
 
 def admin_client(settings, idp=None):
     c = make(settings)
-    enable(c)
+    enable_admin(c)
     if idp:
         c.app.state.oidc.transport = httpx2.MockTransport(idp)
     return c

@@ -424,8 +424,6 @@
     enableForm.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const pass = document.getElementById("su-pass").value;
-      const rep = document.getElementById("su-pass2");
-      if (rep && pass !== rep.value) { toast(tr("setup_mismatch"), "error"); return; }
       const res = await fetch("/api/v1/auth/enable", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ username: document.getElementById("su-name").value.trim(), password: pass }) });
       const data = await res.json().catch(() => ({}));
       if (res.ok) location.reload(); else toast(authErr(res, data), "error");
