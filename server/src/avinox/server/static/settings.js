@@ -96,6 +96,60 @@
     });
   }
 
+  // ---- MCP (Claude, ChatGPT)
+  const mcpOn = document.getElementById("mcp-enabled");
+  if (mcpOn) {
+    const $ = (id) => document.getElementById(id);
+    const jsonHdr = { "Content-Type": "application/json" };
+    const showMcp = (d) => {
+      mcpOn.checked = !!d.enabled;
+      $("mcp-body").hidden = !(d.enabled && d.token);
+      $("mcp-url").value = d.url_with_token || "";
+      $("mcp-token").value = d.token || "";
+      $("mcp-cmd").value = d.token ? `claude mcp add --transport http avinox ${d.url} --header "Authorization: Bearer ${d.token}"` : "";
+    };
+    const call = async (method, path, body) => {
+      try {
+        const res = await fetch("/api/v1/settings/mcp" + path, { method, headers: jsonHdr, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) { showMcp(data); return true; }
+        toast(tr("error_n", { n: res.status }), "error");
+      } catch (e) { toast(tr("error_msg", { m: e.message }), "error"); }
+      return false;
+    };
+    fetch("/api/v1/settings/mcp").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) showMcp(d); }).catch(() => {});
+    mcpOn.addEventListener("change", async () => {
+      const want = mcpOn.checked;
+      if (await call("PUT", "", { enabled: want })) toast(tr(want ? "mcp_on_toast" : "mcp_off_toast"));
+      else mcpOn.checked = !want;
+    });
+    $("mcp-show").addEventListener("click", () => {
+      const hidden = $("mcp-token").type === "password";
+      $("mcp-token").type = hidden ? "text" : "password";
+      $("mcp-show").textContent = tr(hidden ? "mcp_hide" : "mcp_show");
+    });
+    $("mcp-new").addEventListener("click", async () => {
+      if (window.confirm(tr("mcp_new_confirm")) && (await call("POST", "/token"))) toast(tr("mcp_new_toast"));
+    });
+    document.querySelectorAll("[data-mcp-copy]").forEach((btn) => btn.addEventListener("click", async () => {
+      const input = $(btn.dataset.mcpCopy);
+      const value = input.value;
+      try {
+        await navigator.clipboard.writeText(value);
+        toast(tr("mcp_copied"));
+      } catch (e) {
+        // Fallback (kein HTTPS o. Ä.): Feld markieren und kopieren
+        const wasPw = input.type === "password";
+        if (wasPw) input.type = "text";
+        input.focus(); input.select();
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+        if (wasPw) input.type = "password";
+        toast(tr(ok ? "mcp_copied" : "mcp_copy_fail"), ok ? undefined : "error");
+      }
+    }));
+  }
+
   // ---- KI-Auswertung
   const aiSave = document.getElementById("ai-save");
   if (aiSave) {

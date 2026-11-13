@@ -25,6 +25,7 @@ from urllib.parse import urlencode, urlsplit
 from ..analysis import ASSIST_LEVELS
 from . import i18n
 from . import ai
+from . import mcp_server
 from . import healthlog
 from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next, valid_issuer
 from .geocode import Nominatim
@@ -220,6 +221,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ai_thread = threading.Thread(target=ai_worker, name="ai", daemon=True)
         ai_thread.start()
         ai_queue.request_scan()  # nach dem Start: Fahrten ohne Text nachholen
+        mcp_ctx = mcp_app.router.lifespan_context(mcp_app)  # MCP-Session-Manager mit der App starten
+        await mcp_ctx.__aenter__()
         if settings.geocode_url:
             geo_thread = threading.Thread(
                 target=geo_worker, args=(Nominatim(settings.geocode_url, f"avinox-ridedata-server/{APP_VERSION}"),), name="geocode", daemon=True
@@ -228,6 +231,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            await mcp_ctx.__aexit__(None, None, None)
             geo_stop.set()
             geo_wake.set()
             hl_wake.set()
@@ -241,6 +245,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.close()
 
     app = FastAPI(title="Avinox Ride Data", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
+    mcp_app = mcp_server.create(store)
+    # Vor Login, CSRF und Read-Auth: /mcp prüft nur das MCP-Token (siehe mcp_server.McpGate)
+    app.add_middleware(mcp_server.McpGate, mcp_app=mcp_app, db=store.db)
     app.state.store = store
     app.state.synclog = synclog
     app.state.settings = settings
@@ -787,6 +794,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def fill_ai():
         n = ai.enqueue_fill(store, ai_queue, ai.lang_of(store.db)) if ai.is_active(store.db) else 0
         return {"queued": n, **ai_state()}
+
+    def mcp_state(request: Request) -> dict:
+        base = (settings.public_url or "").split(",")[0].strip() or str(request.base_url)
+        return mcp_server.settings_view(store.db, base)
+
+    @app.get("/api/v1/settings/mcp", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def get_mcp(request: Request):
+        return mcp_state(request)
+
+    @app.put("/api/v1/settings/mcp", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def put_mcp(payload: dict, request: Request):
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(400, {"error": "invalid", "message": "enabled muss true oder false sein"})
+        mcp_server.set_enabled(store.db, payload["enabled"])
+        return mcp_state(request)
+
+    @app.post("/api/v1/settings/mcp/token", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def new_mcp_token(request: Request):
+        mcp_server.rotate_token(store.db)
+        return mcp_state(request)
 
     def ai_lang_param(lang: str | None) -> str:
         return lang if lang in ai.LANGS else ai.lang_of(store.db)

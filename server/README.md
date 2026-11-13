@@ -48,6 +48,14 @@ Ein Sprachmodell formuliert aus berechneten Kennzahlen kurze Texte und Tipps zu 
 
 **Gesendet werden nur Kennzahlen:** Strecke, Dauer, Tempo, Höhenmeter, Fahrer-/Motorleistung, Motoranteil, Trittfrequenz, Puls, Zeit je Unterstützungsmodus und Gang, Schaltvorgänge, Steigungsbereiche, Akku, Vergleich mit den anderen Fahrten bzw. dem Vorzeitraum, Bestwerte. **Nie** gesendet werden GPS-Daten, Ortsnamen, Fahrt- und Dateinamen, Seriennummern oder Benutzernamen. Bei einem Cloud-Anbieter verlassen diese Zahlen den Server; mit Ollama bleibt alles lokal.
 
+## MCP (Claude, ChatGPT)
+
+Der Server spricht das Model Context Protocol (Streamable HTTP, nur lesend) unter `/mcp`, sodass Claude (claude.ai, Desktop, Code) und ChatGPT die Fahrdaten abfragen können. Standardmäßig aus; einschalten in den Einstellungen („MCP“), dort stehen Adresse, Token und Anleitungen (oder per API `GET/PUT /api/v1/settings/mcp`, `POST /api/v1/settings/mcp/token`; mit Login nur für Admins).
+
+Anmeldung nur mit dem MCP-Token: `Authorization: Bearer <token>` an `/mcp` oder die Adresse `/mcp/<token>` (für Dienste, die nur eine URL erlauben). Ohne gültiges Token 401, bei ausgeschaltetem MCP 404. Wer das Token hat, liest alle Fahrdaten. claude.ai und ChatGPT verbinden sich aus dem Internet, der Server muss dafür per HTTPS öffentlich erreichbar sein (Reverse Proxy, Tunnel).
+
+Werkzeuge: `list_rides`, `get_ride`, `get_period`, `get_bests`, `get_bike_status`. Es werden nie GPS-Daten, Seriennummern, Dateinamen oder Benutzerdaten ausgegeben.
+
 ## Server (Docker)
 
 ```sh
