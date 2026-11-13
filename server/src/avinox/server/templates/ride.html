@@ -18,6 +18,7 @@
   <div class="actions">
     <button type="button" class="btn ghost danger" id="delete-btn" data-ride="{{ ride.id }}">{{ t('ride.delete') }}</button>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/gpx">GPX</a>
+    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/fit">FIT</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>

@@ -2,6 +2,7 @@
 
 * ``avinox summary <datei|ordner> ... [--json]`` – Kennzahlen je Fahrt
 * ``avinox analyze <datei> [--buried datei]`` – vollständige Auswertung als JSON
+* ``avinox fit <datei> [-o ziel]`` – Fahrt als FIT-Datei (binär)
 * ``avinox gpx <datei> [-o ziel]`` / ``avinox geojson <datei> [-o ziel]`` – Strecke
 * ``avinox device <buried_file_cur.json>`` – Geräte- und Sessiondaten
 * ``avinox serve [--host H] [--port P] [--data-dir DIR]`` – Server starten
@@ -21,6 +22,7 @@ from .buried import device_info, parse_buried_file
 from .hms import parse_hms_file
 from .ride_rec import RideRecError, parse_file
 from .summary import summarize
+from .fit import to_fit
 from .track import SIMPLIFY_TOLERANCE_M, to_geojson, to_gpx
 
 
@@ -123,6 +125,18 @@ def cmd_gpx(args: argparse.Namespace) -> int:
     if ride is None:
         return 1
     _write(to_gpx(ride), args.output)
+    return 0
+
+
+def cmd_fit(args: argparse.Namespace) -> int:
+    ride = _load(args.path)
+    if ride is None:
+        return 1
+    data = to_fit(ride)
+    if args.output:
+        Path(args.output).write_bytes(data)
+    else:
+        sys.stdout.buffer.write(data)
     return 0
 
 
@@ -235,6 +249,11 @@ def main(argv: list[str] | None = None) -> int:
     p_gpx.add_argument("path")
     p_gpx.add_argument("-o", "--output")
     p_gpx.set_defaults(func=cmd_gpx)
+
+    p_fit = sub.add_parser("fit", help="Fahrt als FIT-Datei")
+    p_fit.add_argument("path")
+    p_fit.add_argument("-o", "--output")
+    p_fit.set_defaults(func=cmd_fit)
 
     p_geo = sub.add_parser("geojson", help="vereinfachte Strecke als GeoJSON")
     p_geo.add_argument("path")
