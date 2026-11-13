@@ -122,6 +122,16 @@ def _store_bundle(db, bundle: dict, username: str | None = None) -> None:
 # ------------------------------------------------------------------ HTTP
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Keine Weiterleitungen folgen: sonst ginge der Bearer-Token an einen fremden Host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_opener = urllib.request.build_opener(_NoRedirect)
+
+
 def _request(method: str, url: str, headers: dict, body: dict | None, timeout: float = TIMEOUT_S) -> tuple[int, dict]:
     """(HTTP-Status, JSON-Hülle). Netzfehler → ``HealthLogError('unreachable')``."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -130,7 +140,7 @@ def _request(method: str, url: str, headers: dict, body: dict | None, timeout: f
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _opener.open(req, timeout=timeout) as resp:
             status_code, raw = resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         status_code, raw = exc.code, exc.read()
