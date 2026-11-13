@@ -2,7 +2,7 @@
 
 Der Login ist aktiv, sobald mindestens ein Benutzer existiert oder OIDC konfiguriert ist
 (sonst bleibt die Seite wie bisher im LAN offen). Alles nutzt nur die Standardbibliothek
-plus ``authlib``/``joserfc``/``httpx`` für OIDC.
+plus ``authlib``/``joserfc``/``httpx2`` für OIDC.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from joserfc import jwt
 from joserfc.errors import JoseError
@@ -243,7 +243,7 @@ class Oidc:
     PENDING_TTL = 600
     DISCOVERY_TTL = 3600
 
-    def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(self, settings: Settings, transport: httpx2.AsyncBaseTransport | None = None):
         self.s = settings
         self.transport = transport  # nur für Tests (gemockter IdP)
         self._pending: dict[str, dict] = {}
@@ -265,8 +265,8 @@ class Oidc:
             base = next((u for u in urls if urlsplit(u).netloc == host), urls[0])
         return base + "/auth/oidc/callback"
 
-    def _client(self, **kw) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=10, transport=self.transport, **kw)
+    def _client(self, **kw) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(timeout=10, transport=self.transport, **kw)
 
     async def discovery(self) -> dict:
         if self._disc and self._disc[0] > time.monotonic():
@@ -276,7 +276,7 @@ class Oidc:
                 res = await http.get(f"{self.issuer}/.well-known/openid-configuration")
                 res.raise_for_status()
                 doc = res.json()
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx2.HTTPError, ValueError) as exc:
             raise OidcError("unreachable") from exc
         if not all(doc.get(k) for k in ("authorization_endpoint", "token_endpoint", "jwks_uri")):
             raise OidcError("failed")
@@ -290,7 +290,7 @@ class Oidc:
                     res = await http.get(doc["jwks_uri"])
                     res.raise_for_status()
                     self._jwks = (time.monotonic() + self.DISCOVERY_TTL, res.json())
-            except (httpx.HTTPError, ValueError) as exc:
+            except (httpx2.HTTPError, ValueError) as exc:
                 raise OidcError("unreachable") from exc
         return KeySet.import_key_set(self._jwks[1])
 
@@ -325,7 +325,7 @@ class Oidc:
         try:
             async with self._oauth(pending["redirect_uri"], doc) as client:
                 token = await client.fetch_token(doc["token_endpoint"], code=code, code_verifier=pending["verifier"])
-        except Exception as exc:  # authlib/httpx: IdP lehnt ab oder ist nicht erreichbar
+        except Exception as exc:  # authlib/httpx2: IdP lehnt ab oder ist nicht erreichbar
             raise OidcError("failed") from exc
         id_token = token.get("id_token")
         if not id_token:
@@ -352,7 +352,8 @@ class Oidc:
     # --- Zulassung
     def _identities(self, claims: dict) -> set[str]:
         ids = {str(g).lower() for g in (claims.get("groups") or []) if isinstance(g, str)}
-        if claims.get("email") and claims.get("email_verified") is not False:
+        # Nur bestätigte E-Mails zählen (fehlt email_verified, gilt sie als unbestätigt).
+        if claims.get("email") and claims.get("email_verified") is True:
             ids.add(str(claims["email"]).lower())
         return ids
 

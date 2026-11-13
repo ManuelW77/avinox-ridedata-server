@@ -284,11 +284,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return oidc.enabled or auth_store.user_count() > 0
 
     def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
-        """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer."""
+        """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer.
+
+        Basic Auth gilt nur für die API (Skripte). Auf den Seiten würde sonst ein vom Browser
+        gemerktes Basic-Passwort (alter Login) die Login-Seite dauerhaft überspringen.
+        """
         user = auth_store.session_user(request.cookies.get(AUTH_COOKIE))
         if user:
             return user, "session"
-        if cred:
+        if cred and request.url.path.startswith("/api/"):
             # Dieselbe Bremse wie beim Login-Formular, sonst ließe sich über Basic Auth beliebig raten.
             ip = client_ip(request)
             if throttle.blocked(ip, cred.username):
@@ -337,8 +341,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user, via = identify(request, cred)
         if not user:
             raise LoginRequired
-        if via == "session" and request.method not in ("GET", "HEAD", "OPTIONS"):
-            csrf_guard(request, request.cookies.get(AUTH_COOKIE))
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            if via == "session":
+                csrf_guard(request, request.cookies.get(AUTH_COOKIE))
+            else:
+                # Browser senden gemerkte Basic-Daten automatisch mit: fremde Origin/Referer ablehnen.
+                # Skripte (curl) schicken keinen dieser Header und bleiben unberührt.
+                src = request.headers.get("origin") or request.headers.get("referer")
+                if src and urlsplit(src).netloc.lower() not in allowed_hosts(request):
+                    raise HTTPException(403, "Anfrage abgelehnt (CSRF)")
         request.state.user = user
         return user
 

@@ -5,6 +5,7 @@ import hashlib
 import struct
 
 import pytest
+from conftest import web_login
 from fastapi.testclient import TestClient
 
 from avinox.cli import main
@@ -100,13 +101,16 @@ def test_events_and_ota_report(client, settings):
     assert e["kind"] == "ota" and "0.2.0" in e["detail"] and "fehlgeschlagen" in e["detail"] and "Prüfsumme" in e["detail"]
     for bad in ({"device_id": "esp-1", "event": "ota"}, {**body, "ota": {"result": "kaputt"}}):
         assert client.post("/api/v1/device/report", json=bad, headers=auth(settings)).status_code == 400
+    web_login(client, "fahrer", "geheim")  # Seiten brauchen eine Session
     page = client.get("/sync").text
     assert "Firmware-Update" in page and "verfügbar 0.3.0" in page
 
 
 def test_settings_page(client):
+    web_login(client, "fahrer", "geheim")  # Seiten brauchen eine Session
     assert "Noch keine Firmware" in client.get("/settings").text
-    upload(client, image())
+    # Mit Session greift der CSRF-Schutz: fetch im Browser schickt Origin mit
+    client.post("/api/v1/firmware", files={"file": ("avinox-sync.bin", image())}, headers={"Origin": "http://testserver"})
     html = client.get("/settings").text
     assert "Firmware für den ESP32" in html and "avinox-sync 0.3.0" in html
 

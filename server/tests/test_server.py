@@ -156,7 +156,8 @@ def test_basic_auth(settings):
         assert c.get("/api/v1/rides").status_code == 401
         assert c.get("/api/v1/rides", auth=("fahrer", "falsch")).status_code == 401
         assert c.get("/api/v1/rides", auth=("fahrer", "geheim")).status_code == 200
-        assert c.get("/", auth=("fahrer", "geheim")).status_code == 200
+        # Auf Seiten zählt Basic nicht (gemerktes Browser-Passwort würde den Login überspringen)
+        assert c.get("/", auth=("fahrer", "geheim"), follow_redirects=False).status_code == 303
         data = ride_bytes()
         assert put(c, settings, data).status_code == 200
         assert c.put("/api/v1/upload", params={"path": RIDE_PATH, "size": len(data)}, content=data, auth=("fahrer", "geheim")).status_code == 401
@@ -168,7 +169,8 @@ def test_basic_auth_from_env(tmp_path, monkeypatch):
     with TestClient(create_app(load_settings(tmp_path))) as c:
         assert c.get("/healthz").status_code == 200
         assert c.get("/", follow_redirects=False).status_code == 303
-        assert c.get("/", auth=("a", "b")).status_code == 200
+        assert c.get("/api/v1/rides", auth=("a", "b")).status_code == 200
+        assert c.get("/", auth=("a", "b"), follow_redirects=False).status_code == 303
 
 
 def test_rides_page_toolbar(client, settings):
@@ -301,7 +303,10 @@ def test_token_shown_with_web_login(tmp_path, monkeypatch):
     monkeypatch.setenv("AVINOX_WEB_PASSWORD", "p")
     settings = load_settings(tmp_path)
     client = TestClient(create_app(settings))
-    assert settings.upload_token in client.get("/settings", auth=("u", "p")).text
+    from conftest import web_login
+
+    web_login(client, "u", "p")
+    assert settings.upload_token in client.get("/settings").text
 
 
 def _urls(html):
