@@ -222,6 +222,7 @@ dl.kv dd { margin: 0; }
 .btn.ghost { background: var(--surface-2); color: var(--ink); }
 .btn.danger { color: var(--warn); }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.actions.end { justify-content: flex-end; }
 
 input[type=text], input[type=password] {
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0.45rem 0.7rem; width: 100%;
