@@ -99,7 +99,7 @@ def nominatim(monkeypatch, payload=None, error=None):
 def test_nominatim_picks_field(monkeypatch):
     geo, seen = nominatim(monkeypatch, {"address": {"county": "Kreis", "town": "Teststadt", "suburb": "Vorort"}})
     assert geo.reverse(50.0, 10.0) == "Teststadt"  # Reihenfolge: village, town, suburb, city, ...
-    assert seen["url"].startswith("https://geo.example/reverse?format=jsonv2&lat=50.00000&lon=10.00000")
+    assert seen["url"].startswith("https://geo.example/reverse?format=jsonv2&lat=50.000&lon=10.000")
     assert "addressdetails=1" in seen["url"] and "zoom=14" in seen["url"]
     assert seen["ua"] == "test-agent/1"
     geo, _ = nominatim(monkeypatch, {"address": {"county": "Kreis"}})

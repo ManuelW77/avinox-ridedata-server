@@ -9,7 +9,7 @@
 | ``AVINOX_TZ`` | ``Europe/Berlin`` | Zeitzone für die Anzeige |
 | ``AVINOX_TILE_URL`` | OpenStreetMap | Kachel-URL für die Karte |
 | ``AVINOX_TILE_ATTRIBUTION`` | © OpenStreetMap | Quellenangabe der Karte |
-| ``AVINOX_GEOCODE_URL`` | OpenStreetMap Nominatim | Dienst für Ortsnamen der Fahrten; ``off`` schaltet ihn ganz ab |
+| ``AVINOX_GEOCODE_URL`` | OpenStreetMap Nominatim | Dienst für Ortsnamen der Fahrten (erst nach Einschalten in den Einstellungen aktiv, Koordinaten auf ca. 100 m gerundet); ``off`` schaltet ihn ganz ab |
 | ``AVINOX_MAX_UPLOAD_MB`` | ``64`` | Größte erlaubte Datei |
 """
 

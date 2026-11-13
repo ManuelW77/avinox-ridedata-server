@@ -159,7 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             geo_wake.clear()
             try:
                 # volles Paket = vermutlich mehr offen; weitermachen, bis der Rest kleiner ist
-                while store.db.get_setting("geocode_enabled", True) and not geo_stop.is_set():
+                while store.db.get_setting("geocode_enabled", False) and not geo_stop.is_set():
                     if store.geocode_pending(geocoder, limit=50) < 50:
                         break
             except Exception:  # Worker darf nie sterben
@@ -506,7 +506,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/settings/geocode", dependencies=[Depends(read_auth)], tags=["einstellungen"])
     def get_geocode():
         return {
-            "enabled": bool(store.db.get_setting("geocode_enabled", True)),
+            "enabled": bool(store.db.get_setting("geocode_enabled", False)),
             "available": bool(settings.geocode_url),
             "pending": store.geocode_pending_count(),
         }

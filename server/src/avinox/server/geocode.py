@@ -41,7 +41,7 @@ class Nominatim:
 
     def reverse(self, lat: float, lon: float) -> str | None:
         query = urllib.parse.urlencode(
-            {"format": "jsonv2", "lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "zoom": 14, "addressdetails": 1, "accept-language": "de,en"}
+            {"format": "jsonv2", "lat": f"{lat:.3f}", "lon": f"{lon:.3f}", "zoom": 14, "addressdetails": 1, "accept-language": "de,en"}
         )
         req = urllib.request.Request(f"{self.base_url}/reverse?{query}", headers={"User-Agent": self.user_agent})
         with self._lock:  # Abstand zwischen zwei Anfragen einhalten, auch über Threads hinweg
