@@ -120,22 +120,47 @@ main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 /* Fahrtenliste */
 .rides { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .ride-row {
-  display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px;
+  display: grid; grid-template-columns: minmax(200px, 1.8fr) repeat(5, minmax(64px, 1fr));
   align-items: center; gap: 0.75rem; text-decoration: none;
-  background: var(--surface); border-radius: 12px; padding: 0.8rem 1rem;
+  background: var(--surface); border-radius: 12px; padding: 0.6rem 1rem;
 }
 .ride-row:hover { outline: 2px solid var(--line); }
-.ride-row .when { font-weight: 600; }
-.ride-row .when span { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
-.ride-row .n { text-align: right; }
+.ride-row .when { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.ride-row .when .thumb { flex: none; width: 64px; height: 40px; }
+.ride-row .when span.thumb { background: var(--surface-2); border-radius: 6px; }
+.ride-row .when svg.thumb path { fill: none; stroke: var(--accent, currentColor); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ride-row .when-text { min-width: 0; }
+.ride-row .when-text strong { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ride-row .when .when-text > span { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
+.ride-row .loop { font-style: normal; }
+.ride-row .n { text-align: right; font-variant-numeric: tabular-nums; }
 .ride-row .n small { color: var(--ink-3); margin-left: 0.1rem; }
-.ride-row .flags { color: var(--ink-3); text-align: right; font-size: 0.8rem; }
-.rides-head { display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px; gap: 0.75rem; padding: 0 1rem 0.3rem; color: var(--ink-3); font-size: 0.78rem; }
+.rides-head { display: grid; grid-template-columns: minmax(200px, 1.8fr) repeat(5, minmax(64px, 1fr)); gap: 0.75rem; padding: 0 1rem 0.3rem; color: var(--ink-3); font-size: 0.78rem; }
 .rides-head span:not(:first-child) { text-align: right; }
+.rides li[hidden], .rides-tools [hidden], .bar[hidden], .card.empty[hidden] { display: none; }
+.rides li.group-head { padding: 0.9rem 0.25rem 0.25rem; color: var(--ink-3); font-size: 0.8rem; border-bottom: 1px solid var(--line); }
+.rides li.group-head:first-child { padding-top: 0; }
 @media (max-width: 720px) {
   .ride-row, .rides-head { grid-template-columns: 1fr repeat(2, auto); }
   .ride-row .opt, .rides-head .opt { display: none; }
 }
+
+/* Werkzeugleiste der Fahrtenliste (erst mit JS sichtbar) */
+.rides-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.9rem; }
+.rides-tools:not(.ready) { display: none; }
+.rt-search { display: flex; align-items: center; gap: 0.4rem; background: var(--surface-2); border-radius: 999px; padding: 0.3rem 0.8rem; flex: 1 1 14rem; max-width: 22rem; color: var(--ink-3); }
+.rt-search input { border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; width: 100%; outline: none; }
+.rt-gps, .rides-tools select {
+  border: 0; background: var(--surface-2); color: var(--ink-2); font: inherit; font-size: 0.85rem;
+  padding: 0.38rem 0.85rem; border-radius: 999px; cursor: pointer;
+}
+.rt-gps[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)); }
+button.bar {
+  border: 0; background: transparent; color: inherit; font: inherit; font-size: 0.85rem; width: 100%; text-align: left;
+  padding: 0.2rem 0.4rem; border-radius: 8px; cursor: pointer;
+}
+button.bar:hover { background: var(--surface-2); }
+button.bar[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)); }
 
 /* Karte und Diagramme */
 #map { height: 460px; border-radius: var(--radius); background: var(--surface-2); z-index: 0; }
@@ -410,3 +435,10 @@ html { scroll-behavior: smooth; }
 /* Neutrale Balken nehmen die Farbe der Gruppe an */
 .t-hill .bar .fill:not(.rider):not(.motor) { background: var(--hill); }
 .t-ride .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+
+/* Fahrt umbenennen */
+.rename-btn { font: inherit; font-size: 0.6em; border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 0.1rem 0.4rem; border-radius: 6px; vertical-align: middle; }
+.rename-btn:hover { color: var(--ink); background: var(--surface-2); }
+.rename-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.rename-form input { font: inherit; font-size: 1.1rem; min-width: min(28rem, 100%); padding: 0.3rem 0.5rem; }
+

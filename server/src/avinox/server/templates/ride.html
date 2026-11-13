@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import figure, figure_text, bars, bars_pair with context %}
-{% block title %}{{ ride.start_utc | localtime }} – Avinox Ride Data{% endblock %}
+{% block title %}{{ ride.name }} · {{ ride.start_utc | localtime if ride.start_utc else t('ride_n', n=ride.ride_id) }} – Avinox Ride Data{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css').path }}">
 <link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
@@ -9,8 +9,9 @@
 {% set d = a.device_stats %}
 <div class="lead">
   <div>
-    <h1>{{ ride.start_utc | localtime('%a %d.%m.%Y, %H:%M Uhr') if ride.start_utc else t('ride_no_time', n=ride.ride_id) }}</h1>
-    <p>{{ t('ride.sub', n=ride.ride_id) }} · <span class="mono">{{ ride.path.split('/')[-1] }}</span>
+    <h1 id="ride-title" data-ride="{{ ride.id }}" data-custom="{{ ride.name_custom or '' }}"><span id="ride-title-text">{{ ride.name }}</span>
+      <button type="button" class="rename-btn" id="rename-btn" title="{{ t('ride.rename') }}" aria-label="{{ t('ride.rename') }}">✎</button></h1>
+    <p>{{ ride.start_utc | localtime('%a %d.%m.%Y, %H:%M Uhr') if ride.start_utc else t('ride_no_time', n=ride.ride_id) }} · {{ t('ride.sub', n=ride.ride_id) }} · <span class="mono">{{ ride.path.split('/')[-1] }}</span>
       {% if a.warnings %}<span class="pill warn" title="{{ a.warnings | join('; ') }}">{{ t('ride.warnings', n=a.warnings | length) }}</span>{% endif %}
     </p>
   </div>
@@ -213,4 +214,5 @@
 <script src="{{ url_for('static', path='vendor/leaflet/leaflet.js').path }}"></script>
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
+<script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
 {% endblock %}

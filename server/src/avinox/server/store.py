@@ -22,7 +22,7 @@ from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
 from ..ride_rec import RideRecError, parse_ride
 from ..track import to_geojson, to_gpx
-from . import dashboard
+from . import dashboard, geocode, i18n
 from .firmware import read_app_info
 from .config import Settings
 from .db import Database
@@ -103,6 +103,7 @@ class Store:
         self.db = Database(settings.db_path)
         self._sessions: list[Session] | None = None
         self._lock = threading.RLock()
+        self._derived_cache: dict[tuple[int, str], tuple[str | None, bool | None]] = {}
 
     # ------------------------------------------------------------------ Firmware
 
@@ -362,22 +363,117 @@ class Store:
                     levels.add(int(key.removeprefix("eigen_")))
         return sorted(levels | set(self.mode_names()))
 
+    def _derived(self, ride_pk: int, updated_at: str, geojson: str | None = None) -> tuple[str | None, bool | None]:
+        """(Vorschau-Pfad, Rundfahrt?) je Fahrt und Berechnungsstand, damit nicht jedes Mal GeoJSON geparst wird."""
+        key = (ride_pk, updated_at)
+        hit = self._derived_cache.get(key)
+        if hit is not None:
+            return hit
+        if geojson is None:
+            row = self.db.one("SELECT geojson FROM rides WHERE id = ?", (ride_pk,))
+            geojson = row["geojson"] if row else "{}"
+        data = json.loads(geojson)
+        pts = geocode.route_points(data)
+        result = (geocode.thumb_path(data), geocode.is_loop(pts[0], pts[1]) if pts else None)
+        for stale in [k for k in self._derived_cache if k[0] == ride_pk]:
+            del self._derived_cache[stale]
+        self._derived_cache[key] = result
+        return result
+
+    def _name_fields(self, row, loop: bool | None) -> dict:
+        places = json.loads(row["places_json"]) if row["places_json"] else None
+        custom = row["custom_name"] or None
+        start_local = datetime.fromisoformat(row["start_utc"]).astimezone(self.settings.tz) if row["start_utc"] else None
+        name = custom or geocode.ride_name(places, start_local, bool(loop), i18n.current(), row["ride_id"])
+        return {"name": name, "name_custom": custom, "places": places, "is_loop": loop}
+
     def list_rides(self) -> list[dict]:
         rows = self.db.query(
-            "SELECT id, path, ride_id, start_utc, duration_s, moving_time_s, distance_m, ascent_m, descent_m, avg_speed_kmh, "
-            "max_speed_kmh, avg_rider_power_w, avg_motor_power_w, avg_cadence_rpm, calories_kcal, battery_start_pct, "
-            "battery_end_pct, has_gps, has_device_stats, warnings FROM rides "
-            "ORDER BY start_utc IS NULL, start_utc DESC, path DESC"
+            "SELECT r.id, r.path, r.ride_id, r.start_utc, r.duration_s, r.moving_time_s, r.distance_m, r.ascent_m, r.descent_m, "
+            "r.avg_speed_kmh, r.max_speed_kmh, r.avg_rider_power_w, r.avg_motor_power_w, r.avg_cadence_rpm, r.calories_kcal, "
+            "r.battery_start_pct, r.battery_end_pct, r.has_gps, r.has_device_stats, r.warnings, r.updated_at, "
+            "m.custom_name, m.places_json FROM rides r LEFT JOIN ride_meta m ON m.path = r.path "
+            "ORDER BY r.start_utc IS NULL, r.start_utc DESC, r.path DESC"
         )
-        return [dict(r) for r in rows]
+        out = []
+        for row in rows:
+            d = {k: row[k] for k in row.keys() if k not in ("updated_at", "custom_name", "places_json")}
+            thumb, loop = self._derived(row["id"], row["updated_at"]) if row["has_gps"] else (None, None)
+            d.update(self._name_fields(row, loop))
+            d["thumb"] = thumb
+            out.append(d)
+        return out
 
     def get_ride(self, ride_pk: int) -> dict | None:
-        row = self.db.one("SELECT * FROM rides WHERE id = ?", (ride_pk,))
+        row = self.db.one(
+            "SELECT r.*, m.custom_name, m.places_json FROM rides r LEFT JOIN ride_meta m ON m.path = r.path WHERE r.id = ?", (ride_pk,)
+        )
         if not row:
             return None
-        out = {k: row[k] for k in row.keys() if k not in ("analysis_json", "geojson")}
+        hidden = ("analysis_json", "geojson", "custom_name", "places_json")
+        out = {k: row[k] for k in row.keys() if k not in hidden}
         out["analysis"] = apply_mode_names(json.loads(row["analysis_json"]), self.mode_names())
+        loop = self._derived(row["id"], row["updated_at"], row["geojson"])[1] if row["has_gps"] else None
+        out.update(self._name_fields(row, loop))
         return out
+
+    # ------------------------------------------------------------------ Namen
+
+    def set_ride_name(self, ride_pk: int, name: str | None) -> bool:
+        row = self.db.one("SELECT path FROM rides WHERE id = ?", (ride_pk,))
+        if not row:
+            return False
+        clean = (name or "").strip()[:80].strip() or None
+        self.db.execute(
+            "INSERT INTO ride_meta(path, custom_name) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET custom_name = excluded.custom_name",
+            (row["path"], clean),
+        )
+        return True
+
+    def geocode_pending_count(self) -> int:
+        row = self.db.one(
+            "SELECT COUNT(*) AS n FROM rides r LEFT JOIN ride_meta m ON m.path = r.path WHERE r.has_gps = 1 AND m.geocoded_at IS NULL"
+        )
+        return row["n"]
+
+    def geocode_pending(self, geocoder, limit: int = 50) -> int:
+        """Holt Ortsnamen für Fahrten ohne ``geocoded_at``. Bei Dienstfehler Abbruch (Rest später); Rückgabe = erledigte Fahrten."""
+        rows = self.db.query(
+            "SELECT r.id, r.path, r.updated_at, r.geojson FROM rides r LEFT JOIN ride_meta m ON m.path = r.path "
+            "WHERE r.has_gps = 1 AND m.geocoded_at IS NULL ORDER BY r.start_utc DESC, r.path DESC LIMIT ?",
+            (limit,),
+        )
+        done = 0
+        for row in rows:
+            pts = geocode.route_points(json.loads(row["geojson"]))
+            if pts is None:
+                places = None
+            else:
+                try:
+                    names = [self._place_name(geocoder, lat, lon) for lat, lon in pts]
+                except geocode.GeocodeError as exc:
+                    log.warning("Ortsnamen nicht abrufbar, später erneut: %s", exc)
+                    return done
+                places = dict(zip(("start", "end", "far"), names))
+            self.db.execute(
+                "INSERT INTO ride_meta(path, places_json, geocoded_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(path) DO UPDATE SET places_json = excluded.places_json, geocoded_at = excluded.geocoded_at",
+                (row["path"], json.dumps(places, ensure_ascii=False) if places else None, _now()),
+            )
+            done += 1
+        return done
+
+    def _place_name(self, geocoder, lat: float, lon: float) -> str | None:
+        key = f"{lat:.3f},{lon:.3f}"
+        hit = self.db.one("SELECT name FROM geocache WHERE key = ?", (key,))
+        if hit:
+            return hit["name"]
+        name = geocoder.reverse(lat, lon)
+        self.db.execute(
+            "INSERT INTO geocache(key, name, fetched_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET name = excluded.name, fetched_at = excluded.fetched_at",
+            (key, name, _now()),
+        )
+        return name
 
     def ride_geojson(self, ride_pk: int) -> str | None:
         row = self.db.one("SELECT geojson FROM rides WHERE id = ?", (ride_pk,))

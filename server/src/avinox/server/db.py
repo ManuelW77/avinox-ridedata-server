@@ -86,6 +86,19 @@ CREATE TABLE IF NOT EXISTS firmware (
     is_current  INTEGER NOT NULL DEFAULT 0,
     UNIQUE (project, version)
 );
+
+CREATE TABLE IF NOT EXISTS ride_meta (
+    path        TEXT PRIMARY KEY,   -- = rides.path (bleibt bei Neuberechnung stabil)
+    custom_name TEXT,               -- von Hand gesetzt, NULL = automatisch
+    places_json TEXT,               -- {"start": "...", "end": "...", "far": "..."} (Werte können null sein)
+    geocoded_at TEXT                -- gesetzt, sobald erfolgreich (auch wenn keine Orte gefunden)
+);
+
+CREATE TABLE IF NOT EXISTS geocache (
+    key        TEXT PRIMARY KEY,    -- "lat,lon" auf 3 Nachkommastellen gerundet
+    name       TEXT,                -- NULL = Dienst kannte nichts
+    fetched_at TEXT NOT NULL
+);
 """
 
 

@@ -31,6 +31,7 @@ def buried_ride_bytes() -> bytes:
 def clean_env(monkeypatch):
     for key in ("AVINOX_UPLOAD_TOKEN", "AVINOX_WEB_USER", "AVINOX_WEB_PASSWORD", "AVINOX_DATA_DIR", "AVINOX_PUBLIC_URL"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("AVINOX_GEOCODE_URL", "off")  # nie ins Netz
 
 
 @pytest.fixture
@@ -163,6 +164,12 @@ def test_basic_auth_from_env(tmp_path, monkeypatch):
         assert c.get("/healthz").status_code == 200
         assert c.get("/").status_code == 401
         assert c.get("/", auth=("a", "b")).status_code == 200
+
+
+def test_rides_page_toolbar(client, settings):
+    put(client, settings, ride_bytes(assist=21))
+    page = client.get("/rides").text
+    assert 'id="rides-tools"' in page and "data-search=" in page and "rides.js" in page
 
 
 def test_pages(client, settings):

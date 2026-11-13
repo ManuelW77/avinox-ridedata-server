@@ -28,6 +28,30 @@
     });
   }
 
+  // ---- Ortsnamen an/aus
+  const geoBox = document.getElementById("geo-enabled");
+  if (geoBox) {
+    const geoStatus = document.getElementById("geo-status");
+    const geoOff = document.getElementById("geo-off");
+    const showGeo = (d) => {
+      geoBox.checked = !!d.enabled;
+      geoBox.disabled = !d.available;
+      geoOff.hidden = !!d.available;
+      geoStatus.textContent = d.available && d.enabled && d.pending > 0 ? tr("geo_pending", { n: d.pending }) : "";
+    };
+    fetch("/api/v1/settings/geocode").then((r) => r.json()).then(showGeo).catch(() => {});
+    geoBox.addEventListener("change", async () => {
+      try {
+        const res = await fetch("/api/v1/settings/geocode", {
+          method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: geoBox.checked }),
+        });
+        if (res.ok) showGeo(await res.json());
+      } catch (e) {
+        geoStatus.textContent = tr("error_msg", { m: e.message });
+      }
+    });
+  }
+
   // ---- Upload
   const patEl = document.getElementById("upload-patterns");
   const patterns = patEl ? JSON.parse(patEl.textContent).map((p) => new RegExp(p)) : [];

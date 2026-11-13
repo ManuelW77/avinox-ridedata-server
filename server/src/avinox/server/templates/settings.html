@@ -37,6 +37,18 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="sec-geo" data-jump="{{ t('set.geo') }}">
+  <h2 class="section-title">{{ t('set.geo') }}</h2>
+  <p class="muted small block-desc">{{ t('set.geo_text') }}</p>
+<section class="card">
+  <div class="form-row">
+    <label for="geo-enabled"><input type="checkbox" id="geo-enabled" disabled> {{ t('set.geo_toggle') }}</label>
+  </div>
+  <p class="muted small" id="geo-status" role="status"></p>
+  <p class="notice" id="geo-off" hidden>{{ t('set.geo_off_hint') }}</p>
+</section>
+</div>
+
 <div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
   <h2 class="section-title">{{ t('set.upload') }}</h2>
   <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
