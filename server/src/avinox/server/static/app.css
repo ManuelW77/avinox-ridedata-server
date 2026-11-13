@@ -442,3 +442,10 @@ html { scroll-behavior: smooth; }
 .rename-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .rename-form input { font: inherit; font-size: 1.1rem; min-width: min(28rem, 100%); padding: 0.3rem 0.5rem; }
 
+.hint-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.hint-list li { display: grid; grid-template-columns: 0.7rem 1fr; gap: 0.6rem; align-items: start; }
+.hint-list .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-top: 0.3rem; background: var(--ink-3); }
+.hint-list .dot.ok { background: var(--hill); }
+.hint-list .dot.info { background: var(--alt); }
+.hint-list .dot.warn { background: var(--warn); }
+.bars.mini .bar { grid-template-columns: 8.5rem 1fr 5.5rem; }
