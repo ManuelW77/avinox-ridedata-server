@@ -100,6 +100,17 @@ CREATE TABLE IF NOT EXISTS ride_meta (
     geocoded_at TEXT                -- gesetzt, sobald erfolgreich (auch wenn keine Orte gefunden)
 );
 
+-- Puls aus HealthLog je Fahrt (Schlüssel = rides.path, bleibt bei Neuberechnung erhalten)
+CREATE TABLE IF NOT EXISTS ride_hr (
+    path        TEXT PRIMARY KEY,
+    source      TEXT,               -- healthlog_workout | healthlog_measurements | healthlog_mixed
+    workout_id  TEXT,
+    points_json TEXT,               -- [[unix_ts, bpm, "w"|"m"], ...]
+    status      TEXT NOT NULL,      -- ok | none | error
+    detail      TEXT,
+    fetched_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS geocache (
     key        TEXT PRIMARY KEY,    -- "lat,lon" auf 3 Nachkommastellen gerundet
     name       TEXT,                -- NULL = Dienst kannte nichts

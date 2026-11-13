@@ -47,6 +47,7 @@
     {{ figure(s.max_rider_torque_nm, t('ride.f.torque'), 'Nm', 0, 'rider') }}
     {% if s.avg_heart_rate_bpm %}{{ figure(s.avg_heart_rate_bpm, t('ride.f.hr'), 'bpm') }}{% endif %}
   </div>
+  {% if a.hr_source %}<p class="muted small" id="hr-source">{{ t('ride.hr.healthlog' if a.hr_source == 'healthlog_workout' else 'ride.hr.' ~ a.hr_source) }}</p>{% endif %}
   <h3 class="group-title g-motor t-motor">{{ t('ride.grp.motor') }}</h3>
   <div class="figures">
     {{ figure(s.avg_motor_power_w, t('ride.f.avg_motor'), 'W', 0, 'motor') }}

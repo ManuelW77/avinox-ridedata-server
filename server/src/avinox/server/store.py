@@ -16,7 +16,7 @@ import json
 import logging
 import re
 import threading
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from .. import battery
@@ -26,14 +26,14 @@ from ..hms import parse_hms
 from ..ride_rec import RideRecError, parse_ride
 from ..fit import to_fit
 from ..track import to_geojson, to_gpx
-from . import dashboard, geocode, i18n
+from . import dashboard, geocode, healthlog, i18n
 from .firmware import read_app_info
 from .config import Settings
 from .db import Database
 
 log = logging.getLogger("avinox.store")
 
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 """Erhöhen, wenn sich Parser oder Auswertung ändern – dann wird alles neu berechnet."""
 
 _SEG = r"[A-Za-z0-9_-]{1,64}"
@@ -289,6 +289,19 @@ class Store:
                 self._sessions = list(seen.values())
             return self._sessions
 
+    def _load_ride(self, path: str, data: bytes):
+        """Fahrt parsen; ohne Gurt-Puls den Puls aus HealthLog (``ride_hr``) einsetzen. Gibt (Ride, Pulsquelle) zurück.
+
+        Pulsquelle: ``belt``, ``healthlog_workout|measurements|mixed`` oder ``None``.
+        """
+        ride = parse_ride(data)
+        if healthlog.has_belt_hr(ride):
+            return ride, "belt"
+        row = self.db.one("SELECT source, points_json FROM ride_hr WHERE path = ? AND status = 'ok'", (path,))
+        if row and row["points_json"] and healthlog.merge_heart_rate(ride, json.loads(row["points_json"])):
+            return ride, row["source"]
+        return ride, None
+
     def _process_ride(self, file_id: int, path: str, data: bytes) -> int | None:
         if self.db.one("SELECT 1 FROM deleted_rides WHERE path = ?", (path,)):
             return None  # vom Nutzer gelöscht: nur in files vermerkt
@@ -296,11 +309,12 @@ class Store:
         if current and current["file_id"] != file_id and current["size"] > len(data):
             return current["id"]  # ältere, kürzere Fassung einer schon bekannten Fahrt
         try:
-            ride = parse_ride(data)
+            ride, hr_source = self._load_ride(path, data)
         except RideRecError as exc:
             log.warning("Fahrt %s nicht lesbar: %s", path, exc)
             return None
         analysis = analyze(ride, self.sessions())
+        analysis["hr_source"] = hr_source
         s = analysis["summary"]
         row = {
             "path": path,
@@ -447,6 +461,7 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO deleted_rides(path, deleted_at) VALUES (?, ?)", (path, _now()))
             self.db.execute("DELETE FROM rides WHERE id = ?", (ride_pk,))
             self.db.execute("DELETE FROM ride_meta WHERE path = ?", (path,))
+            self.db.execute("DELETE FROM ride_hr WHERE path = ?", (path,))
             for key in [k for k in self._derived_cache if k[0] == ride_pk]:
                 del self._derived_cache[key]
             self._sessions = None
@@ -458,6 +473,72 @@ class Store:
                 if not shared:
                     self._raw_path(f["sha256"]).unlink(missing_ok=True)
             return True
+
+    # ------------------------------------------------------------------ HealthLog-Puls
+
+    HR_RETRY_NONE_S = 3600
+    HR_RECENT_DAYS = 3
+
+    def _hr_candidates(self) -> list:
+        """Fahrten ohne Gurt-Puls und ohne erfolgreichen HealthLog-Abruf (mit Uhrzeit)."""
+        return self.db.query(
+            "SELECT r.id, r.file_id, r.path, r.start_utc, r.duration_s, h.status, h.fetched_at FROM rides r "
+            "LEFT JOIN ride_hr h ON h.path = r.path WHERE r.start_utc IS NOT NULL "
+            "AND json_extract(r.analysis_json, '$.hr_source') IS NOT 'belt' AND (h.status IS NULL OR h.status != 'ok') "
+            "ORDER BY r.start_utc DESC"
+        )
+
+    def hr_counts(self) -> dict:
+        ok = self.db.one("SELECT COUNT(*) AS n FROM ride_hr WHERE status = 'ok'")["n"]
+        return {"open": len(self._hr_candidates()), "ok": ok}
+
+    def _hr_due(self, row, now: datetime) -> bool:
+        if row["status"] is None:
+            return True
+        age = (now - datetime.fromisoformat(row["fetched_at"])).total_seconds()
+        if row["status"] == "error":
+            return age >= self.HR_RETRY_NONE_S
+        start = datetime.fromisoformat(row["start_utc"])
+        return (now - start).days < self.HR_RECENT_DAYS and age >= self.HR_RETRY_NONE_S  # none
+
+    def healthlog_pending(self, limit: int = 20, now: datetime | None = None, fetch=None) -> int:
+        """Holt den Puls für Fahrten ohne Gurt-Puls. Bei Verbindungsfehler Abbruch (später erneut); Rückgabe = bearbeitete Fahrten."""
+        fetch = fetch or (lambda s, e: healthlog.fetch_heart_rate(self.db, s, e))
+        now = now or datetime.now(UTC)
+        done = 0
+        for row in self._hr_candidates():
+            if done >= limit:
+                break
+            if not self._hr_due(row, now):
+                continue
+            start = datetime.fromisoformat(row["start_utc"])
+            try:
+                res = fetch(start, start + timedelta(seconds=row["duration_s"]))
+            except healthlog.HealthLogError as exc:
+                log.warning("HealthLog-Puls nicht abrufbar (%s), später erneut", exc.code)
+                return done
+            except Exception as exc:  # unerwartete Antwort: Fahrt vermerken, Rest weiter
+                log.exception("HealthLog-Puls für %s", row["path"])
+                self._save_hr(row["path"], "error", detail=str(exc)[:200], now=now)
+                done += 1
+                continue
+            if res.points:
+                self._save_hr(row["path"], "ok", res.source, res.workout_id, res.points, now=now)
+                with self._lock:
+                    self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
+            else:
+                self._save_hr(row["path"], "none", now=now)
+            done += 1
+        return done
+
+    def _save_hr(self, path: str, status: str, source=None, workout_id=None, points=None, detail=None, now=None) -> None:
+        self.db.execute(
+            "INSERT INTO ride_hr(path, source, workout_id, points_json, status, detail, fetched_at) VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(path) DO UPDATE SET source = excluded.source, workout_id = excluded.workout_id, "
+            "points_json = excluded.points_json, status = excluded.status, detail = excluded.detail, fetched_at = excluded.fetched_at",
+            (path, source, workout_id, json.dumps([list(p) for p in points]) if points else None, status, detail,
+             (now or datetime.now(UTC)).isoformat(timespec="seconds")),
+        )
 
     def geocode_pending_count(self) -> int:
         row = self.db.one(
@@ -509,18 +590,18 @@ class Store:
         return row["geojson"] if row else None
 
     def ride_gpx(self, ride_pk: int) -> tuple[str, str] | None:
-        row = self.db.one("SELECT file_id, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
+        row = self.db.one("SELECT file_id, path, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
         if not row:
             return None
-        ride = parse_ride(self.read_raw(row["file_id"]))
+        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.gpx"
         return to_gpx(ride), name
 
     def ride_fit(self, ride_pk: int) -> tuple[bytes, str] | None:
-        row = self.db.one("SELECT file_id, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
+        row = self.db.one("SELECT file_id, path, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
         if not row:
             return None
-        ride = parse_ride(self.read_raw(row["file_id"]))
+        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.fit"
         return to_fit(ride), name
 

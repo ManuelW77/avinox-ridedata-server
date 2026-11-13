@@ -24,6 +24,7 @@ from urllib.parse import urlencode
 
 from ..analysis import ASSIST_LEVELS
 from . import i18n
+from . import healthlog
 from .geocode import Nominatim
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
@@ -166,9 +167,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.exception("Ortsnamen-Worker")
             geo_wake.wait(600)
 
+    # HealthLog-Puls: Worker läuft nur bei verbundenem und eingeschaltetem HealthLog
+    hl_wake = threading.Event()
+    hl_thread: threading.Thread | None = None
+
+    def hl_worker() -> None:
+        while not geo_stop.is_set():
+            hl_wake.clear()
+            try:
+                while healthlog.is_active(store.db) and not geo_stop.is_set():
+                    if store.healthlog_pending(limit=20) < 20:
+                        break
+            except Exception:  # Worker darf nie sterben
+                log.exception("HealthLog-Worker")
+            hl_wake.wait(600)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        nonlocal geo_thread
+        nonlocal geo_thread, hl_thread
+        hl_thread = threading.Thread(target=hl_worker, name="healthlog", daemon=True)
+        hl_thread.start()
         if settings.geocode_url:
             geo_thread = threading.Thread(
                 target=geo_worker, args=(Nominatim(settings.geocode_url, f"avinox-ridedata-server/{APP_VERSION}"),), name="geocode", daemon=True
@@ -179,6 +197,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             geo_stop.set()
             geo_wake.set()
+            hl_wake.set()
+            if hl_thread:
+                hl_thread.join(timeout=15)
             if geo_thread:
                 geo_thread.join(timeout=15)
             store.close()
@@ -320,6 +341,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         elif result.get("complete"):
             if result.get("new"):
                 geo_wake.set()
+                hl_wake.set()
             synclog.event("file_new" if result.get("new") else "file_known", ip, dev, path=result["path"], size=size, status=200)
         return JSONResponse(result, status_code=409 if result.get("conflict") else 200)
 
@@ -534,6 +556,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         geo_wake.set()
         return get_geocode()
 
+    def healthlog_state() -> dict:
+        return {**healthlog.status(store.db), **store.hr_counts()}
+
+    @app.get("/api/v1/settings/healthlog", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_healthlog():
+        return healthlog_state()
+
+    @app.put("/api/v1/settings/healthlog", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def put_healthlog(payload: dict):
+        if "enabled" in payload and not isinstance(payload["enabled"], bool):
+            raise HTTPException(400, "enabled muss true oder false sein")
+        if "url" in payload and not isinstance(payload["url"], str):
+            raise HTTPException(400, "url muss ein Text sein")
+        try:
+            if "url" in payload:
+                healthlog.set_url(store.db, payload["url"])
+        except healthlog.HealthLogError as exc:
+            raise HTTPException(400, {"error": exc.code, "message": str(exc)}) from exc
+        if "enabled" in payload:
+            healthlog.set_enabled(store.db, payload["enabled"])
+        hl_wake.set()
+        return healthlog_state()
+
+    @app.post("/api/v1/settings/healthlog/connect", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def connect_healthlog(payload: dict):
+        values = {k: payload.get(k) for k in ("url", "username", "password", "mfa_code")}
+        if any(v is not None and not isinstance(v, str) for v in values.values()):
+            raise HTTPException(400, "Angaben müssen Text sein")
+        try:
+            result = healthlog.connect(store.db, values["url"], values["username"] or "", values["password"] or "", values["mfa_code"])
+        except healthlog.HealthLogError as exc:
+            code = {"unreachable": 502, "bad_response": 502}.get(exc.code, 400 if exc.code in ("invalid_url", "mfa_invalid") else 401)
+            raise HTTPException(code, {"error": exc.code, "message": str(exc)}) from exc
+        hl_wake.set()
+        return {**healthlog_state(), **result}
+
+    @app.post("/api/v1/settings/healthlog/disconnect", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def disconnect_healthlog():
+        healthlog.disconnect(store.db)
+        return healthlog_state()
+
     @app.post("/api/v1/files", dependencies=[Depends(read_auth)], tags=["upload"])
     async def upload_files(request: Request):
         """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl).
@@ -557,6 +620,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 r = store.add_file(f.filename or "", data)
                 if r["new"]:
                     geo_wake.set()
+                    hl_wake.set()
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
                 synclog.event("file_new" if r["new"] else "file_known", ip, None, path=normalize_path(f.filename or ""), size=len(data), status=200, detail="Browser")
             except UploadError as exc:
