@@ -132,7 +132,7 @@ def test_admin_needs_web_password(settings):
         assert upload(c, image()).status_code == 403
         assert c.post("/api/v1/firmware/1/current").status_code == 403
         assert c.delete("/api/v1/firmware/1").status_code == 403
-        assert "Web-Passwort" in c.delete("/api/v1/firmware/1").json()["detail"]
+        assert "Anmeldung" in c.delete("/api/v1/firmware/1").json()["detail"]
 
 
 def test_admin_needs_login(settings):

@@ -4,8 +4,8 @@
 |---|---|---|
 | ``AVINOX_DATA_DIR`` | ``./data`` | Rohdateien, Datenbank, Upload-Token |
 | ``AVINOX_UPLOAD_TOKEN`` | zufällig, in ``<data>/upload_token`` | Bearer-Token für Uploads (ESP32) |
-| ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Start-Admin: wird beim Start als Administrator angelegt, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben, spätere Änderungen in der Datenbank bleiben). Sobald es einen Benutzer gibt, ist der Login aktiv (Seite per Formular, API zusätzlich per Basic Auth); ohne Benutzer und OIDC bleibt alles offen |
-| ``AVINOX_OIDC_ISSUER`` / ``AVINOX_OIDC_CLIENT_ID`` | leer | Anmeldung über einen OpenID-Connect-Anbieter (Authorization Code mit PKCE); Redirect-URI ``<Adresse>/auth/oidc/callback`` |
+| ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Start-Admin: wird beim Start als Administrator angelegt, falls es den Benutzer noch nicht gibt (ein vorhandener wird nie überschrieben, spätere Änderungen in der Datenbank bleiben). Schaltet den Login ein und fest (Seite per Formular, API zusätzlich per Basic Auth). Sonst ist die Anmeldung standardmäßig aus und lässt sich in den Einstellungen einschalten |
+| ``AVINOX_OIDC_ISSUER`` / ``AVINOX_OIDC_CLIENT_ID`` | leer | Anmeldung über einen OpenID-Connect-Anbieter (Authorization Code mit PKCE); Redirect-URI ``<Adresse>/auth/oidc/callback``; hat Vorrang vor den Einstellungen (dort nur lesbar) |
 | ``AVINOX_OIDC_CLIENT_SECRET`` | leer | Client-Secret (leer = öffentlicher Client) |
 | ``AVINOX_OIDC_NAME`` | ``SSO`` | Name auf dem Knopf „Mit … anmelden“ |
 | ``AVINOX_OIDC_SCOPES`` | ``openid email profile`` | Angeforderte Scopes (für Gruppen ggf. ``groups`` ergänzen) |

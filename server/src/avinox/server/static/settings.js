@@ -365,15 +365,48 @@
       if (res.ok) { pwForm.reset(); toast(tr("pw_saved")); } else toast(authErr(res, data), "error");
     });
   }
-  const setupForm = document.getElementById("setup-form");
-  if (setupForm) {
-    setupForm.addEventListener("submit", async (ev) => {
+  const enableForm = document.getElementById("enable-form");
+  if (enableForm) {
+    enableForm.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const pass = document.getElementById("su-pass").value;
-      if (pass !== document.getElementById("su-pass2").value) { toast(tr("setup_mismatch"), "error"); return; }
-      const res = await fetch("/api/v1/setup/admin", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ code: document.getElementById("su-code").value.trim(), username: document.getElementById("su-name").value.trim(), password: pass }) });
+      const rep = document.getElementById("su-pass2");
+      if (rep && pass !== rep.value) { toast(tr("setup_mismatch"), "error"); return; }
+      const res = await fetch("/api/v1/auth/enable", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ username: document.getElementById("su-name").value.trim(), password: pass }) });
       const data = await res.json().catch(() => ({}));
       if (res.ok) location.reload(); else toast(authErr(res, data), "error");
+    });
+  }
+  const disableBtn = document.getElementById("auth-disable");
+  if (disableBtn) {
+    disableBtn.addEventListener("click", async () => {
+      if (!confirm(tr("disable_confirm"))) return;
+      const res = await fetch("/api/v1/auth/disable", { method: "POST", headers: { "X-Requested-With": "fetch" } });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) location.reload(); else toast(authErr(res, data), "error");
+    });
+  }
+  const oidcForm = document.getElementById("oidc-form");
+  if (oidcForm) {
+    const oidcStatus = document.getElementById("oidc-status");
+    const val = (id) => document.getElementById(id).value.trim();
+    oidcForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (oidcForm.dataset.locked) return;
+      const res = await fetch("/api/v1/settings/oidc", { method: "PUT", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({
+        enabled: document.getElementById("oi-on").checked, issuer: val("oi-issuer"), client_id: val("oi-client"), secret: document.getElementById("oi-secret").value,
+        name: val("oi-name"), allowed: val("oi-allowed"), admin: val("oi-admin") }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { document.getElementById("oi-secret").value = ""; document.getElementById("oi-secret").placeholder = data.has_secret ? tr("oidc_secret_set") : ""; toast(tr("saved")); } else toast(authErr(res, data), "error");
+    });
+    document.getElementById("oidc-test").addEventListener("click", async () => {
+      oidcStatus.textContent = tr("oidc_testing");
+      try {
+        const res = await fetch("/api/v1/settings/oidc/test", { method: "POST", headers: { "X-Requested-With": "fetch" } });
+        const data = await res.json().catch(() => ({}));
+        const key = "oidc_test." + (data.ok ? "ok" : data.error);
+        oidcStatus.textContent = res.ok ? (I[key] ? tr(key) : tr("oidc_test.failed")) : authErr(res, data);
+      } catch (e) { oidcStatus.textContent = tr("oidc_test.unreachable"); }
     });
   }
   const userForm = document.getElementById("user-add-form");

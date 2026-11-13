@@ -68,7 +68,7 @@ services:
       - avinox-data:/data
     environment:
       AVINOX_DATA_DIR: /data
-      # Initial admin (turns the login on)
+      # Optional: initial admin (turns the login on and locks it). Without it, sign-in can be turned on under Settings
       # AVINOX_WEB_USER: "avinox"
       # AVINOX_WEB_PASSWORD: "change-me"
 
@@ -88,7 +88,7 @@ The server creates the upload token for the ESP32 on first start:
 docker compose exec avinox cat /data/upload_token
 ```
 
-**Login:** `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` create an administrator at startup and turn the login on (sign-in form, more users under Settings). Signing in via OpenID Connect is optional (`AVINOX_OIDC_*`, see [server/README.md](server/README.md), German). **Warning:** Without any user or OIDC the web page is open to everyone on your LAN. Do not expose it to the internet without a login. All settings: [server/README.md](server/README.md) (German).
+**Login:** Sign-in is off by default. Turn it on under **Settings → Sign-in** and choose a username and password there (more users are added there too). Alternatively `AVINOX_WEB_USER`/`AVINOX_WEB_PASSWORD` create an administrator at startup and turn the login on permanently. Signing in via OpenID Connect is optional, set up under Settings or with `AVINOX_OIDC_*` (see [server/README.md](server/README.md), German). **Warning:** While sign-in is off the web page is open to everyone on your LAN. Do not expose it to the internet without a login. All settings: [server/README.md](server/README.md) (German).
 
 ### b) Flash the ESP32 once
 

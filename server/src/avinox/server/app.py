@@ -26,7 +26,7 @@ from ..analysis import ASSIST_LEVELS
 from . import i18n
 from . import ai
 from . import healthlog
-from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next
+from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next, valid_issuer
 from .geocode import Nominatim
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
@@ -309,23 +309,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ------------------------------------------------------------ Anmeldung
 
     auth_store = AuthStore(store.db)
-    oidc = Oidc(settings)
+    oidc = Oidc(settings, store.db)
     throttle = LoginThrottle()
     app.state.auth = auth_store
     app.state.oidc = oidc
     app.state.login_throttle = throttle
-    if settings.web_user and settings.web_password:
-        auth_store.ensure_admin(settings.web_user, settings.web_password)
+    auth_env = bool(settings.web_user and settings.web_password)
+    if auth_env:
+        auth_store.ensure_admin(settings.web_user, settings.web_password)  # type: ignore[arg-type]
+    if auth_env or (store.db.get_setting("auth_enabled") is None and auth_store.user_count() > 0):
+        store.db.set_setting("auth_enabled", True)  # bisheriger Login bleibt an
 
     setup_lock = threading.Lock()
-    app.state.setup_code = None
-    if not (oidc.enabled or auth_store.user_count() > 0):
-        app.state.setup_code = secrets.token_urlsafe(9)
-        log.warning("Anmeldung aus – Einrichtungscode für den ersten Admin: %s (Einstellungen → Anmeldung)", app.state.setup_code)
 
     def login_active() -> bool:
-        """Login nur, wenn es Benutzer gibt oder OIDC eingerichtet ist – sonst offen (LAN-Modus)."""
-        return oidc.enabled or auth_store.user_count() > 0
+        """Login nur, wenn eingeschaltet und es einen Benutzer gibt – sonst offen (LAN-Modus). OIDC allein zählt nicht."""
+        return bool(store.db.get_setting("auth_enabled", False)) and auth_store.user_count() > 0
 
     def identify(request: Request, cred: HTTPBasicCredentials | None = None) -> tuple[dict | None, str]:
         """Angemeldeter Benutzer und Weg (``session`` oder ``basic``); Basic nur für Passwortbenutzer.
@@ -397,8 +396,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.user = user
         return user
 
-    FW_ADMIN_HINT = "Firmware-Verwaltung nur mit Web-Passwort (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD) – oder per ‚avinox firmware add‘ auf dem Server"
-    USERS_HINT = "Benutzerverwaltung nur mit Anmeldung (AVINOX_WEB_USER/AVINOX_WEB_PASSWORD oder OIDC einrichten)"
+    FW_ADMIN_HINT = "Firmware-Verwaltung nur mit eingeschalteter Anmeldung (Einstellungen → Anmeldung) – oder per ‚avinox firmware add‘ auf dem Server"
+    USERS_HINT = "Benutzerverwaltung nur mit eingeschalteter Anmeldung (Einstellungen → Anmeldung)"
 
     def admin_required(hint: str):
         def dep(request: Request, cred: HTTPBasicCredentials | None = Depends(basic)) -> dict:
@@ -925,7 +924,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fw_admin=bool(user and user["is_admin"]),
             fw_admin_hint=FW_ADMIN_HINT,
             users=auth_store.list_users() if user and user["is_admin"] else [],
-            oidc_name=settings.oidc_name if oidc.enabled else None,
+            oidc_name=oidc.config().name if oidc.enabled else None,
+            oidc_cfg=oidc_view(request) if user and user["is_admin"] else None,
+            auth_env_locked=auth_env,
+            has_users=auth_store.user_count() > 0,
             min_password=MIN_PASSWORD,
             server_urls=server_urls,
             server_url_unreachable=unreachable,
@@ -946,7 +948,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Formular mit CSRF-Token (Double-Submit über ein eigenes Cookie)."""
         base = request.cookies.get(CSRF_COOKIE) or secrets.token_urlsafe(24)
         resp = page(request, "login.html", bare=True, next=next_url, error=error, csrf_token=auth_store.csrf_token(base),
-                    oidc_name=settings.oidc_name if oidc.enabled else None)
+                    oidc_name=oidc.config().name if oidc.enabled else None)
         resp.status_code = status
         if not request.cookies.get(CSRF_COOKIE):
             resp.set_cookie(CSRF_COOKIE, base, httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/")
@@ -992,7 +994,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/auth/oidc/login", include_in_schema=False)
     async def oidc_login(request: Request, next: str = "/"):
-        if not oidc.enabled:
+        if not oidc.enabled or not login_active():
             raise HTTPException(404, "OIDC ist nicht eingerichtet")
         try:
             url, state = await oidc.start(oidc.redirect_uri(str(request.base_url), request.headers.get("host", "")), safe_next(next))
@@ -1005,7 +1007,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/auth/oidc/callback", include_in_schema=False)
     async def oidc_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
-        if not oidc.enabled:
+        if not oidc.enabled or not login_active():
             raise HTTPException(404, "OIDC ist nicht eingerichtet")
 
         def fail(code_: str):
@@ -1071,34 +1073,111 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth_store.delete_sessions(user["id"], keep=request.cookies.get(AUTH_COOKIE))
         return {"ok": True}
 
-    @app.post("/api/v1/setup/admin", tags=["benutzer"])
-    def setup_admin(request: Request, payload: dict):
-        """Ersten Admin im offenen Modus anlegen und sofort anmelden (danach 409)."""
+    @app.post("/api/v1/auth/enable", tags=["benutzer"])
+    def auth_enable(request: Request, payload: dict):
+        """Anmeldung einschalten und sofort anmelden.
+
+        Ohne Benutzer wird ein Admin angelegt. Gibt es schon Benutzer (Login war vorher an), muss die
+        Eingabe zu einem vorhandenen Admin mit Passwort passen.
+        """
         csrf_guard(request, None)
         if login_active():
-            bad("setup_done", 409)
-        key = (client_ip(request), "__setup__")
+            bad("already_on", 409)
+        key = (client_ip(request), "__enable__")
         if throttle.blocked(*key):
             bad("throttle", 429)
-        code = app.state.setup_code
-        given = str(payload.get("code") or "")
-        if not code or not secrets.compare_digest(given.encode(), code.encode()):
-            throttle.fail(*key)
-            bad("setup_code", 403)
-        name = valid_name(payload.get("username"))
-        password = str(payload.get("password") or "")
-        if problem := password_problem(password):
-            bad(problem)
+        name, password = str(payload.get("username") or "").strip(), str(payload.get("password") or "")
         with setup_lock:
-            if auth_store.user_count() != 0:
-                bad("setup_done", 409)
-            user = auth_store.create_user(name, password, True)
+            if login_active():
+                bad("already_on", 409)
+            if auth_store.user_count() == 0:
+                name = valid_name(name)
+                if problem := password_problem(password):
+                    bad(problem)
+                user = auth_store.create_user(name, password, True)
+            else:
+                user = auth_store.check_password(name, password[:512])
+                if not user or not user["is_admin"]:
+                    throttle.fail(*key)
+                    bad("bad_login", 403)
+            store.db.set_setting("auth_enabled", True)
         throttle.clear(*key)
-        app.state.setup_code = None
         token, max_age = auth_store.create_session(user["id"], True)
         resp = JSONResponse({"ok": True})
         set_session_cookie(resp, request, token, max_age)
         return resp
+
+    @app.post("/api/v1/auth/disable", tags=["benutzer"])
+    def auth_disable(admin: dict = Depends(users_admin_auth)):
+        """Anmeldung ausschalten (nur Admins). Benutzer bleiben, alle Sessions enden."""
+        if auth_env:
+            bad("env_locked", 409)
+        store.db.set_setting("auth_enabled", False)
+        store.db.execute("DELETE FROM sessions")
+        return {"ok": True}
+
+    # ------------------------------------------------------------ OIDC-Einstellungen
+
+    def oidc_view(request: Request) -> dict:
+        cfg = oidc.config()
+        return {"enabled": cfg.active, "issuer": cfg.issuer, "client_id": cfg.client_id, "has_secret": bool(cfg.client_secret), "name": cfg.name,
+                "allowed": cfg.allowed, "admin": cfg.admin, "env_locked": oidc.env_locked,
+                "redirect_uri": oidc.redirect_uri(str(request.base_url), request.headers.get("host", ""))}
+
+    @app.get("/api/v1/settings/oidc", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    def oidc_settings_get(request: Request):
+        return oidc_view(request)
+
+    @app.put("/api/v1/settings/oidc", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    def oidc_settings_put(request: Request, payload: dict):
+        """OIDC speichern. Das Secret wird nie zurückgegeben; leer = unverändert, bei neuem Issuer/Client-ID ohne neues Secret gelöscht."""
+        if oidc.env_locked:
+            bad("env_locked", 409)
+        db = store.db
+
+        def text(key: str, limit: int) -> str:
+            value = str(payload.get(key) or "").strip()
+            if len(value) > limit:
+                bad("too_long")
+            return value
+
+        enabled = bool(payload.get("enabled"))
+        issuer_raw, client_id = text("issuer", 300), text("client_id", 256)
+        secret, name = str(payload.get("secret") or "").strip(), text("name", 40)
+        if len(secret) > 512:
+            bad("too_long")
+        issuer = ""
+        if issuer_raw:
+            issuer = valid_issuer(issuer_raw) or ""
+            if not issuer:
+                bad("issuer_invalid")
+        if enabled and not (issuer and client_id):
+            bad("oidc_incomplete")
+        old = oidc.config()
+        if secret:
+            db.set_setting("oidc_secret", secret)
+        elif (issuer, client_id) != (old.issuer, old.client_id):
+            db.set_setting("oidc_secret", "")
+        db.set_setting("oidc_enabled", enabled)
+        db.set_setting("oidc_issuer", issuer)
+        db.set_setting("oidc_client_id", client_id)
+        db.set_setting("oidc_name", name)
+        db.set_setting("oidc_allowed", text("allowed", 1000))
+        db.set_setting("oidc_admin", text("admin", 1000))
+        oidc.reset_cache()
+        return oidc_view(request)
+
+    @app.post("/api/v1/settings/oidc/test", dependencies=[Depends(users_admin_auth)], tags=["einstellungen"])
+    async def oidc_settings_test():
+        """Verbindung prüfen: Discovery des gespeicherten Issuers. Antworten des Anbieters gehen nicht an den Browser."""
+        if not oidc.config().issuer:
+            return {"ok": False, "error": "not_configured"}
+        oidc._disc = None
+        try:
+            await oidc.discovery()
+        except OidcError as exc:
+            return {"ok": False, "error": exc.code}
+        return {"ok": True}
 
     @app.post("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])
     def users_create(payload: dict):

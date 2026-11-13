@@ -325,7 +325,7 @@ def test_settings_page_card(login_settings):
     c = logged_in(login_settings)
     html = c.get("/settings").text
     assert 'id="sec-auth"' in html and 'id="pw-form"' in html and 'id="user-add-form"' in html and 'action="/logout"' in html
-    assert "OIDC" not in html and "SSO" not in html  # OIDC-Status nur, wenn eingerichtet
+    assert "Anmeldung mit" not in html and 'id="oidc-form"' in html  # Status nur, wenn eingerichtet; Formular für Admins
     assert "ohne Passwort im WLAN offen" not in html
     assert 'action="/logout"' in c.get("/rides").text  # Abmelden-Knopf in der Navigation
 
@@ -383,7 +383,9 @@ def idp():
 
 
 @pytest.fixture
-def oidc_settings(settings):
+def oidc_settings(login_settings):
+    """OIDC per Umgebung (Vorrang) plus Passwort-Admin: OIDC allein schaltet den Login nie ein."""
+    settings = login_settings
     settings.oidc_issuer, settings.oidc_client_id, settings.oidc_client_secret = ISSUER, "avinox-test", "test-secret"
     settings.oidc_name = "Authentik"
     return settings
@@ -404,9 +406,16 @@ def start_oidc(c, idp, next_url="/rides"):
     return q
 
 
-def test_oidc_configured_enables_login_and_button(oidc_settings, idp):
+def test_oidc_alone_does_not_enable_login(settings, idp):
+    settings.oidc_issuer, settings.oidc_client_id = ISSUER, "avinox-test"
+    with oidc_client(settings, idp) as c:
+        assert c.get("/rides").status_code == 200
+        assert c.get("/auth/oidc/login").status_code == 404
+
+
+def test_oidc_configured_shows_button(oidc_settings, idp):
     with oidc_client(oidc_settings, idp) as c:
-        assert c.get("/rides").status_code == 303  # OIDC allein schaltet den Login ein
+        assert c.get("/rides").status_code == 303
         html = c.get("/login").text
         assert "Mit Authentik anmelden" in html and "/auth/oidc/login" in html
 
@@ -436,7 +445,7 @@ def test_oidc_full_flow(oidc_settings, idp):
         c2 = oidc_client(oidc_settings, idp)
         q = start_oidc(c2, idp)
         assert c2.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]}).status_code == 303
-        assert c.app.state.auth.user_count() == 1
+        assert c.app.state.auth.user_count() == 2
 
 
 def test_oidc_redirect_uri_uses_public_url(oidc_settings, idp):
@@ -501,7 +510,7 @@ def test_oidc_allowed_list(oidc_settings, idp):
     with oidc_client(oidc_settings, idp) as c:  # weder E-Mail noch Gruppe passen
         q = start_oidc(c, idp)
         r = c.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]})
-        assert "error=denied" in r.headers["location"] and c.app.state.auth.user_count() == 0
+        assert "error=denied" in r.headers["location"] and c.app.state.auth.user_count() == 1
     idp.claims["groups"] = ["familie"]  # Gruppe (ohne Beachtung der Schreibweise)
     with oidc_client(oidc_settings, idp) as c:
         q = start_oidc(c, idp)
@@ -534,59 +543,231 @@ def test_oidc_admin_setting_and_name_conflict(oidc_settings, idp):
         assert c.get("/api/v1/rides").status_code == 200
 
 
-# ------------------------------------------------------------ Erster Admin im offenen Modus
+# ------------------------------------------------------------ Anmeldung ein- und ausschalten
 SETUP = {"username": "erster", "password": "erster-passwort-1"}
 
 
-def test_setup_admin_open_mode(settings):
+def enable(c, body=None, headers=XRW):
+    return c.post("/api/v1/auth/enable", json=body or SETUP, headers=headers)
+
+
+def test_login_off_by_default(settings):
     c = make(settings)
-    code = c.app.state.setup_code
-    assert "setup-form" in c.get("/settings").text
-    r = c.post("/api/v1/setup/admin", json={**SETUP, "code": code}, headers=XRW)
-    assert r.status_code == 200
-    assert c.app.state.setup_code is None and r.json() == {"ok": True}
-    assert "set-cookie" in r.headers
     assert c.get("/settings").status_code == 200
-    assert "setup-form" not in c.get("/settings").text
+    html = c.get("/settings").text
+    assert 'id="enable-form"' in html and 'id="su-pass2"' in html and "su-code" not in html
+    assert c.get("/login", params={"next": "/rides"}).headers["location"] == "/rides"
+    assert not hasattr(c.app.state, "setup_code")
+
+
+def test_enable_creates_admin_and_logs_in(settings):
+    c = make(settings)
+    r = enable(c)
+    assert r.status_code == 200 and r.json() == {"ok": True} and "avinox_session=" in r.headers["set-cookie"]
+    assert c.app.state.auth.by_name("erster")["is_admin"] == 1
+    assert c.get("/settings").status_code == 200
+    assert 'id="enable-form"' not in c.get("/settings").text and 'id="oidc-form"' in c.get("/settings").text
     assert make(settings).get("/settings").status_code == 303
-    assert c.post("/api/v1/setup/admin", json={**SETUP, "code": code}, headers=XRW).status_code == 409
+    assert enable(c).status_code == 409  # schon an
 
 
-def test_setup_admin_csrf(settings):
+def test_enable_validates_new_admin(settings):
     c = make(settings)
-    SETUP = {**globals()["SETUP"], "code": c.app.state.setup_code}
-    assert c.post("/api/v1/setup/admin", json=SETUP, headers={"Origin": "http://evil.example"}).status_code == 403
-    assert c.post("/api/v1/setup/admin", json=SETUP).status_code == 403
+    assert enable(c, {"username": "erster", "password": "kurz"}).status_code == 400
+    assert enable(c, {"username": "ungültig name!", "password": "erster-passwort-1"}).status_code == 400
+    assert c.app.state.auth.user_count() == 0
 
 
-def test_setup_admin_short_password(settings):
+def test_enable_csrf(settings):
     c = make(settings)
-    r = c.post("/api/v1/setup/admin", json={"username": "erster", "password": "kurz", "code": c.app.state.setup_code}, headers=XRW)
-    assert r.status_code == 400
+    assert enable(c, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert enable(c, headers={}).status_code == 403
+    assert c.app.state.auth.user_count() == 0
+    assert enable(c, headers={"Origin": "http://testserver"}).status_code == 200
 
 
-def test_setup_admin_refused_with_user_or_oidc(login_settings, settings):
-    r = make(login_settings).post("/api/v1/setup/admin", json=SETUP, headers=XRW)
-    assert r.status_code == 409
+def test_disable_admin_only_then_open(settings):
+    admin = make(settings)
+    assert enable(admin).status_code == 200
+    admin.app.state.auth.create_user("fahrer", "fahrer-passwort")
+    other = TestClient(admin.app, follow_redirects=False)
+    assert login(other, "fahrer", "fahrer-passwort").status_code == 303
+    assert other.post("/api/v1/auth/disable", headers=XRW).status_code == 403
+    assert TestClient(admin.app).post("/api/v1/auth/disable", headers=XRW).status_code == 401  # nicht angemeldet
+    assert admin.post("/api/v1/auth/disable", headers=XRW).status_code == 200
+    anon = TestClient(admin.app, follow_redirects=False)
+    assert anon.get("/settings").status_code == 200 and anon.get("/api/v1/rides").status_code == 200
+    assert admin.app.state.auth.user_count() == 2  # Benutzer bleiben
+    html = anon.get("/settings").text
+    assert 'id="enable-form"' in html and "bestehenden Admin" in html and 'id="su-pass2"' not in html
 
 
-def test_setup_admin_refused_with_oidc(settings):
-    settings.oidc_issuer, settings.oidc_client_id, settings.oidc_client_secret = ISSUER, "avinox-test", "test-secret"
+def test_reenable_needs_existing_admin(settings):
+    admin = make(settings)
+    enable(admin)
+    admin.app.state.auth.create_user("fahrer", "fahrer-passwort")
+    assert admin.post("/api/v1/auth/disable", headers=XRW).status_code == 200
+    anon = TestClient(admin.app, follow_redirects=False)
+    r = enable(anon, {"username": "erster", "password": "falsch-falsch"})
+    assert r.status_code == 403 and r.json()["detail"]["error"] == "bad_login"
+    assert enable(anon, {"username": "neu", "password": "neu-passwort-1"}).status_code == 403  # unbekannt: nichts wird angelegt
+    assert anon.app.state.auth.by_name("neu") is None
+    assert enable(anon, {"username": "fahrer", "password": "fahrer-passwort"}).status_code == 403  # kein Admin
+    assert anon.get("/settings").status_code == 200
+    r = enable(anon)
+    assert r.status_code == 200 and "avinox_session=" in r.headers["set-cookie"]
+    assert anon.get("/settings").status_code == 200 and make(settings).get("/settings").status_code == 303
+
+
+def test_enable_is_throttled(settings):
     c = make(settings)
-    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 409
+    enable(c)
+    c.post("/api/v1/auth/disable", headers=XRW)
+    anon = TestClient(c.app, follow_redirects=False)
+    for _ in range(10):
+        assert enable(anon, {"username": "erster", "password": "falsch-falsch"}).status_code == 403
+    assert enable(anon, {"username": "erster", "password": "falsch-falsch"}).status_code == 429
+    assert enable(anon).status_code == 429
 
 
-def test_setup_admin_login_active_no_code(login_settings, oidc_settings):
-    assert make(login_settings).app.state.setup_code is None
-    assert make(oidc_settings).app.state.setup_code is None
+def test_env_admin_login_on_and_not_disableable(login_settings):
+    c = logged_in(login_settings)
+    r = c.post("/api/v1/auth/disable", headers=XRW)
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "env_locked"
+    assert c.get("/api/v1/rides").status_code == 200 and make(login_settings).get("/").status_code == 303
+    html = c.get("/settings").text
+    assert "AVINOX_WEB_USER" in html and 'id="auth-disable"' not in html
 
 
-def test_setup_admin_wrong_code_and_throttle(settings):
+def test_env_overrides_disabled_flag(login_settings):
+    with make(login_settings) as c:
+        c.app.state.auth.db.set_setting("auth_enabled", False)
+    assert make(login_settings).get("/").status_code == 303  # Neustart schaltet per Env wieder ein
+
+
+def test_migration_existing_users_without_key(settings):
+    with make(settings) as c:
+        c.app.state.auth.create_user("alt", "alt-passwort-1", True)
+        assert c.get("/").status_code == 200  # Schlüssel fehlt, gesetzt wird er erst beim Start
+    assert make(settings).get("/").status_code == 303
+
+
+def test_existing_users_with_flag_off_stay_open(settings):
+    with make(settings) as c:
+        c.app.state.auth.create_user("alt", "alt-passwort-1", True)
+        c.app.state.auth.db.set_setting("auth_enabled", False)
+    assert make(settings).get("/").status_code == 200
+
+
+def test_disable_button_in_settings(settings):
     c = make(settings)
-    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 403
-    for _ in range(9):
-        r = c.post("/api/v1/setup/admin", json={**SETUP, "code": "falsch"}, headers=XRW)
-        assert r.status_code == 403 and r.json()["detail"]["error"] == "setup_code"
-    r = c.post("/api/v1/setup/admin", json={**SETUP, "code": c.app.state.setup_code}, headers=XRW)
-    assert r.status_code == 429
-    assert c.app.state.setup_code is not None
+    enable(c)
+    html = c.get("/settings").text
+    assert 'id="auth-disable"' in html and 'id="oidc-form"' in html
+    assert "http://testserver/auth/oidc/callback" in html
+
+
+# ------------------------------------------------------------ OIDC in den Einstellungen
+OIDC_BODY = {"enabled": True, "issuer": ISSUER + "/", "client_id": "avinox-test", "secret": "geheim-secret", "name": "Authentik", "allowed": "familie", "admin": ""}
+
+
+def admin_client(settings, idp=None):
+    c = make(settings)
+    enable(c)
+    if idp:
+        c.app.state.oidc.transport = httpx2.MockTransport(idp)
+    return c
+
+
+def test_oidc_settings_secret_never_returned(settings):
+    c = admin_client(settings)
+    r = c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["has_secret"] is True and "geheim-secret" not in r.text and "secret" not in body
+    assert body["issuer"] == ISSUER and body["redirect_uri"] == "http://testserver/auth/oidc/callback"
+    got = c.get("/api/v1/settings/oidc")
+    assert got.json() == body and "geheim-secret" not in got.text
+    assert "geheim-secret" not in c.get("/settings").text
+    assert c.app.state.oidc.config().client_secret == "geheim-secret" and c.app.state.oidc.enabled
+
+
+def test_oidc_settings_empty_secret_keeps_old(settings):
+    c = admin_client(settings)
+    c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    r = c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "secret": "", "name": "Neu"}, headers=XRW)
+    assert r.json()["has_secret"] is True and r.json()["name"] == "Neu"
+    assert c.app.state.oidc.config().client_secret == "geheim-secret"
+    c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "secret": "anderes"}, headers=XRW)
+    assert c.app.state.oidc.config().client_secret == "anderes"
+
+
+def test_oidc_settings_secret_dropped_when_issuer_or_client_changes(settings):
+    c = admin_client(settings)
+    c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    r = c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "secret": "", "issuer": "https://anderer.example.test"}, headers=XRW)
+    assert r.json()["has_secret"] is False and c.app.state.oidc.config().client_secret == ""
+    c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    r = c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "secret": "", "client_id": "andere-id"}, headers=XRW)
+    assert r.json()["has_secret"] is False
+
+
+def test_oidc_settings_validation(settings):
+    c = admin_client(settings)
+    for issuer in ("http://idp.example.test", "ftp://idp.example.test", "idp.example.test", "https://u:p@idp.example.test", "https://idp.example.test/?x=1"):
+        r = c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "issuer": issuer}, headers=XRW)
+        assert r.status_code == 400 and r.json()["detail"]["error"] == "issuer_invalid", issuer
+    for issuer in ("http://localhost:9000", "http://192.168.1.5/realm", "http://127.0.0.1:8080"):
+        assert c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "issuer": issuer}, headers=XRW).status_code == 200, issuer
+    r = c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "client_id": ""}, headers=XRW)
+    assert r.status_code == 400 and r.json()["detail"]["error"] == "oidc_incomplete"
+    assert c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "enabled": False, "issuer": "", "client_id": ""}, headers=XRW).status_code == 200
+
+
+def test_oidc_settings_admin_only(settings):
+    admin = admin_client(settings)
+    admin.app.state.auth.create_user("fahrer", "fahrer-passwort")
+    c = TestClient(admin.app, follow_redirects=False)
+    assert login(c, "fahrer", "fahrer-passwort").status_code == 303
+    assert c.get("/api/v1/settings/oidc").status_code == 403
+    assert c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW).status_code == 403
+    assert c.post("/api/v1/settings/oidc/test", headers=XRW).status_code == 403
+    assert 'id="oidc-form"' not in c.get("/settings").text
+    assert TestClient(admin.app).get("/api/v1/settings/oidc").status_code == 401  # nicht angemeldet
+    assert make(load_settings(settings.data_dir.parent / "zweit")).get("/api/v1/settings/oidc").status_code == 403  # Login aus
+
+
+def test_oidc_settings_env_wins(oidc_settings):
+    c = logged_in(oidc_settings)
+    r = c.get("/api/v1/settings/oidc")
+    assert r.json()["env_locked"] is True and r.json()["issuer"] == ISSUER and r.json()["has_secret"] is True and "test-secret" not in r.text
+    r = c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    assert r.status_code == 409 and r.json()["detail"]["error"] == "env_locked"
+    html = c.get("/settings").text
+    assert "readonly" in html and "test-secret" not in html
+
+
+def test_oidc_settings_test_button(settings, idp):
+    c = admin_client(settings, idp)
+    assert c.post("/api/v1/settings/oidc/test", headers=XRW).json() == {"ok": False, "error": "not_configured"}
+    c.put("/api/v1/settings/oidc", json=OIDC_BODY, headers=XRW)
+    assert c.post("/api/v1/settings/oidc/test", headers=XRW).json() == {"ok": True}
+    idp.down = True
+    r = c.post("/api/v1/settings/oidc/test", headers=XRW)
+    assert r.json() == {"ok": False, "error": "unreachable"} and "idp.example.test" not in r.text
+
+
+def test_oidc_from_db_full_flow(settings, idp):
+    c = admin_client(settings, idp)
+    c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "allowed": ""}, headers=XRW)
+    anon = TestClient(c.app, follow_redirects=False)
+    assert "Mit Authentik anmelden" in anon.get("/login").text
+    q = start_oidc(anon, idp)
+    assert q["client_id"] == "avinox-test"
+    r = anon.get("/auth/oidc/callback", params={"code": "abc", "state": q["state"]})
+    assert r.status_code == 303 and r.headers["location"] == "/rides"
+    assert idp.token_requests[0]["client_secret"] == "geheim-secret"
+    assert anon.get("/api/v1/rides").status_code == 200
+    c.put("/api/v1/settings/oidc", json={**OIDC_BODY, "enabled": False}, headers=XRW)  # aus: kein Knopf, kein Einstieg
+    assert "/auth/oidc/login" not in TestClient(c.app).get("/login").text
+    assert TestClient(c.app).get("/auth/oidc/login").status_code == 404
