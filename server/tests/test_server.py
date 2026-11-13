@@ -172,6 +172,11 @@ def test_rides_page_toolbar(client, settings):
     assert 'id="rides-tools"' in page and "data-search=" in page and "rides.js" in page
 
 
+def test_rides_page_has_more_button(client, settings):
+    put(client, settings, ride_bytes(assist=21))
+    assert 'id="rides-more"' in client.get("/rides").text
+
+
 def test_pages(client, settings):
     pk = put(client, settings, ride_bytes(assist=21)).json()["ride"]
     client.post("/api/v1/files", files=[("files", ("buried_rec/buried_file_cur.json", LINES.encode()))])
