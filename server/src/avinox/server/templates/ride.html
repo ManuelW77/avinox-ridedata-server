@@ -72,6 +72,7 @@
       <button type="button" data-key="rider">{{ t('ride.c.rider') }}</button>
       <button type="button" data-key="motor">{{ t('ride.c.motor') }}</button>
       <button type="button" data-key="alt">{{ t('ride.c.alt') }}</button>
+      {% if a.summary.avg_heart_rate_bpm %}<button type="button" data-key="hr">{{ t('ride.c.hr') }}</button>{% endif %}
       <button type="button" data-key="mode">{{ t('ride.c.mode') }}</button>
     </div>
     </div>

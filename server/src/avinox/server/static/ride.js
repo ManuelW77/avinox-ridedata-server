@@ -92,6 +92,7 @@
     rider: { field: "rider_power_w", unit: "W", digits: 0 },
     motor: { field: "motor_power_w", unit: "W", digits: 0 },
     alt: { field: "altitude_m", unit: "m", digits: 0 },
+    hr: { field: "heart_rate_bpm", unit: "bpm", digits: 0 },
     mode: { field: "assist_level" },
   };
 
@@ -177,7 +178,7 @@
           const range = fmt(edges[i], cfg.digits) + "–" + fmt(edges[i + 1], cfg.digits) + " " + cfg.unit;
           items.push([SCALE[i], range, range]);
         }
-        ends = { speed: tr("lg.speed"), rider: tr("lg.rider"), motor: tr("lg.motor"), alt: tr("lg.alt") }[key].split("|");
+        ends = { speed: tr("lg.speed"), rider: tr("lg.rider"), motor: tr("lg.motor"), alt: tr("lg.alt"), hr: tr("lg.hr") }[key].split("|");
         classes = vals.map((v) => classOf(v, br.cuts));
         palette = (c) => (c === -1 ? grey : SCALE[c]);
       } else {
@@ -531,7 +532,7 @@
 
     // Werte aus der Zeitreihe am nächsten Punkt
     const dcol = col("distance_m");
-    const colIdx = { time: col("offset_s"), speed: col("speed_kmh"), rider: col("rider_power_w"), motor: col("motor_power_w"), grade: col("gradient_pct") };
+    const colIdx = { time: col("offset_s"), speed: col("speed_kmh"), rider: col("rider_power_w"), motor: col("motor_power_w"), grade: col("gradient_pct"), hr: col("heart_rate_bpm") };
     const cells = [];
     const addCell = (key, label) => {
       const span = document.createElement("span");
@@ -549,6 +550,7 @@
     if (colIdx.rider >= 0) addCell("rider", tr("s.rider"));
     if (colIdx.motor >= 0) addCell("motor", tr("s.motor"));
     if (colIdx.grade >= 0) addCell("grade", tr("d3.grade"));
+    if (colIdx.hr >= 0 && rows.some((r) => r[colIdx.hr] != null)) addCell("hr", tr("c.hr"));
     const hms = (sec) => { const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
       return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s % 60).padStart(2, "0"); };
     const updateHud = (meters) => {
@@ -562,6 +564,7 @@
         else if (key === "speed") b.textContent = v("speed") == null ? "–" : fmt(v("speed"), 0) + " km/h";
         else if (key === "rider") b.textContent = v("rider") == null ? "–" : fmt(v("rider"), 0) + " W";
         else if (key === "motor") b.textContent = v("motor") == null ? "–" : fmt(v("motor"), 0) + " W";
+        else if (key === "hr") b.textContent = v("hr") == null ? "–" : fmt(v("hr"), 0) + " bpm";
         else if (key === "grade") b.textContent = v("grade") == null ? "–" : (v("grade") >= 0 ? "↗ " : "↘ ") + fmt(Math.abs(v("grade")), 0) + " %";
       });
     };
@@ -686,7 +689,7 @@
     const c = {
       rider: cssVar("--rider", "#d9661a"), motor: cssVar("--motor", "#13877a"), alt: cssVar("--alt", "#6b6f9a"),
       ink: cssVar("--ink", "#1c2226"), ink2: cssVar("--ink-2", "#57605f"), ink3: cssVar("--ink-3", "#8a908c"),
-      line: cssVar("--line", "#dcd8cf"),
+      line: cssVar("--line", "#dcd8cf"), hr: cssVar("--hr", "#d02a5e"),
     };
     const font = "11px " + (cssVar("--font", "sans-serif"));
     const axis = (extra) => Object.assign({
@@ -714,6 +717,8 @@
     }
     const cad = get("cadence_rpm");
     if (hasData(cad)) defs.push({ title: tr("c.cadence"), data: [cad], series: [{ label: tr("c.cadence"), stroke: c.rider, value: val(tr("rpm"), 0) }] });
+    const hrv = get("heart_rate_bpm");
+    if (hasData(hrv)) defs.push({ title: tr("c.hr"), data: [hrv], series: [{ label: tr("c.hr"), stroke: c.hr, value: val("bpm", 0) }] });
     const bat = get("battery_pct"), tmp = get("temperature_c");
     if (hasData(bat) || hasData(tmp)) {
       const d = { title: tr("c.battery"), data: [], series: [], axes: [] };

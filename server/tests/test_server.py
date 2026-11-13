@@ -180,6 +180,12 @@ def test_rides_page_has_more_button(client, settings):
     assert 'id="rides-more"' in client.get("/rides").text
 
 
+def test_ride_page_without_heart_rate_has_no_hr_button(client, settings):
+    no_hr = [{**gps_sample(t, 5 * t), 51: 0} for t in range(30)]
+    pk = put(client, settings, ride(no_hr, start=T0, end=T0 + 30, distance=150)).json()["ride"]
+    assert 'data-key="hr"' not in client.get(f"/rides/{pk}").text
+
+
 def test_pages(client, settings):
     pk = put(client, settings, ride_bytes(assist=21)).json()["ride"]
     client.post("/api/v1/files", files=[("files", ("buried_rec/buried_file_cur.json", LINES.encode()))])
@@ -189,6 +195,8 @@ def test_pages(client, settings):
         assert "text/html" in r.headers["content-type"]
     page = client.get(f"/rides/{pk}").text
     assert "Leistung nach Steigung" in page and "Tempo nach Steigung" in page
+
+    assert 'data-key="hr"' in page
 
     assert client.get("/rides/9999").status_code == 404
 
