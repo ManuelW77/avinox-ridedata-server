@@ -16,25 +16,34 @@ Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwer
 
 ## Was man bekommt
 
-- **Übersicht** mit Zeiträumen (Tag, Woche, Monat, Jahr), Vergleich und Bestwerten; Fahrtenliste unter `/rides`.
-- **Fahrtdetails** mit Karte (GPS-Strecke mit Messwerten) und Diagrammen: Leistung, Trittfrequenz, Tempo, Steigung, Puls.
-- **Statistiken:** Zeit je Unterstützungsmodus und Gang, Verteilungen, Bestleistungen von 5 s bis 60 min, Energie und Motoranteil, Akkuverbrauch, Stopps.
-- **Gerät:** Firmware, Akku (Zellspannungen, Strom, Temperaturen), Nutzungsstatistik, Meldungen des Antriebs.
-- **Export** als GPX (mit Leistung, Trittfrequenz, Puls) und GeoJSON.
-- **Sync-Seite** (`/sync`) mit Zustand und Berichten des ESP32.
+- **Deine Bilanz auf einen Blick:** Kilometer, Fahrzeit, Höhenmeter und Kalorien je Tag, Woche, Monat, Jahr oder insgesamt, mit Vergleich zum Zeitraum davor. Ein Balken zeigt, wie viel Energie du selbst getreten hast und wie viel der Motor beigesteuert hat.
+- **Bestwerte:** stärkste 5 und 20 Minuten, höchste Spitzenleistung, längste Fahrt, meiste Höhenmeter, Höchsttempo, sparsamste Fahrt (km je Prozent Akku), beste Woche.
+- **Jede Fahrt im Detail:** Karte mit der Strecke, eingefärbt nach Tempo, Fahrer- oder Motorleistung, Höhe oder Unterstützungsmodus. Dazu Verläufe für Höhe, Tempo, Leistung, Trittfrequenz, Akku und Temperatur.
+- **Strecke in 3D:** die Fahrt als Flug über das Gelände abspielen, mit überhöhtem Relief und auf Wunsch mit Gebäuden.
+- **Wie du fährst:** Zeit je Unterstützungsmodus und Gang, Trittfrequenz je Gang, Verteilung von Leistung, Tempo und Steigung, Leistung bergauf und bergab.
+- **Akku-Zustand in einem Satz:** „Dein Akku ist in gutem Zustand“ samt Hinweisen. Dahinter Ladevorgänge und volle Zyklen, Gesundheitstrend (nutzbare Wh), Zellbalance, Spannungseinbruch unter Last und Diagramme zu Ladestand, Temperatur, Zellabweichung und Strom.
+- **Fahrtenliste** mit automatischen Namen (z. B. „Runde um …“, abschaltbar), Umbenennen, Suche, Filter und Routen-Vorschau.
+- **Export** als GPX (mit Leistung, Trittfrequenz, Puls), GeoJSON und JSON.
+- **Bequem:** heller und dunkler Modus, Deutsch und Englisch, eigene Namen für Unterstützungsmodi, Dateien auch per Upload im Browser, Firmware-Updates für den ESP32 per WLAN, Sync-Seite mit den Berichten des ESP32.
 
 ## Screenshots
 
 <table>
 <tr>
-<td width="50%"><img src="assets/screenshots/dashboard-de.png" alt="Übersicht mit Zeiträumen, Statistiken und Bestwerten"><br><sub>Übersicht mit Zeiträumen, Statistiken und Bestwerten</sub></td>
-<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen und Diagrammen"><br><sub>Fahrtdetails mit Kennzahlen und Diagrammen</sub></td>
+<td width="50%"><img src="assets/screenshots/dashboard-de.png" alt="Übersicht mit Zeitraum, Energieanteil Fahrer und Motor und Diagrammen"><br><sub>Übersicht: Bilanz, Energieanteil von dir und Motor, Diagramme</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen und Verläufen"><br><sub>Fahrt: Kennzahlen und Verläufe</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/battery-de.png" alt="Akku-Zustand mit Hinweisen, Ladezyklen und Gesundheitstrend"><br><sub>Akku: Zustand, Zyklen, Gesundheitstrend, Spannungseinbruch</sub></td>
+<td width="50%"><img src="assets/screenshots/bests-de.png" alt="Bestwerte für Leistung, Motor, Fahrten und Zeiträume"><br><sub>Bestwerte</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/stats-de.png" alt="Unterstützungsmodi, Gänge und Verteilungen einer Fahrt"><br><sub>Fahrt: Modi, Gänge und Verteilungen</sub></td>
+<td width="50%"><img src="assets/screenshots/battery-history-de.png" alt="Akku-Verlauf: Ladestand, Temperatur, Zellabweichung und Strom"><br><sub>Akku-Verlauf je Sitzung</sub></td>
 </tr>
 </table>
 
-![Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt](assets/screenshots/stats-de.png)
-
-*Unterstützungsmodi, Gänge, Verteilungen und Bestleistungen einer Fahrt*
+Karte und 3D-Ansicht sind hier bewusst nicht abgebildet, weil sie echte GPS-Spuren zeigen.
 
 ## Benötigt
 
@@ -144,7 +153,7 @@ Alle Zustände: [esp32/avinox-sync/README.md](esp32/avinox-sync/README.md).
 | [`server/`](server/README.md) | Parser, Auswertung, Server, Docker |
 | [`esp32/`](esp32/avinox-sync/README.md) | Firmware `avinox-sync`; daneben `usb-probe` = Machbarkeitstest |
 | [`ERKENNTNISSE.md`](ERKENNTNISSE.md) | Dateiformat, Datenwege, Feldzuordnung |
-| `assets/` | Icon |
+| `assets/` | Icon, Screenshots |
 
 ## Hinweise
 
