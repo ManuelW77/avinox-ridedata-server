@@ -217,7 +217,6 @@ dl.kv dd { margin: 0; }
 }
 .btn.ghost { background: var(--surface-2); color: var(--ink); }
 .btn.danger { color: var(--warn); }
-.ride-delete { margin: 2rem 0 1rem; text-align: center; }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 input[type=text], input[type=password] {
