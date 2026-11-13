@@ -125,12 +125,15 @@ def test_read_api(client, settings):
     gpx = client.get(f"/api/v1/rides/{pk}/gpx")
     assert gpx.status_code == 200 and "attachment" in gpx.headers["content-disposition"] and ".gpx" in gpx.headers["content-disposition"]
     assert gpx.text.lstrip().startswith("<?xml")
+    fit = client.get(f"/api/v1/rides/{pk}/fit")
+    assert fit.status_code == 200 and "attachment" in fit.headers["content-disposition"] and ".fit" in fit.headers["content-disposition"]
+    assert fit.content[8:12] == b".FIT"
     raw = client.get(f"/api/v1/rides/{pk}/raw")
     assert raw.content == ride_bytes()
 
     assert client.get("/api/v1/stats").json()["total"]["rides"] == 1
     assert client.get("/api/v1/device").status_code == 200
-    for suffix in ("", "/geojson", "/gpx", "/raw"):
+    for suffix in ("", "/geojson", "/gpx", "/fit", "/raw"):
         assert client.get(f"/api/v1/rides/9999{suffix}").status_code == 404
 
 

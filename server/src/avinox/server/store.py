@@ -24,6 +24,7 @@ from ..analysis import CUSTOM_MODE_MIN, analyze
 from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
 from ..ride_rec import RideRecError, parse_ride
+from ..fit import to_fit
 from ..track import to_geojson, to_gpx
 from . import dashboard, geocode, i18n
 from .firmware import read_app_info
@@ -514,6 +515,14 @@ class Store:
         ride = parse_ride(self.read_raw(row["file_id"]))
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.gpx"
         return to_gpx(ride), name
+
+    def ride_fit(self, ride_pk: int) -> tuple[bytes, str] | None:
+        row = self.db.one("SELECT file_id, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
+        if not row:
+            return None
+        ride = parse_ride(self.read_raw(row["file_id"]))
+        name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.fit"
+        return to_fit(ride), name
 
     def ride_raw(self, ride_pk: int) -> tuple[bytes, str] | None:
         row = self.db.one("SELECT file_id, path FROM rides WHERE id = ?", (ride_pk,))
