@@ -454,7 +454,7 @@ html { scroll-behavior: smooth; }
 select {
   appearance: none; -webkit-appearance: none;
   font: inherit; font-size: 0.9rem; color: var(--ink); background-color: var(--surface-2);
-  border: 0; border-radius: 999px; min-height: 2.25rem; padding: 0.45rem 2.2rem 0.45rem 0.95rem; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px; min-height: 2.25rem; padding: 0.45rem 2.2rem 0.45rem 0.95rem; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2357605f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 0.9rem;
   transition: background-color 0.15s;
@@ -467,10 +467,10 @@ select {
 :root[data-theme="dark"] select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b0ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-select:hover:not(:disabled) { background-color: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); }
+select:hover:not(:disabled) { background-color: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); border-color: var(--ink-3); }
 select:focus-visible, input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=password]:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
 select:disabled { opacity: 0.5; cursor: not-allowed; }
-.rides-tools select { min-height: 0; font-size: 0.85rem; color: var(--ink-2); padding: 0.38rem 2rem 0.38rem 0.85rem; }
+.rides-tools select { border: 1px solid var(--line); min-height: 0; font-size: 0.85rem; color: var(--ink-2); padding: 0.38rem 2rem 0.38rem 0.85rem; }
 input[type=text], input[type=search], input[type=password] { transition: border-color 0.15s; }
 input[type=text]:focus, input[type=search]:focus, input[type=password]:focus { border-color: var(--motor); }
 .rename-form input { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
