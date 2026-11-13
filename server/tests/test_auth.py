@@ -532,3 +532,41 @@ def test_oidc_admin_setting_and_name_conflict(oidc_settings, idp):
         assert store.by_name("anna")["oidc_sub"] is None and store.by_name("anna")["is_admin"] == 1
         assert c.get("/api/v1/users").status_code == 403  # kein Admin
         assert c.get("/api/v1/rides").status_code == 200
+
+
+# ------------------------------------------------------------ Erster Admin im offenen Modus
+SETUP = {"username": "erster", "password": "erster-passwort-1"}
+
+
+def test_setup_admin_open_mode(settings):
+    c = make(settings)
+    assert "setup-form" in c.get("/settings").text
+    r = c.post("/api/v1/setup/admin", json=SETUP, headers=XRW)
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert AUTH_COOKIE_NAME in r.headers.get("set-cookie", "")
+    assert c.get("/settings").status_code == 200
+    assert "setup-form" not in c.get("/settings").text
+    assert make(settings).get("/settings").status_code == 303
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 409
+
+
+def test_setup_admin_csrf(settings):
+    c = make(settings)
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers={"Origin": "http://evil.example"}).status_code == 403
+    assert c.post("/api/v1/setup/admin", json=SETUP).status_code == 403
+
+
+def test_setup_admin_short_password(settings):
+    r = make(settings).post("/api/v1/setup/admin", json={"username": "erster", "password": "kurz"}, headers=XRW)
+    assert r.status_code == 400
+
+
+def test_setup_admin_refused_with_user_or_oidc(login_settings, settings):
+    r = make(login_settings).post("/api/v1/setup/admin", json=SETUP, headers=XRW)
+    assert r.status_code == 409
+
+
+def test_setup_admin_refused_with_oidc(settings):
+    settings.oidc_issuer, settings.oidc_client_id, settings.oidc_client_secret = ISSUER, "avinox-test", "test-secret"
+    c = make(settings)
+    assert c.post("/api/v1/setup/admin", json=SETUP, headers=XRW).status_code == 409

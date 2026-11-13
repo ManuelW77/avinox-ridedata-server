@@ -959,6 +959,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth_store.delete_sessions(user["id"], keep=request.cookies.get(AUTH_COOKIE))
         return {"ok": True}
 
+    @app.post("/api/v1/setup/admin", tags=["benutzer"])
+    def setup_admin(request: Request, payload: dict):
+        """Ersten Admin im offenen Modus anlegen und sofort anmelden (danach 409)."""
+        csrf_guard(request, None)
+        if login_active():
+            bad("setup_done", 409)
+        name = valid_name(payload.get("username"))
+        password = str(payload.get("password") or "")
+        if problem := password_problem(password):
+            bad(problem)
+        if auth_store.user_count() != 0:
+            bad("setup_done", 409)
+        user = auth_store.create_user(name, password, True)
+        token, max_age = auth_store.create_session(user["id"], True)
+        resp = JSONResponse({"ok": True})
+        set_session_cookie(resp, request, token, max_age)
+        return resp
+
     @app.post("/api/v1/users", dependencies=[Depends(users_admin_auth)], tags=["benutzer"])
     def users_create(payload: dict):
         name = valid_name(payload.get("username"))
