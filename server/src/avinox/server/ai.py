@@ -20,7 +20,7 @@ from collections import deque
 from datetime import date, datetime
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2
 
 from . import dashboard
 
@@ -177,10 +177,10 @@ def update_settings(db, payload: dict) -> None:
 def _post(url: str, headers: dict, body: dict, timeout: float = TIMEOUT_S) -> tuple[int, dict]:
     """(HTTP-Status, JSON-Hülle). Netzfehler → ``AiError('unreachable')``. Einzige Netzstelle."""
     try:
-        r = httpx.post(url, headers=headers, json=body, timeout=timeout, follow_redirects=False)
-    except httpx.InvalidURL as exc:
+        r = httpx2.post(url, headers=headers, json=body, timeout=timeout, follow_redirects=False)
+    except httpx2.InvalidURL as exc:
         raise AiError("bad_url", "Adresse ungültig") from exc
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         raise AiError("unreachable", f"Nicht erreichbar: {type(exc).__name__}") from exc
     try:
         data = r.json()
