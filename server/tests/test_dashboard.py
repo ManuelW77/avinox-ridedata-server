@@ -310,3 +310,20 @@ def test_series_range_starts_at_first_ride(store):
     add(store, 2, ride_at(datetime(2020, 3, 9, 10), km=10, ride_id=2))
     assert len(store.dashboard("month", today=TODAY)["series"]) == 24
     assert all(b["when_text"] for b in store.dashboard("month", today=TODAY)["highlights"])
+
+
+def test_gesamt_zeitraum(store, filled):
+    d = store.dashboard("all", 3, today=TODAY)
+    assert d["offset"] == 0 and d["max_offset"] == 0 and d["last_offset"] == 0
+    assert d["current"]["distance_km"] == pytest.approx(10 + 6 + 8 + 30 + 0.3, abs=0.1)
+    assert d["comparison"]["distance_km"]["delta_pct"] is None
+    assert [s["key"] for s in d["series"]] == ["2025", "2026"]
+    assert "Gesamt" in d["current"]["name"]
+
+
+def test_gesamt_api_und_seite(tmp_path, store, filled):
+    client = TestClient(create_app(load_settings(tmp_path / "data")))
+    j = client.get("/api/v1/dashboard?period=all&offset=3").json()
+    assert j["period"] == "all" and j["offset"] == 0
+    html = client.get("/?period=all").text
+    assert 'data-key="all" aria-pressed="true"' in html

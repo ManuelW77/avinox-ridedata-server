@@ -28,7 +28,7 @@
 <section class="card period" id="period" aria-live="polite">
   <div class="toolbar">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
-      {% for key, name in (('day', t('period.day')), ('week', t('period.week')), ('month', t('period.month')), ('year', t('period.year'))) %}
+      {% for key, name in (('day', t('period.day')), ('week', t('period.week')), ('month', t('period.month')), ('year', t('period.year')), ('all', t('period.all'))) %}
       <button type="button" data-key="{{ key }}" aria-pressed="{{ 'true' if dash.period == key else 'false' }}">{{ name }}</button>
       {% endfor %}
     </div>
