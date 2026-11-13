@@ -279,6 +279,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.web_user and settings.web_password:
         auth_store.ensure_admin(settings.web_user, settings.web_password)
 
+    setup_lock = threading.Lock()
+    app.state.setup_code = None
+    if not (oidc.enabled or auth_store.user_count() > 0):
+        app.state.setup_code = secrets.token_urlsafe(9)
+        log.warning("Anmeldung aus – Einrichtungscode für den ersten Admin: %s (Einstellungen → Anmeldung)", app.state.setup_code)
+
     def login_active() -> bool:
         """Login nur, wenn es Benutzer gibt oder OIDC eingerichtet ist – sonst offen (LAN-Modus)."""
         return oidc.enabled or auth_store.user_count() > 0
@@ -965,13 +971,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         csrf_guard(request, None)
         if login_active():
             bad("setup_done", 409)
+        key = (client_ip(request), "__setup__")
+        if throttle.blocked(*key):
+            bad("throttle", 429)
+        code = app.state.setup_code
+        given = str(payload.get("code") or "")
+        if not code or not secrets.compare_digest(given.encode(), code.encode()):
+            throttle.fail(*key)
+            bad("setup_code", 403)
         name = valid_name(payload.get("username"))
         password = str(payload.get("password") or "")
         if problem := password_problem(password):
             bad(problem)
-        if auth_store.user_count() != 0:
-            bad("setup_done", 409)
-        user = auth_store.create_user(name, password, True)
+        with setup_lock:
+            if auth_store.user_count() != 0:
+                bad("setup_done", 409)
+            user = auth_store.create_user(name, password, True)
+        throttle.clear(*key)
+        app.state.setup_code = None
         token, max_age = auth_store.create_session(user["id"], True)
         resp = JSONResponse({"ok": True})
         set_session_cookie(resp, request, token, max_age)

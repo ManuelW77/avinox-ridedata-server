@@ -30,6 +30,8 @@
   <p class="notice small">{{ t('set.auth_off') }}</p>
   <form id="setup-form" class="stack" autocomplete="off">
     <p class="small"><strong>{{ t('set.setup_title') }}</strong></p>
+    <div class="form-row"><label for="su-code">{{ t('set.setup_code') }}</label><input type="text" id="su-code" autocomplete="off" required></div>
+    <p class="muted small">{{ t('set.setup_code_hint') }}</p>
     <div class="form-row"><label for="su-name">{{ t('login.user') }}</label><input type="text" id="su-name" autocomplete="username" required></div>
     <div class="form-row"><label for="su-pass">{{ t('login.password') }}</label><input type="password" id="su-pass" autocomplete="new-password" minlength="{{ min_password }}" required></div>
     <div class="form-row"><label for="su-pass2">{{ t('set.setup_repeat') }}</label><input type="password" id="su-pass2" autocomplete="new-password" minlength="{{ min_password }}" required></div>

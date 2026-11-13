@@ -299,7 +299,7 @@
       ev.preventDefault();
       const pass = document.getElementById("su-pass").value;
       if (pass !== document.getElementById("su-pass2").value) { toast(tr("setup_mismatch"), "error"); return; }
-      const res = await fetch("/api/v1/setup/admin", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ username: document.getElementById("su-name").value.trim(), password: pass }) });
+      const res = await fetch("/api/v1/setup/admin", { method: "POST", headers: { ...jsonHeaders, "X-Requested-With": "fetch" }, body: JSON.stringify({ code: document.getElementById("su-code").value.trim(), username: document.getElementById("su-name").value.trim(), password: pass }) });
       const data = await res.json().catch(() => ({}));
       if (res.ok) location.reload(); else toast(authErr(res, data), "error");
     });
