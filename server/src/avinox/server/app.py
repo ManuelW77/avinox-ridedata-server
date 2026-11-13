@@ -8,7 +8,8 @@ import logging
 import os
 import re
 import secrets
-from contextlib import asynccontextmanager
+import threading
+from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, date, datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
@@ -23,6 +24,7 @@ from urllib.parse import urlencode
 
 from ..analysis import ASSIST_LEVELS
 from . import i18n
+from .geocode import Nominatim
 from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
 from .dashboard import PERIODS, day_text, emphasize
@@ -147,11 +149,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if redone:
         log.info("%d Fahrten neu berechnet", redone)
 
+    # Ortsnamen: Hintergrund-Thread holt sie nach, weckbar nach neuen Fahrten und beim Einschalten
+    geo_wake = threading.Event()
+    geo_stop = threading.Event()
+    geo_thread: threading.Thread | None = None
+
+    def geo_worker(geocoder: Nominatim) -> None:
+        while not geo_stop.is_set():
+            geo_wake.clear()
+            try:
+                # volles Paket = vermutlich mehr offen; weitermachen, bis der Rest kleiner ist
+                while store.db.get_setting("geocode_enabled", False) and not geo_stop.is_set():
+                    if store.geocode_pending(geocoder, limit=50) < 50:
+                        break
+            except Exception:  # Worker darf nie sterben
+                log.exception("Ortsnamen-Worker")
+            geo_wake.wait(600)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        nonlocal geo_thread
+        if settings.geocode_url:
+            geo_thread = threading.Thread(
+                target=geo_worker, args=(Nominatim(settings.geocode_url, f"avinox-ridedata-server/{APP_VERSION}"),), name="geocode", daemon=True
+            )
+            geo_thread.start()
         try:
             yield
         finally:
+            geo_stop.set()
+            geo_wake.set()
+            if geo_thread:
+                geo_thread.join(timeout=15)
             store.close()
 
     app = FastAPI(title="Avinox Ride Data", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
@@ -189,6 +218,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def lang_of(request: Request) -> str:
         return i18n.pick_language(request.query_params.get("lang"), request.cookies.get(i18n.COOKIE), request.headers.get("accept-language"))
+
+    @contextmanager
+    def localized(request: Request):
+        """Sprache der Anfrage setzen, solange Fahrtnamen berechnet werden."""
+        token = i18n.use(lang_of(request))
+        try:
+            yield
+        finally:
+            i18n.reset(token)
 
     bearer = HTTPBearer(auto_error=False)
     basic = HTTPBasic(auto_error=False)
@@ -280,6 +318,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result.get("conflict"):
             synclog.event("upload_chunk_error", ip, dev, path=path, size=size, status=409, detail="Offset korrigiert")
         elif result.get("complete"):
+            if result.get("new"):
+                geo_wake.set()
             synclog.event("file_new" if result.get("new") else "file_known", ip, dev, path=result["path"], size=size, status=200)
         return JSONResponse(result, status_code=409 if result.get("conflict") else 200)
 
@@ -387,12 +427,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ------------------------------------------------------------ Lese-API
 
     @app.get("/api/v1/rides", dependencies=[Depends(read_auth)], tags=["fahrten"])
-    def rides():
-        return store.list_rides()
+    def rides(request: Request):
+        with localized(request):
+            return store.list_rides()
 
     @app.get("/api/v1/rides/{ride_pk}", dependencies=[Depends(read_auth)], tags=["fahrten"])
-    def ride(ride_pk: int):
-        return ride_or_404(ride_pk)
+    def ride(request: Request, ride_pk: int):
+        with localized(request):
+            return ride_or_404(ride_pk)
+
+    @app.put("/api/v1/rides/{ride_pk}/name", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def put_ride_name(request: Request, ride_pk: int, payload: dict):
+        name = payload.get("name")
+        if name is not None and not isinstance(name, str):
+            raise HTTPException(400, "name muss Text oder null sein")
+        if not store.set_ride_name(ride_pk, name):
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        with localized(request):
+            ride = ride_or_404(ride_pk)
+        return {"name": ride["name"], "name_custom": ride["name_custom"]}
 
     @app.get("/api/v1/rides/{ride_pk}/geojson", dependencies=[Depends(read_auth)], tags=["fahrten"])
     def ride_geojson(ride_pk: int):
@@ -450,6 +503,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, "Schlüssel müssen Modusnummern sein") from exc
         return {"names": store.mode_names()}
 
+    @app.get("/api/v1/settings/geocode", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_geocode():
+        return {
+            "enabled": bool(store.db.get_setting("geocode_enabled", False)),
+            "available": bool(settings.geocode_url),
+            "pending": store.geocode_pending_count(),
+        }
+
+    @app.put("/api/v1/settings/geocode", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def put_geocode(payload: dict):
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(400, "enabled muss true oder false sein")
+        store.db.set_setting("geocode_enabled", payload["enabled"])
+        geo_wake.set()
+        return get_geocode()
+
     @app.post("/api/v1/files", dependencies=[Depends(read_auth)], tags=["upload"])
     async def upload_files(request: Request):
         """Upload aus dem Browser: Dateiname = Pfad auf dem Laufwerk (z. B. per Ordnerauswahl).
@@ -471,6 +540,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             data = await f.read(settings.max_upload_bytes + 1)
             try:
                 r = store.add_file(f.filename or "", data)
+                if r["new"]:
+                    geo_wake.set()
                 results.append({"path": f.filename, "ok": True, "new": r["new"], "ride": r["ride"]})
                 synclog.event("file_new" if r["new"] else "file_known", ip, None, path=normalize_path(f.filename or ""), size=len(data), status=200, detail="Browser")
             except UploadError as exc:
@@ -516,11 +587,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/rides", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def rides_page(request: Request):
-        return page(request, "index.html", rides=store.list_rides(), stats=store.stats())
+        with localized(request):
+            rides = store.list_rides()
+        return page(request, "index.html", rides=rides, stats=store.stats())
 
     @app.get("/rides/{ride_pk}", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def ride_page(request: Request, ride_pk: int):
-        ride = ride_or_404(ride_pk)
+        with localized(request):
+            ride = ride_or_404(ride_pk)
         names = {**{str(k): v for k, v in ASSIST_LEVELS.items()}, **{str(k): v for k, v in store.mode_names().items()}}
         return page(request, "ride.html", ride=ride, a=ride["analysis"], s=ride["analysis"]["summary"], mode_names=names)
 

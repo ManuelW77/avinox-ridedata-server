@@ -120,22 +120,47 @@ main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 /* Fahrtenliste */
 .rides { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .ride-row {
-  display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px;
+  display: grid; grid-template-columns: minmax(200px, 1.8fr) repeat(5, minmax(64px, 1fr));
   align-items: center; gap: 0.75rem; text-decoration: none;
-  background: var(--surface); border-radius: 12px; padding: 0.8rem 1rem;
+  background: var(--surface); border-radius: 12px; padding: 0.6rem 1rem;
 }
 .ride-row:hover { outline: 2px solid var(--line); }
-.ride-row .when { font-weight: 600; }
-.ride-row .when span { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
-.ride-row .n { text-align: right; }
+.ride-row .when { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.ride-row .when .thumb { flex: none; width: 64px; height: 40px; }
+.ride-row .when span.thumb { background: var(--surface-2); border-radius: 6px; }
+.ride-row .when svg.thumb path { fill: none; stroke: var(--accent, currentColor); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ride-row .when-text { min-width: 0; }
+.ride-row .when-text strong { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ride-row .when .when-text > span { display: block; font-weight: 400; color: var(--ink-3); font-size: 0.8rem; }
+.ride-row .loop { font-style: normal; }
+.ride-row .n { text-align: right; font-variant-numeric: tabular-nums; }
 .ride-row .n small { color: var(--ink-3); margin-left: 0.1rem; }
-.ride-row .flags { color: var(--ink-3); text-align: right; font-size: 0.8rem; }
-.rides-head { display: grid; grid-template-columns: minmax(160px, 1.4fr) repeat(5, minmax(70px, 1fr)) 22px; gap: 0.75rem; padding: 0 1rem 0.3rem; color: var(--ink-3); font-size: 0.78rem; }
+.rides-head { display: grid; grid-template-columns: minmax(200px, 1.8fr) repeat(5, minmax(64px, 1fr)); gap: 0.75rem; padding: 0 1rem 0.3rem; color: var(--ink-3); font-size: 0.78rem; }
 .rides-head span:not(:first-child) { text-align: right; }
+.rides li[hidden], .rides-tools [hidden], .bar[hidden], .card.empty[hidden] { display: none; }
+.rides li.group-head { padding: 0.9rem 0.25rem 0.25rem; color: var(--ink-3); font-size: 0.8rem; border-bottom: 1px solid var(--line); }
+.rides li.group-head:first-child { padding-top: 0; }
 @media (max-width: 720px) {
   .ride-row, .rides-head { grid-template-columns: 1fr repeat(2, auto); }
   .ride-row .opt, .rides-head .opt { display: none; }
 }
+
+/* Werkzeugleiste der Fahrtenliste (erst mit JS sichtbar) */
+.rides-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.9rem; }
+.rides-tools:not(.ready) { display: none; }
+.rt-search { display: flex; align-items: center; gap: 0.4rem; background: var(--surface-2); border-radius: 999px; padding: 0.3rem 0.8rem; flex: 1 1 14rem; max-width: 22rem; color: var(--ink-3); }
+.rt-search input { border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; width: 100%; outline: none; }
+.rt-gps, .rides-tools select {
+  border: 0; background-color: var(--surface-2); color: var(--ink-2); font: inherit; font-size: 0.85rem;
+  padding: 0.38rem 0.85rem; border-radius: 999px; cursor: pointer;
+}
+.rt-gps[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)); }
+button.bar {
+  border: 0; background: transparent; color: inherit; font: inherit; font-size: 0.85rem; width: 100%; text-align: left;
+  padding: 0.2rem 0.4rem; border-radius: 8px; cursor: pointer;
+}
+button.bar:hover { background: var(--surface-2); }
+button.bar[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)); }
 
 /* Karte und Diagramme */
 #map { height: 460px; border-radius: var(--radius); background: var(--surface-2); z-index: 0; }
@@ -410,3 +435,96 @@ html { scroll-behavior: smooth; }
 /* Neutrale Balken nehmen die Farbe der Gruppe an */
 .t-hill .bar .fill:not(.rider):not(.motor) { background: var(--hill); }
 .t-ride .bar .fill:not(.rider):not(.motor) { background: var(--alt); }
+
+/* Fahrt umbenennen */
+.rename-btn { font: inherit; font-size: 0.6em; border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 0.1rem 0.4rem; border-radius: 6px; vertical-align: middle; }
+.rename-btn:hover { color: var(--ink); background: var(--surface-2); }
+.rename-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.rename-form input { font: inherit; font-size: 1.1rem; min-width: min(28rem, 100%); padding: 0.3rem 0.5rem; }
+
+.hint-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.hint-list li { display: grid; grid-template-columns: 0.7rem 1fr; gap: 0.6rem; align-items: start; }
+.hint-list .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-top: 0.3rem; background: var(--ink-3); }
+.hint-list .dot.ok { background: var(--hill); }
+.hint-list .dot.info { background: var(--alt); }
+.hint-list .dot.warn { background: var(--warn); }
+.bars.mini .bar { grid-template-columns: 8.5rem 1fr 5.5rem; }
+
+/* Auswahlfelder (Pill-Look wie die Werkzeugleiste) */
+select {
+  appearance: none; -webkit-appearance: none;
+  font: inherit; font-size: 0.9rem; color: var(--ink); background-color: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 999px; min-height: 2.25rem; padding: 0.45rem 2.2rem 0.45rem 0.95rem; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2357605f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 0.9rem;
+  transition: background-color 0.15s;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b0ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b0ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+select:hover:not(:disabled) { background-color: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); border-color: var(--ink-3); }
+select:focus-visible, input[type=text]:focus-visible, input[type=search]:focus-visible, input[type=password]:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+.rides-tools select { border: 1px solid var(--line); min-height: 0; font-size: 0.85rem; color: var(--ink-2); padding: 0.38rem 2rem 0.38rem 0.85rem; }
+input[type=text], input[type=search], input[type=password] { transition: border-color 0.15s; }
+input[type=text]:focus, input[type=search]:focus, input[type=password]:focus { border-color: var(--motor); }
+.rename-form input { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+
+/* Schalter statt Checkbox */
+input[type=checkbox].switch {
+  appearance: none; -webkit-appearance: none; flex: none; margin: 0; cursor: pointer; position: relative;
+  width: 2.2rem; height: 1.25rem; border-radius: 999px; background: var(--line); transition: background-color 0.18s;
+}
+input[type=checkbox].switch::after {
+  content: ""; position: absolute; top: 0.15rem; left: 0.15rem; width: 0.95rem; height: 0.95rem; border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); transition: transform 0.18s;
+}
+input[type=checkbox].switch:checked { background: var(--motor); }
+input[type=checkbox].switch:checked::after { transform: translateX(0.95rem); }
+input[type=checkbox].switch:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
+input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch-row { display: flex; align-items: center; gap: 0.6rem; cursor: pointer; grid-column: 1 / -1; }
+.form-row:has(.switch-row) { grid-template-columns: 1fr; }
+
+/* Hinweis-Pille (Toast) */
+.toast {
+  position: fixed; left: 50%; bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)); z-index: 60;
+  display: inline-flex; align-items: center; gap: 0.45rem; max-width: calc(100vw - 8rem);
+  background: var(--ink); color: var(--bg); font-size: 0.9rem; padding: 0.5rem 1rem; border-radius: 999px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); pointer-events: none;
+  opacity: 0; transform: translate(-50%, 0.5rem); transition: opacity 0.2s, transform 0.2s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { background: var(--warn); color: var(--bg); }
+.toast svg { flex: none; }
+
+/* Nach-oben-Knopf */
+.to-top {
+  position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 50;
+  width: 2.5rem; height: 2.5rem; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+  opacity: 0; transform: translateY(0.5rem); transition: opacity 0.2s, transform 0.2s, background-color 0.15s;
+}
+.to-top[hidden] { display: none; }
+.to-top.show { opacity: 1; transform: none; }
+.to-top:hover { background: var(--surface-2); }
+.to-top:focus-visible { outline: 2px solid var(--motor); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .toast, .to-top, input[type=checkbox].switch, input[type=checkbox].switch::after, select { transition: none; }
+}
+.btn[hidden] { display: none; }
+/* Auf-/zuklappbare Karten (details.card.fold), nebeneinander ohne Mitstrecken */
+.folds { align-items: start; }
+.fold > summary { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; cursor: pointer; list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary h2 { margin: 0; }
+.fold > summary h2::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--ink-3); transition: transform 0.15s; }
+.fold[open] > summary h2::before { transform: rotate(90deg); }
+.fold[open] > summary { margin-bottom: 0.6rem; }
+@media (prefers-reduced-motion: reduce) { .fold > summary h2::before { transition: none; } }

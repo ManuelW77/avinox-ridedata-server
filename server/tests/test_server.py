@@ -31,6 +31,7 @@ def buried_ride_bytes() -> bytes:
 def clean_env(monkeypatch):
     for key in ("AVINOX_UPLOAD_TOKEN", "AVINOX_WEB_USER", "AVINOX_WEB_PASSWORD", "AVINOX_DATA_DIR", "AVINOX_PUBLIC_URL"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("AVINOX_GEOCODE_URL", "off")  # nie ins Netz
 
 
 @pytest.fixture
@@ -163,6 +164,12 @@ def test_basic_auth_from_env(tmp_path, monkeypatch):
         assert c.get("/healthz").status_code == 200
         assert c.get("/").status_code == 401
         assert c.get("/", auth=("a", "b")).status_code == 200
+
+
+def test_rides_page_toolbar(client, settings):
+    put(client, settings, ride_bytes(assist=21))
+    page = client.get("/rides").text
+    assert 'id="rides-tools"' in page and "data-search=" in page and "rides.js" in page
 
 
 def test_pages(client, settings):
@@ -408,7 +415,7 @@ def test_used_keys_exist():
 
     base = Path(i18n.__file__).parent
     known = set(i18n.TEXTS["de"])
-    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.")
+    dynamic = ("best.", "bestp.", "cur.", "last.", "versus.", "sync.kind.", "upload.kind.", "notup.", "span.", "bh.hint.")
     for path in [*base.glob("templates/*.html"), base / "app.py", base / "dashboard.py"]:
         for key in re.findall(r"\bt\(\s*['\"]([a-z0-9_.]+)['\"]", path.read_text()):
             assert key in known or key.startswith(dynamic), (path.name, key)
@@ -438,3 +445,27 @@ def test_settings_language_select(client):
     assert 'id="lang-select"' in r.text
     assert '<option value="en" selected' in r.text
     assert client.cookies.get("lang") == "en" or "lang=en" in r.headers.get("set-cookie", "")
+
+
+def test_device_page_renders_battery_health(client):
+    page = client.get("/device").text
+    assert "Hinweise" in page and "Alles unauff" in page
+    assert client.get("/api/v1/device").json()["battery_health"]["charge_count"] == 0
+
+
+def test_device_page_battery_charts(client, monkeypatch):
+    real = store_mod.Store.device
+
+    nulls = {k: None for k in ("start_temp_c", "end_temp_c", "min_cell_mv", "max_cell_mv", "min_total_v")}
+
+    def fake(self):
+        info = real(self)
+        info["battery_history"] = [
+            {"time": None, "boot_count": 1, "start_pct": 70, "end_pct": 43, "max_temp_c": 17, "max_cell_delta_mv": 200, "max_current_a": 40.0, **nulls},
+            {"time": "2026-01-05T10:00:00+00:00", "boot_count": 2, "start_pct": 90, "end_pct": 60, "max_temp_c": 20, "max_cell_delta_mv": 150, "max_current_a": 35.5, **nulls},
+        ]
+        return info
+
+    monkeypatch.setattr(store_mod.Store, "device", fake)
+    page = client.get("/device").text
+    assert 'id="bat-data"' in page and "battery.js" in page and 'id="bat-charts"' in page

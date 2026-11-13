@@ -9,6 +9,7 @@
 | ``AVINOX_TZ`` | ``Europe/Berlin`` | Zeitzone für die Anzeige |
 | ``AVINOX_TILE_URL`` | OpenStreetMap | Kachel-URL für die Karte |
 | ``AVINOX_TILE_ATTRIBUTION`` | © OpenStreetMap | Quellenangabe der Karte |
+| ``AVINOX_GEOCODE_URL`` | OpenStreetMap Nominatim | Dienst für Ortsnamen der Fahrten (erst nach Einschalten in den Einstellungen aktiv, Koordinaten auf ca. 100 m gerundet); ``off`` schaltet ihn ganz ab |
 | ``AVINOX_MAX_UPLOAD_MB`` | ``64`` | Größte erlaubte Datei |
 """
 
@@ -32,6 +33,7 @@ class Settings:
     tile_url: str
     tile_attribution: str
     max_upload_bytes: int
+    geocode_url: str | None = None
 
     @property
     def db_path(self) -> Path:
@@ -61,6 +63,11 @@ def _token(data_dir: Path) -> str:
     return token
 
 
+def _geocode_url() -> str | None:
+    value = os.environ.get("AVINOX_GEOCODE_URL", "").strip() or "https://nominatim.openstreetmap.org"
+    return None if value.lower() == "off" else value.rstrip("/")
+
+
 def load_settings(data_dir: str | Path | None = None) -> Settings:
     base = Path(data_dir or os.environ.get("AVINOX_DATA_DIR", "./data")).resolve()
     base.mkdir(parents=True, exist_ok=True)
@@ -74,4 +81,5 @@ def load_settings(data_dir: str | Path | None = None) -> Settings:
         tile_url=os.environ.get("AVINOX_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
         tile_attribution=os.environ.get("AVINOX_TILE_ATTRIBUTION", "© OpenStreetMap-Mitwirkende"),
         max_upload_bytes=int(os.environ.get("AVINOX_MAX_UPLOAD_MB", "64")) * 1024 * 1024,
+        geocode_url=_geocode_url(),
     )

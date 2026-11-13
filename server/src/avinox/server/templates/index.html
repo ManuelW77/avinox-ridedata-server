@@ -3,7 +3,7 @@
 <div class="lead">
   <div>
     <h1>{{ t('rides.title') }}</h1>
-    <p>{{ t('rides.summary', n=stats.total.rides, km=stats.total.distance_km | num(1), hm=stats.total.ascent_m | num, h=stats.total.moving_time_s | duration) }}</p>
+    <p id="rides-summary">{{ t('rides.summary', n=stats.total.rides, km=stats.total.distance_km | num(1), hm=stats.total.ascent_m | num, h=stats.total.moving_time_s | duration) }}</p>
   </div>
   <a class="btn ghost" href="/settings#upload">{{ t('btn.upload') }}</a>
 </div>
@@ -15,11 +15,11 @@
 <section class="card">
   <div class="bars wide">
     {% for month, m in stats.months.items() %}
-    <div class="bar">
+    <button type="button" class="bar" data-ym="{{ month }}" aria-pressed="false">
       <span class="label">{{ t('rides.month_label', m=month[5:], y=month[:4], n=m.rides) }}</span>
       <span class="track"><span class="fill" style="width: {{ (100 * m.distance_km / max_km) if max_km else 0 }}%"></span></span>
       <span class="val">{{ m.distance_km | num(1) }} km</span>
-    </div>
+    </button>
     {% endfor %}
   </div>
 </section>
@@ -29,24 +29,49 @@
 {% if rides %}
 <div class="block t-ride{% if not stats.months %} block-first{% endif %}" id="sec-list" data-jump="{{ t('rides.sec.list') }}">
   <h2 class="section-title">{{ t('rides.sec.list') }}</h2>
-<div class="rides-head">
-  <span>{{ t('col.date') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span><span></span>
+<div class="rides-tools" id="rides-tools" role="search">
+  <label class="rt-search"><span aria-hidden="true">&#9906;</span><input type="search" id="rt-q" placeholder="{{ t('rides.f.search') }}" aria-label="{{ t('rides.f.search') }}" autocomplete="off"></label>
+  <div class="segmented" id="rt-year" role="group" aria-label="{{ t('rides.f.year') }}" hidden></div>
+  <div class="segmented" id="rt-len" role="group" aria-label="{{ t('rides.f.length') }}">
+    <button type="button" data-v="" aria-pressed="true">{{ t('rides.f.all') }}</button>
+    <button type="button" data-v="lt20" aria-pressed="false">{{ t('rides.f.len_lt20') }}</button>
+    <button type="button" data-v="20-50" aria-pressed="false">{{ t('rides.f.len_mid') }}</button>
+    <button type="button" data-v="gt50" aria-pressed="false">{{ t('rides.f.len_gt50') }}</button>
+  </div>
+  <button type="button" class="rt-gps" id="rt-gps" aria-pressed="false">{{ t('rides.f.gps') }}</button>
+  <select id="rt-sort" aria-label="{{ t('rides.f.sort') }}">
+    <option value="new">{{ t('rides.f.sort_new') }}</option>
+    <option value="old">{{ t('rides.f.sort_old') }}</option>
+    <option value="dist">{{ t('rides.f.sort_dist') }}</option>
+    <option value="hm">{{ t('rides.f.sort_hm') }}</option>
+    <option value="dur">{{ t('rides.f.sort_dur') }}</option>
+  </select>
+  <button type="button" class="btn ghost" id="rt-reset" hidden>{{ t('rides.f.reset') }}</button>
 </div>
-<ul class="rides">
+<div class="rides-head">
+  <span>{{ t('col.ride') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span>
+</div>
+<ul class="rides" id="rides-list">
   {% for r in rides %}
-  <li>
+  <li data-name="{{ r.name }}" data-search="{{ r.name }} {{ (r.places.values() | select | join(' ')) if r.places else '' }}" data-start="{{ r.start_utc | localtime('%Y-%m-%dT%H:%M') if r.start_utc else '' }}" data-ym="{{ r.start_utc | localtime('%Y-%m') if r.start_utc else '' }}" data-km="{{ (r.distance_m or 0) / 1000 }}" data-hm="{{ r.ascent_m or 0 }}" data-dur="{{ r.duration_s or 0 }}" data-mov="{{ r.moving_time_s or 0 }}" data-gps="{{ 1 if r.has_gps else 0 }}">
     <a class="ride-row" href="/rides/{{ r.id }}">
-      <span class="when">{{ r.start_utc | localtime('%a %d.%m.%Y') }}<span>{{ r.start_utc | localtime('%H:%M Uhr') if r.start_utc else t('ride_n', n=r.ride_id) }}</span></span>
+      <span class="when">
+        {% if r.thumb %}<svg class="thumb" viewBox="0 0 64 40" width="64" height="40" aria-hidden="true"><path d="{{ r.thumb }}"/></svg>{% else %}<span class="thumb"></span>{% endif %}
+        <span class="when-text"><strong>{{ r.name }}</strong><span>{{ r.start_utc | localtime('%a %d.%m.%Y · %H:%M') if r.start_utc else t('ride_n', n=r.ride_id) }}{% if r.is_loop %} <i class="loop" aria-hidden="true">&#8635;</i>{% endif %}</span></span>
+      </span>
       <span class="n">{{ (r.distance_m / 1000) | num(1) }}<small>km</small></span>
       <span class="n">{{ r.duration_s | duration }}</span>
       <span class="n opt">{{ r.ascent_m | num }}<small>m</small></span>
       <span class="n opt">{{ r.avg_rider_power_w | num }}<small>W</small></span>
       <span class="n opt">{% if r.battery_start_pct is not none %}{{ r.battery_start_pct }}→{{ r.battery_end_pct }}<small>%</small>{% else %}–{% endif %}</span>
-      <span class="flags" title="{{ t('gps.with') if r.has_gps else t('gps.without') }}">{{ '◉' if r.has_gps else '' }}</span>
     </a>
   </li>
   {% endfor %}
 </ul>
+<div class="card empty" id="rides-empty" hidden>
+  <p>{{ t('rides.f.none') }}</p>
+  <button type="button" class="btn ghost" id="rt-reset2">{{ t('rides.f.reset_filters') }}</button>
+</div>
 </div>
 {% else %}
 <div class="card empty">
@@ -56,5 +81,6 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', path='rides.js').path }}" defer></script>
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% endblock %}

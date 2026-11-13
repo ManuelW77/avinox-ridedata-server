@@ -12,7 +12,7 @@
       <option value="de"{% if lang == 'de' %} selected{% endif %}>Deutsch</option>
       <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
     </select>
-    <button type="submit" class="btn">{{ t('set.save') }}</button>
+    <button type="submit" class="btn" id="lang-save">{{ t('set.save') }}</button>
   </form>
 </section>
 </div>
@@ -34,6 +34,18 @@
   {% else %}
   <p class="notice">{{ t('set.nomodes') }}</p>
   {% endif %}
+</section>
+</div>
+
+<div class="block t-neutral" id="sec-geo" data-jump="{{ t('set.geo') }}">
+  <h2 class="section-title">{{ t('set.geo') }}</h2>
+  <p class="muted small block-desc">{{ t('set.geo_text') }}</p>
+<section class="card">
+  <div class="form-row">
+    <label for="geo-enabled" class="switch-row"><input type="checkbox" class="switch" id="geo-enabled" disabled> <span>{{ t('set.geo_toggle') }}</span></label>
+  </div>
+  <p class="muted small" id="geo-status" role="status"></p>
+  <p class="notice" id="geo-off" hidden>{{ t('set.geo_off_hint') }}</p>
 </section>
 </div>
 
