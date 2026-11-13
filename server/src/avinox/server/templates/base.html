@@ -33,6 +33,9 @@
       <a href="{{ lang_links['de'] }}" hreflang="de" lang="de" {% if lang == 'de' %}aria-current="true"{% endif %}>DE</a> | <a href="{{ lang_links['en'] }}" hreflang="en" lang="en" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a>
     </p>
   </footer>
+  <button type="button" class="to-top" id="to-top" hidden aria-label="{{ t('js.to_top') }}" title="{{ t('js.to_top') }}">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
   <script type="application/json" id="i18n">{{ js_i18n | tojson }}</script>
   <script>
   (function () {
@@ -61,6 +64,7 @@
     update();
   })();
   </script>
+  <script src="{{ url_for('static', path='toast.js').path }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

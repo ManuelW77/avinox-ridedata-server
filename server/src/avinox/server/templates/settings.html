@@ -12,7 +12,7 @@
       <option value="de"{% if lang == 'de' %} selected{% endif %}>Deutsch</option>
       <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
     </select>
-    <button type="submit" class="btn">{{ t('set.save') }}</button>
+    <button type="submit" class="btn" id="lang-save">{{ t('set.save') }}</button>
   </form>
 </section>
 </div>
@@ -42,7 +42,7 @@
   <p class="muted small block-desc">{{ t('set.geo_text') }}</p>
 <section class="card">
   <div class="form-row">
-    <label for="geo-enabled"><input type="checkbox" id="geo-enabled" disabled> {{ t('set.geo_toggle') }}</label>
+    <label for="geo-enabled" class="switch-row"><input type="checkbox" class="switch" id="geo-enabled" disabled> <span>{{ t('set.geo_toggle') }}</span></label>
   </div>
   <p class="muted small" id="geo-status" role="status"></p>
   <p class="notice" id="geo-off" hidden>{{ t('set.geo_off_hint') }}</p>

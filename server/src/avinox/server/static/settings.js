@@ -7,7 +7,15 @@
   const LOCALE = I.lang === "en" ? "en-US" : "de-DE";
   // ---- Sprache: bei Auswahl sofort abschicken
   const langSelect = document.getElementById("lang-select");
-  if (langSelect && langSelect.form) langSelect.addEventListener("change", () => langSelect.form.submit());
+  if (langSelect && langSelect.form) {
+    const langSave = document.getElementById("lang-save");
+    if (langSave) langSave.hidden = true;
+    langSelect.addEventListener("change", () => {
+      try { sessionStorage.setItem("avinox-toast", "lang"); } catch (e) {}
+      langSelect.form.submit();
+    });
+  }
+  const toast = (text, kind) => { if (window.avinoxToast) window.avinoxToast(text, kind); };
   // ---- Eigene Modi benennen
   const form = document.getElementById("modes-form");
   if (form) {
@@ -22,8 +30,10 @@
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
         status.textContent = res.ok ? tr("saved") : tr("error_n", { n: res.status });
+        if (res.ok) toast(tr("autosaved")); else toast(tr("error_n", { n: res.status }), "error");
       } catch (e) {
         status.textContent = tr("error_msg", { m: e.message });
+        toast(tr("error_msg", { m: e.message }), "error");
       }
     });
   }
@@ -45,9 +55,12 @@
         const res = await fetch("/api/v1/settings/geocode", {
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: geoBox.checked }),
         });
-        if (res.ok) showGeo(await res.json());
+        if (res.ok) { showGeo(await res.json()); toast(tr("autosaved")); }
+        else { geoBox.checked = !geoBox.checked; toast(tr("error_n", { n: res.status }), "error"); }
       } catch (e) {
+        geoBox.checked = !geoBox.checked;
         geoStatus.textContent = tr("error_msg", { m: e.message });
+        toast(tr("error_msg", { m: e.message }), "error");
       }
     });
   }
