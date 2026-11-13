@@ -468,6 +468,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         text, name = found
         return Response(text, media_type="application/gpx+xml", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
+    @app.get("/api/v1/rides/{ride_pk}/fit", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def ride_fit(ride_pk: int):
+        found = store.ride_fit(ride_pk)
+        if not found:
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        data, name = found
+        return Response(data, media_type="application/vnd.ant.fit", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
     @app.get("/api/v1/rides/{ride_pk}/raw", dependencies=[Depends(read_auth)], tags=["fahrten"])
     def ride_raw(ride_pk: int):
         found = store.ride_raw(ride_pk)

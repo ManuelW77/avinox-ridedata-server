@@ -17,6 +17,7 @@ avinox = "avinox.cli:main"
 
 [dependency-groups]
 dev = [
+    "fitdecode>=0.11.0",
     "httpx>=0.28.1",
     "pytest>=8",
 ]
