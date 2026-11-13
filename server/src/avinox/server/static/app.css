@@ -571,3 +571,47 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   #color-by { display: flex; flex-wrap: nowrap; width: 100%; }
   #color-by button { flex: 1; font-size: 0.75rem; padding: 0.3rem 0.2rem; white-space: nowrap; }
 }
+/* Karte: Werkzeugleiste (3D + Einfärben) */
+.map-tools { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.btn.small { font-size: 0.85rem; padding: 0.3rem 0.85rem; }
+.btn[hidden] { display: none; }
+.maplibregl-map { font-family: inherit; }
+
+/* 3D-Ansicht: Vollbild über allem */
+.view3d { position: fixed; inset: 0; z-index: 1100; background: var(--bg); color: var(--ink); }
+.view3d[hidden] { display: none; }
+#map3d { position: absolute; inset: 0; }
+.view3d-bar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 1rem; padding-top: max(0.6rem, env(safe-area-inset-top));
+  background: color-mix(in srgb, var(--surface) 90%, transparent); border-bottom: 1px solid var(--line);
+}
+.view3d-bar h2 { flex: 1; margin: 0; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view3d-close { flex: none; width: 2.2rem; height: 2.2rem; justify-content: center; padding: 0; font-size: 1.3rem; line-height: 1; }
+.view3d-ride { flex: none; }
+.view3d .maplibregl-ctrl-top-right { top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.2rem); }
+.view3d-legend {
+  position: absolute; left: 1rem; top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.8rem); margin: 0; z-index: 2;
+  max-width: calc(100% - 5rem); display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.5rem 0.75rem;
+  border-radius: 12px; font-size: 0.8rem; color: var(--ink-2);
+  background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+.view3d-legend:empty { display: none; }
+.view3d-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 0.3rem; vertical-align: -1px; }
+.view3d-dock {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; width: min(34rem, calc(100% - 2rem));
+  bottom: max(2.6rem, calc(env(safe-area-inset-bottom) + 1.6rem)); display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.6rem 0.9rem; border-radius: 16px; background: color-mix(in srgb, var(--surface) 93%, transparent);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.2);
+}
+.view3d-dock[hidden] { display: none; }
+.view3d-hud { display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; justify-content: center; font-variant-numeric: tabular-nums; }
+.view3d-hud span { display: flex; flex-direction: column; align-items: center; min-width: 3.4rem; }
+.view3d-hud small { font-size: 0.7rem; color: var(--ink-2); }
+.view3d-hud b { font-size: 1rem; font-weight: 650; }
+.view3d-seek { width: 100%; accent-color: var(--ink); }
+/* 3D-Ansicht öffnen: in der Antriebsfarbe hervorgehoben */
+.btn.btn-3d { background: var(--motor, #13877a); color: #fff; font-weight: 600; }
+.btn.btn-3d:hover { filter: brightness(1.08); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.btn-3d { color: #0f1a18; } }
+:root[data-theme="dark"] .btn.btn-3d { color: #0f1a18; }

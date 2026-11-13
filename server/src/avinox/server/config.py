@@ -7,8 +7,7 @@
 | ``AVINOX_WEB_USER`` / ``AVINOX_WEB_PASSWORD`` | leer | Optionaler Passwortschutz (Basic Auth) für Webseite und Lese-API |
 | ``AVINOX_PUBLIC_URL`` | leer | Adresse des Servers für den ESP32, z. B. ``http://192.168.1.18:8000`` (sonst aus der Browser-Anfrage) |
 | ``AVINOX_TZ`` | ``Europe/Berlin`` | Zeitzone für die Anzeige |
-| ``AVINOX_TILE_URL`` | OpenStreetMap | Kachel-URL für die Karte |
-| ``AVINOX_TILE_ATTRIBUTION`` | © OpenStreetMap | Quellenangabe der Karte |
+| ``AVINOX_MAP_STYLE`` | OpenFreeMap „liberty“ | Style-URL (MapLibre, Vektorkarte) für die Fahrtkarte und die 3D-Ansicht |
 | ``AVINOX_GEOCODE_URL`` | OpenStreetMap Nominatim | Dienst für Ortsnamen der Fahrten (erst nach Einschalten in den Einstellungen aktiv, Koordinaten auf ca. 100 m gerundet); ``off`` schaltet ihn ganz ab |
 | ``AVINOX_MAX_UPLOAD_MB`` | ``64`` | Größte erlaubte Datei |
 """
@@ -30,8 +29,7 @@ class Settings:
     web_password: str | None
     public_url: str | None
     tz: ZoneInfo
-    tile_url: str
-    tile_attribution: str
+    map_style: str
     max_upload_bytes: int
     geocode_url: str | None = None
 
@@ -78,8 +76,7 @@ def load_settings(data_dir: str | Path | None = None) -> Settings:
         web_password=os.environ.get("AVINOX_WEB_PASSWORD") or None,
         public_url=(",".join(u.strip().rstrip("/") for u in os.environ.get("AVINOX_PUBLIC_URL", "").split(",") if u.strip()) or None),
         tz=ZoneInfo(os.environ.get("AVINOX_TZ", "Europe/Berlin")),
-        tile_url=os.environ.get("AVINOX_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
-        tile_attribution=os.environ.get("AVINOX_TILE_ATTRIBUTION", "© OpenStreetMap-Mitwirkende"),
+        map_style=os.environ.get("AVINOX_MAP_STYLE") or "https://tiles.openfreemap.org/styles/liberty",
         max_upload_bytes=int(os.environ.get("AVINOX_MAX_UPLOAD_MB", "64")) * 1024 * 1024,
         geocode_url=_geocode_url(),
     )
