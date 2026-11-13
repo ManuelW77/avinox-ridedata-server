@@ -617,3 +617,6 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.btn-3d:hover { filter: brightness(1.08); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.btn-3d { color: #0f1a18; } }
 :root[data-theme="dark"] .btn.btn-3d { color: #0f1a18; }
+
+.rides-more { display: flex; justify-content: center; margin: 1rem 0; }
+.rides-more[hidden] { display: none; }

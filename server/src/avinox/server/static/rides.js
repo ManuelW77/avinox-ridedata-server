@@ -1,5 +1,7 @@
 // Fahrtenliste: Suche, Filter, Sortierung, Monatsgruppen. Der Server liefert alle Zeilen,
-// dieses Skript blendet aus, sortiert um und rechnet die Summen neu.
+// dieses Skript blendet aus, sortiert um und rechnet die Summen neu. Sichtbar sind zunächst nur
+// PAGE (30) Fahrten, der Knopf „Weitere anzeigen“ lädt mehr nach. Suche, Filter, Summen und
+// Monatssummen laufen immer über ALLE passenden Fahrten; `limit` steht nicht in der URL.
 (function () {
   "use strict";
   var tools = document.getElementById("rides-tools");
@@ -34,6 +36,9 @@
   var gpsBtn = document.getElementById("rt-gps");
   var sortSel = document.getElementById("rt-sort");
   var resetBtns = [document.getElementById("rt-reset"), document.getElementById("rt-reset2")];
+  var moreBtn = document.getElementById("rides-more");
+  var PAGE = 30;
+  var limit = PAGE;
   var emptyBox = document.getElementById("rides-empty");
   var bars = Array.prototype.slice.call(document.querySelectorAll("button.bar[data-ym]"));
 
@@ -129,25 +134,33 @@
     Array.prototype.forEach.call(list.querySelectorAll("li.group-head"), function (h) { h.remove(); });
 
     var grouped = state.sort === "new" || state.sort === "old";
-    var cur = null, head = null, gn = 0, gkm = 0;
-    function closeGroup() {
-      if (head) head.textContent = tx("rides.group", { month: head.dataset.label, n: gn, km: fmt(gkm, 0) });
-    }
+    var visible = shown.slice(0, limit);
+    var perYm = {};
     shown.forEach(function (r) {
+      var g = perYm[r.ym] || (perYm[r.ym] = { n: 0, km: 0 });
+      g.n++; g.km += r.km;
+    });
+    var cur = null;
+    visible.forEach(function (r) {
       if (grouped && (cur === null || r.ym !== cur)) {
-        closeGroup();
-        cur = r.ym; gn = 0; gkm = 0;
-        head = document.createElement("li");
+        cur = r.ym;
+        var head = document.createElement("li");
         head.className = "group-head";
         var date = r.ym ? new Date(r.ym + "-01T12:00:00") : null;
-        head.dataset.label = date ? monthFmt.format(date) : tx("rides.nodate");
+        head.textContent = tx("rides.group", {
+          month: date ? monthFmt.format(date) : tx("rides.nodate"),
+          n: perYm[r.ym].n, km: fmt(perYm[r.ym].km, 0)
+        });
         list.appendChild(head);
       }
-      gn++; gkm += r.km;
       r.li.hidden = false;
       list.appendChild(r.li);
     });
-    closeGroup();
+    var rest = shown.length - visible.length;
+    if (moreBtn) {
+      moreBtn.hidden = rest <= 0;
+      moreBtn.textContent = tx("rides.more", { n: Math.min(PAGE, rest), rest: rest });
+    }
 
     var km = 0, hm = 0, mov = 0;
     shown.forEach(function (r) { km += r.km; hm += r.hm; mov += r.mov; });
@@ -174,31 +187,36 @@
   var timer = null;
   q.addEventListener("input", function () {
     clearTimeout(timer);
-    timer = setTimeout(function () { state.q = q.value.trim(); render(); }, 120);
+    timer = setTimeout(function () { state.q = q.value.trim(); limit = PAGE; render(); }, 120);
   });
   yearBox.addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
     state.y = b.dataset.v;
     if (state.m && state.y && state.m.slice(0, 4) !== state.y) state.m = "";
-    render();
+    limit = PAGE; render();
   });
   lenBox.addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
-    state.len = b.dataset.v; render();
+    state.len = b.dataset.v; limit = PAGE; render();
   });
-  gpsBtn.addEventListener("click", function () { state.gps = !state.gps; render(); });
-  sortSel.addEventListener("change", function () { state.sort = sortSel.value; render(); });
+  gpsBtn.addEventListener("click", function () { state.gps = !state.gps; limit = PAGE; render(); });
+  sortSel.addEventListener("change", function () { state.sort = sortSel.value; limit = PAGE; render(); });
   bars.forEach(function (b) {
     b.addEventListener("click", function () {
       state.m = state.m === b.dataset.ym ? "" : b.dataset.ym;
-      render();
+      limit = PAGE; render();
     });
   });
   resetBtns.forEach(function (b) {
     if (b) b.addEventListener("click", function () {
       state.q = ""; state.y = ""; state.len = ""; state.gps = false; state.m = "";
-      render();
+      limit = PAGE; render();
     });
+  });
+  if (moreBtn) moreBtn.addEventListener("click", function () {
+    var y = window.scrollY;
+    limit += PAGE; render();
+    window.scrollTo(0, y);
   });
 
   readUrl();
