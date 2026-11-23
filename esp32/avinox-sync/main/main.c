@@ -14,6 +14,7 @@
 
 #include "config.h"
 #include "led.h"
+#include "log_buf.h"
 #include "ota.h"
 #include "portal.h"
 #include "report.h"
@@ -170,6 +171,7 @@ static void sync_task(void *arg)
 
 void app_main(void)
 {
+    log_buf_init();
     if (config_nvs_init() != ESP_OK) {
         led_init();
         led_set_state(LED_ERROR);

@@ -1,4 +1,5 @@
 #include "config.h"
+#include "log_buf.h"
 
 #include <string.h>
 #include <strings.h>
@@ -73,6 +74,12 @@ bool config_complete(const app_config_t *cfg)
 
 esp_err_t config_save(const app_config_t *cfg)
 {
+    /* Neues Zugangspasswort = neuer Besitzer möglich: altes Log (SSID, Server-URL) nicht weiterreichen */
+    static app_config_t old;    /* statisch: Struktur ist für den Stack zu groß */
+    if (config_load(&old) != ESP_OK || strcmp(old.ap_pass, cfg->ap_pass) != 0) {
+        log_buf_clear();
+    }
+    memset(&old, 0, sizeof(old));
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err != ESP_OK) {
@@ -96,6 +103,7 @@ esp_err_t config_save(const app_config_t *cfg)
 
 esp_err_t config_factory_reset(void)
 {
+    log_buf_clear();            /* Werkseinstellung: auch das Log (übersteht sonst den Neustart) */
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err != ESP_OK) {

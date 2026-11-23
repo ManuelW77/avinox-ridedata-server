@@ -18,6 +18,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "nvs.h"
@@ -592,7 +593,11 @@ done:
         ESP_LOGW(TAG, "Sync %s", line);
     }
     result_save(&res);
+    ESP_LOGI(TAG, "Speicher vor Bericht: Stack frei %u Byte, Heap frei %u Byte (kleinster Block %u)",
+             (unsigned)uxTaskGetStackHighWaterMark(NULL), (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     report_send(cfg, &res);
+    ESP_LOGI(TAG, "Bericht abgeschlossen");
     if (out) {
         *out = res;
     }
