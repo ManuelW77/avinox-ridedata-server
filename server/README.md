@@ -54,7 +54,7 @@ Der Server spricht das Model Context Protocol (Streamable HTTP, nur lesend) unte
 
 Anmeldung nur mit dem MCP-Token: `Authorization: Bearer <token>` an `/mcp` oder die Adresse `/mcp/<token>` (für Dienste, die nur eine URL erlauben). Ohne gültiges Token 401, bei ausgeschaltetem MCP 404. Wer das Token hat, liest alle Fahrdaten. claude.ai und ChatGPT verbinden sich aus dem Internet, der Server muss dafür per HTTPS öffentlich erreichbar sein (Reverse Proxy, Tunnel).
 
-Werkzeuge: `list_rides`, `get_ride`, `get_period`, `get_bests`, `get_bike_status`. Es werden nie GPS-Daten, Seriennummern, Dateinamen oder Benutzerdaten ausgegeben.
+Werkzeuge: `list_rides`, `get_ride`, `get_period`, `get_bests`, `get_bike_status`, `get_physics` (Fahrphysik, siehe unten). Es werden nie GPS-Daten, Seriennummern, Dateinamen oder Benutzerdaten ausgegeben.
 
 ## Server (Docker)
 
@@ -110,3 +110,12 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 (`stat -f%z` unter macOS, `stat -c%s` unter Linux.)
 
 Ohne ESP32 lassen sich Dateien auch über die Webseite hochladen: **Einstellungen → Dateien hochladen**, dann den Ordner des Display-Laufwerks wählen. Verschlüsselte `ebike_log_*.dat` werden dabei ignoriert.
+
+## Fahrphysik
+
+Schätzt je Fahrt Rollwiderstand (Crr), Luftwiderstandsfläche (CdA), Leistungsbedarf auf der Ebene bei Windstille (20 und 25 km/h), Energie je km, Motoranteil, Bergauf-Werte und Bedingungen. Modell je Sekunde: `P_gesamt·η/v − m·g·sin α − m·a = m·g·cos α·Crr + ½·ρ·v²·CdA` (η = 0,96). Steigung aus Höhe und Strecke über 150 m, Luftdichte aus Luftdruck und Temperatur der Fahrt.
+
+- **Voraussetzung:** Gesamtgewicht (Fahrer + Ausrüstung + Bike) unter *Einstellungen → Fahrphysik*. Optional CdA (Vorgabe 0,7 m²) und Akkugröße in Wh (für den Wirkungsgrad von Motor und Akku). Ohne Gewicht antworten die Endpunkte mit 409 `mass_missing`.
+- **Schätzwerte:** Es gibt keinen Windmesser, die Leistungswerte stammen aus dem Reverse Engineering, die Höhe ist barometrisch. CdA wird nur bei genug Tempo-Spanne gefittet (`cda_source` = `fitted`), sonst gilt der Vorgabewert (`assumed`). Wind verfälscht einzelne Fahrten; bei Hin- und Rückweg derselben Strecke (`conditions.out_and_back`) mittelt `crr_mean` ihn weitgehend heraus. Die Temperatur kann die Gerätetemperatur sein (Warnung `temp_is_device`).
+- **API:** `GET /api/v1/rides/{id}/physics`, `GET /api/v1/physics/compare?start=YYYY-MM-DD&end=YYYY-MM-DD` (je Fahrt Kernwerte, Median, `outlier` bei Crr > 1,25 × Median), `GET/PUT /api/v1/settings/physics` (`mass_kg`, `cda`, `battery_wh`; mit Login nur für Admins).
+- **Zwischenspeicher:** Tabelle `ride_physics`; neu gerechnet wird bei geändertem Gewicht, CdA, Akkugröße, Fahrtdatei oder Rechenversion.

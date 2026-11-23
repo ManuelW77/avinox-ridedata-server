@@ -18,6 +18,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
 from . import ai
+from .store import PhysicsSetupError
 
 PATH = "/mcp"
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -213,6 +214,36 @@ def build(store):
         if facts is None:
             return json.dumps({"period": period, "label": label, "rides": 0}, ensure_ascii=False)
         return _text({**facts, "label": label, "ai_text": _ai_text(store, "period", ai.period_ref(dash))})
+
+    @mcp.tool()
+    def get_physics(
+        ride_id: Annotated[int | None, Field(ge=1, le=2**31, description="Ride id from list_rides; omit to compare rides")] = None,
+        start: Annotated[str | None, Field(description="Comparison only: first local date, YYYY-MM-DD")] = None,
+        end: Annotated[str | None, Field(description="Comparison only: last local date, YYYY-MM-DD")] = None,
+    ) -> str:
+        """Ride physics. With ride_id: the full analysis of that ride; without it: a comparison of all rides (optionally
+        between start and end) with the median over all rides and an outlier flag per ride.
+        Contents: rolling resistance Crr and air resistance area CdA (with a 10-90 % range for Crr), the power needed on
+        flat ground at 20 and 25 km/h, energy per km and motor share, the ratio of physically needed to measured energy,
+        motor+battery efficiency (only if the battery size is set), climbing figures (W/kg, VAM, real assist factor per
+        assist level) and conditions (temperature, out-and-back detection that averages wind out).
+        IMPORTANT: Crr and CdA are ESTIMATES, not measurements. There is no wind sensor, the power values come from
+        reverse engineering, altitude is barometric and the weight is entered by the user. CdA is only fitted when the
+        speed varies enough (cda_source 'fitted'), otherwise a default is assumed ('assumed'). Wind biases single rides
+        (a tailwind lowers Crr, a headwind raises it); out_and_back.crr_mean cancels most of it. The temperature may be
+        the device temperature (warning temp_is_device). A flag 'outlier' (Crr above 1.25 x the median) hints at a
+        dragging brake or similar. Blocks without data are null with a *_reason. If the total system weight is not
+        set in the app settings, a hint to set it is returned instead."""
+        try:
+            if ride_id is not None:
+                result = store.ride_physics(ride_id)
+                if result is None:
+                    raise ValueError("ride not found")
+            else:
+                result = store.physics_compare(start, end)
+        except PhysicsSetupError:
+            return json.dumps({"error": "mass_missing", "message": "Enter the total system weight (rider + gear + bike) in the app settings first."})
+        return json.dumps(result, ensure_ascii=False)
 
     @mcp.tool()
     def get_bests() -> str:

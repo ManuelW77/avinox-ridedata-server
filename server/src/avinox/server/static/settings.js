@@ -38,6 +38,28 @@
     });
   }
 
+  // ---- Fahrphysik: Gewicht, CdA, Akkugröße
+  const physForm = document.getElementById("phys-form");
+  if (physForm) {
+    const num = (id) => { const v = document.getElementById(id).value.trim().replace(",", "."); return v === "" ? null : Number(v); };
+    const show = (d) => {
+      document.getElementById("phys-mass").value = d.mass_kg != null ? d.mass_kg : "";
+      document.getElementById("phys-cda").value = d.cda_custom ? d.cda : "";
+      document.getElementById("phys-battery").value = d.battery_wh != null ? d.battery_wh : "";
+    };
+    fetch("/api/v1/settings/physics").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) show(d); }).catch(() => {});
+    physForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const body = { mass_kg: num("phys-mass"), cda: num("phys-cda"), battery_wh: num("phys-battery") };
+      if (Object.values(body).some((v) => v !== null && Number.isNaN(v))) { toast(tr("phys_invalid"), "error"); return; }
+      try {
+        const res = await fetch("/api/v1/settings/physics", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (res.ok) { show(await res.json()); toast(tr("saved")); }
+        else toast(res.status === 400 ? tr("phys_invalid") : tr("error_n", { n: res.status }), "error");
+      } catch (e) { toast(tr("error_msg", { m: e.message }), "error"); }
+    });
+  }
+
   // ---- HealthLog
   const hlForm = document.getElementById("hl-form");
   if (hlForm) {
