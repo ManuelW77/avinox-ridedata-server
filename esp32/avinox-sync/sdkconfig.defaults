@@ -12,6 +12,5 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
 # OTA: neue Firmware muss sich bestätigen, sonst Rückkehr zur alten
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
-# USB-Aufzählung im Log (Tags USBH/HUB/ENUM auf DEBUG, siehe usb_drive.c); Standard bleibt INFO
-CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=n
-CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+# Log-Maximum bleibt INFO: Mit DEBUG stürzt esp_vfs_select ab (IDF v6.0.2, vfs_calls.c:660 ESP_LOGD mit vfs==NULL,
+# sobald /usb ausgehängt ist) - der ESP startete dann nach jedem Sync neu.
