@@ -13,6 +13,7 @@
 #include "esp_http_server.h"
 #include "lwip/sockets.h"
 
+#include "log_buf.h"
 #include "report.h"
 #include "sync.h"
 #include "usb_drive.h"
@@ -313,6 +314,13 @@ static esp_err_t root_get(httpd_req_t *req)
     buf_init(&b);
     web_page_head(&b, "/");
     status_block(&b);
+    buf_append(&b, "<section><p><a href=\"/log\" target=\"_blank\">");
+    buf_append_esc(&b, T(T_LOG_LINK));
+    buf_append(&b, "</a></p><form method=\"post\" action=\"/log/clear\"><button class=\"sec\" type=\"submit\">");
+    buf_append_esc(&b, T(T_LOG_CLEAR_BTN));
+    buf_append(&b, "</button></form><small>");
+    buf_append_esc(&b, T(T_LOG_NOTE));
+    buf_append(&b, "</small></section>");
     buf_append(&b, "<section class=\"err\"><p>");
     buf_append_esc(&b, T(T_WARN_WIFI));
     buf_append(&b, "</p></section>");
@@ -324,6 +332,35 @@ static esp_err_t root_get(httpd_req_t *req)
     buf_append(&b, "</small></section>");
     web_page_tail(&b);
     return buf_send(req, &b);
+}
+
+/* Log als Text, in Stücken gesendet (kein großer Puffer). */
+static esp_err_t log_get(httpd_req_t *req)
+{
+    if (!access_ok(req, false)) {
+        return ESP_OK;
+    }
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    char chunk[512];
+    uint32_t pos = 0, end = log_buf_end();
+    size_t n;
+    while ((n = log_buf_read(&pos, end, chunk, sizeof(chunk))) > 0) {
+        if (httpd_resp_send_chunk(req, chunk, n) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
+    return httpd_resp_send_chunk(req, NULL, 0);
+}
+
+static esp_err_t log_clear_post(httpd_req_t *req)
+{
+    if (!access_ok(req, true)) {
+        return ESP_OK;
+    }
+    log_buf_clear();
+    ESP_LOGI(TAG, "Log geleert");
+    return web_send_message(req, "ok", T_OK_LOG_CLEARED, true);
 }
 
 static esp_err_t scan_get(httpd_req_t *req)
@@ -401,7 +438,7 @@ void webui_start(const app_config_t *cfg)
     s_cfg = *cfg;
 
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
-    c.max_uri_handlers = 10;
+    c.max_uri_handlers = 12;
     c.max_open_sockets = 4;
     c.lru_purge_enable = true;
     c.stack_size = 6144;
@@ -419,6 +456,8 @@ void webui_start(const app_config_t *cfg)
         { .uri = "/restart", .method = HTTP_POST, .handler = restart_post },
         { .uri = "/check", .method = HTTP_POST, .handler = check_post },
         { .uri = "/setup", .method = HTTP_POST, .handler = setup_post },
+        { .uri = "/log", .method = HTTP_GET, .handler = log_get },
+        { .uri = "/log/clear", .method = HTTP_POST, .handler = log_clear_post },
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
         httpd_register_uri_handler(srv, &uris[i]);
