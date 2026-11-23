@@ -193,8 +193,8 @@ Danach:
 Alle Log-Meldungen landen zusätzlich in einem 16-KB-Ringpuffer im RAM (bleibt nach Software-Neustart oder Absturz
 erhalten, nach dem Ausstecken nicht). Beim Start steht dort der Reset-Grund samt Firmware-Version. Aufruf im Betrieb:
 `http://<IP des Geräts>/log` (Login wie die Weboberfläche, Benutzer `avinox`) oder auf der Statusseite „Log anzeigen“;
-„Log leeren“ leert den Puffer. Die USB-Aufzählung (Tags `USBH`, `HUB`, `ENUM`) wird auf DEBUG mitgeschrieben, um zu
-sehen, wo die Erkennung des Display-Laufwerks hängt. Seriennummer, Token und WLAN-Passwort werden nie geloggt.
+„Log leeren“ leert den Puffer. Die USB-Schritte (Gerät angeschlossen, Anmeldung, Einhängen) stehen auf INFO im Log. DEBUG bleibt aus:
+Mit `CONFIG_LOG_MAXIMUM_LEVEL_DEBUG` stürzt `esp_vfs_select` in IDF v6.0.2 nach dem Aushängen ab. Seriennummer, Token und WLAN-Passwort werden nie geloggt.
 Abstürze stehen nach dem Neustart als `!!! PANIC`-Zeile mit Backtrace im Log.
 Im Einrichtungsportal gibt es `/log` bewusst nicht (dort ohne Anmeldung erreichbar).
 

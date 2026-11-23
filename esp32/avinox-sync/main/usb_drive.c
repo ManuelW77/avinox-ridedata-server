@@ -61,20 +61,8 @@ static void msc_event_cb(const msc_host_event_t *event, void *arg)
     }
 }
 
-/* USB-Stack: Aufzählung (Enumeration) im Log sichtbar machen. Wirkt, weil CONFIG_LOG_MAXIMUM_LEVEL = DEBUG
- * (sdkconfig.defaults) und die dynamische Pegelsteuerung an ist. HCD DWC bleibt auf INFO (sehr gesprächig). */
-static void usb_log_levels(void)
-{
-    static const char *const dbg[] = { "USBH", "HUB", "ENUM", "USB HOST", "EXT_HUB", "EXT_PORT" };
-    for (size_t i = 0; i < sizeof(dbg) / sizeof(dbg[0]); i++) {
-        esp_log_level_set(dbg[i], ESP_LOG_DEBUG);
-    }
-    esp_log_level_set("HCD DWC", ESP_LOG_INFO);
-}
-
 static void host_task(void *arg)
 {
-    usb_log_levels();
     ESP_LOGI(TAG, "Installiere USB-Host (FIFO RX=%d NPTX=%d PTX=%d)", FIFO_RX_LINES, FIFO_NPTX_LINES, FIFO_PTX_LINES);
     const usb_host_config_t host_config = {
         .intr_flags = ESP_INTR_FLAG_LOWMED,
