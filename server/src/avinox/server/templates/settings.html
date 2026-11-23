@@ -154,11 +154,13 @@
   <form id="phys-form" class="stack" autocomplete="off">
     <div class="form-row"><label for="phys-mass">{{ t('set.phys_mass') }}</label>
       <input type="number" id="phys-mass" inputmode="decimal" min="30" max="300" step="0.5"></div>
+    <p class="muted small">{{ t('set.phys_mass_hint') }}</p>
     <div class="form-row"><label for="phys-cda">{{ t('set.phys_cda') }}</label>
       <input type="number" id="phys-cda" inputmode="decimal" min="0.2" max="1.5" step="0.01" placeholder="0.7"></div>
     <p class="muted small">{{ t('set.phys_cda_hint') }}</p>
     <div class="form-row"><label for="phys-battery">{{ t('set.phys_battery') }}</label>
       <input type="number" id="phys-battery" inputmode="numeric" min="100" max="3000" step="10"></div>
+    <p class="muted small">{{ t('set.phys_battery_hint') }}</p>
     <div class="actions"><button type="submit" class="btn" id="phys-save">{{ t('set.phys_save') }}</button></div>
   </form>
 </section>

@@ -333,9 +333,9 @@ def test_settings_roundtrip_and_validation(client):
 
 def test_settings_page_has_physics_section(client):
     html = client.get("/settings").text
-    assert "phys-mass" in html and "Gewicht gesamt (du + Ausrüstung + Bike), kg" in html
-    assert "Luftwiderstandsfläche (nur ändern, wenn du sie kennst)" in html
-    assert "Total weight (you + gear + bike), kg" in client.get("/settings?lang=en").text
+    assert "phys-mass" in html and "Du, Ausrüstung und Bike zusammen." in html
+    assert "Nur ändern, wenn du deine Luftwiderstandsfläche kennst." in html
+    assert "You, gear and bike together." in client.get("/settings?lang=en").text
 
 
 def test_ride_physics_endpoint_and_cache(client, store, monkeypatch):
