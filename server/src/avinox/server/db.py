@@ -111,6 +111,14 @@ CREATE TABLE IF NOT EXISTS ride_hr (
     fetched_at  TEXT NOT NULL
 );
 
+-- Fahrphysik je Fahrt (Zwischenspeicher; cache_key = Datei, Gewicht, CdA, Akku, Code-Version)
+CREATE TABLE IF NOT EXISTS ride_physics (
+    ride_id     INTEGER PRIMARY KEY REFERENCES rides(id) ON DELETE CASCADE,
+    cache_key   TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    computed_at TEXT NOT NULL
+);
+
 -- Anmeldung: Passwortbenutzer (password_hash) und OIDC-Benutzer (oidc_issuer + oidc_sub)
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY,

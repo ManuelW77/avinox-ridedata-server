@@ -147,6 +147,23 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="sec-phys" data-jump="{{ t('set.phys') }}">
+  <h2 class="section-title">{{ t('set.phys') }}</h2>
+  <p class="muted small block-desc">{{ t('set.phys_text') }}</p>
+<section class="card">
+  <form id="phys-form" class="stack" autocomplete="off">
+    <div class="form-row"><label for="phys-mass">{{ t('set.phys_mass') }}</label>
+      <input type="number" id="phys-mass" inputmode="decimal" min="30" max="300" step="0.5"></div>
+    <div class="form-row"><label for="phys-cda">{{ t('set.phys_cda') }}</label>
+      <input type="number" id="phys-cda" inputmode="decimal" min="0.2" max="1.5" step="0.01" placeholder="0.7"></div>
+    <p class="muted small">{{ t('set.phys_cda_hint') }}</p>
+    <div class="form-row"><label for="phys-battery">{{ t('set.phys_battery') }}</label>
+      <input type="number" id="phys-battery" inputmode="numeric" min="100" max="3000" step="10"></div>
+    <div class="actions"><button type="submit" class="btn" id="phys-save">{{ t('set.phys_save') }}</button></div>
+  </form>
+</section>
+</div>
+
 <div class="block t-neutral" id="sec-hl" data-jump="{{ t('set.hl') }}">
   <h2 class="section-title">{{ t('set.hl') }}</h2>
   <p class="muted small block-desc">{{ t('set.hl_text') }}</p>

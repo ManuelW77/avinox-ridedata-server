@@ -33,7 +33,7 @@ from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
 from .dashboard import PERIODS, day_text, emphasize
 from .sync_log import DEVICE_ID, SyncLog
-from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, Store, UploadError
+from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, PhysicsSetupError, Store, UploadError
 
 log = logging.getLogger("avinox.server")
 HERE = Path(__file__).parent
@@ -597,6 +597,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result == "current":
             raise HTTPException(409, "Die aktuelle Firmware kann nicht gelöscht werden")
         return {"ok": True}
+
+    # ------------------------------------------------------------ Fahrphysik
+
+    def physics_state() -> dict:
+        return store.physics_config()
+
+    def mass_missing(request: Request) -> HTTPException:
+        return HTTPException(409, {"error": "mass_missing", "message": i18n.t("phys.mass_missing", lang_of(request))})
+
+    @app.get("/api/v1/settings/physics", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def get_physics_settings():
+        return physics_state()
+
+    @app.put("/api/v1/settings/physics", dependencies=[Depends(settings_admin_auth)], tags=["einstellungen"])
+    def put_physics_settings(payload: dict):
+        try:
+            store.set_physics_config(payload.get("mass_kg"), payload.get("cda"), payload.get("battery_wh"))
+        except ValueError as exc:
+            raise HTTPException(400, {"error": "invalid", "message": str(exc)}) from exc
+        return physics_state()
+
+    @app.get("/api/v1/rides/{ride_pk}/physics", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def ride_physics(request: Request, ride_pk: int):
+        try:
+            result = store.ride_physics(ride_pk)
+        except PhysicsSetupError:
+            raise mass_missing(request)
+        if result is None:
+            raise HTTPException(404, "Fahrt nicht gefunden")
+        return result
+
+    @app.get("/api/v1/physics/compare", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def physics_compare(request: Request, start: str | None = None, end: str | None = None):
+        try:
+            return store.physics_compare(start, end)
+        except PhysicsSetupError:
+            raise mass_missing(request)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     # ------------------------------------------------------------ Lese-API
 

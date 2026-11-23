@@ -20,9 +20,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from .. import battery
-from ..analysis import CUSTOM_MODE_MIN, analyze
+from ..analysis import CUSTOM_MODE_MIN, analyze, assist_name
 from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
+from .. import physics
 from ..ride_rec import RideRecError, parse_ride
 from ..fit import to_fit
 from ..track import to_geojson, to_gpx
@@ -59,6 +60,10 @@ NOT_UPLOADED: list[dict[str, str]] = [
     {"paths": "alles andere", "label": "alle übrigen Dateien und Ordner"},
 ]
 """Anzeige auf der Einstellungsseite: wird nicht hochgeladen."""
+
+
+class PhysicsSetupError(ValueError):
+    """Für die Fahrphysik fehlt das Systemgewicht in den Einstellungen."""
 
 
 class UploadError(ValueError):
@@ -658,6 +663,94 @@ class Store:
         ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.gpx"
         return to_gpx(ride), name
+
+    # ------------------------------------------------------------------ Fahrphysik
+
+    def physics_config(self) -> dict:
+        """Einstellungen der Fahrphysik: Systemgewicht (Pflicht), CdA-Vorgabe, Akkukapazität (optional)."""
+        get = self.db.get_setting
+        return {"mass_kg": get("physics_mass_kg"), "cda": get("physics_cda") or physics.DEFAULT_CDA,
+                "cda_custom": get("physics_cda") is not None, "battery_wh": get("physics_battery_wh")}
+
+    def set_physics_config(self, mass_kg, cda, battery_wh) -> None:
+        """Speichert die Werte; ``None`` löscht (CdA fällt auf die Vorgabe, Akku auf unbekannt). Wirft ``ValueError``."""
+        for name, value, lo, hi in (("mass_kg", mass_kg, 30, 300), ("cda", cda, 0.2, 1.5), ("battery_wh", battery_wh, 100, 3000)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not lo <= value <= hi):
+                raise ValueError(f"{name} muss zwischen {lo} und {hi} liegen")
+        self.db.set_setting("physics_mass_kg", mass_kg)
+        self.db.set_setting("physics_cda", cda)
+        self.db.set_setting("physics_battery_wh", battery_wh)
+
+    def _physics_for(self, row, cfg: dict) -> dict:
+        """Fahrphysik einer Fahrt, aus ``ride_physics`` oder frisch berechnet (Schlüssel: Datei, Gewicht, CdA, Akku, Code-Version)."""
+        key = json.dumps([row["file_id"], cfg["mass_kg"], cfg["cda"], cfg["battery_wh"], physics.PHYSICS_VERSION])
+        cached = self.db.one("SELECT cache_key, result_json FROM ride_physics WHERE ride_id = ?", (row["id"],))
+        if cached and cached["cache_key"] == key:
+            return json.loads(cached["result_json"])
+        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
+        result = physics.analyze_physics(ride.samples, cfg["mass_kg"], cfg["cda"], battery_wh=cfg["battery_wh"])
+        self.db.execute(
+            "INSERT INTO ride_physics(ride_id, cache_key, result_json, computed_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(ride_id) DO UPDATE SET cache_key = excluded.cache_key, result_json = excluded.result_json, computed_at = excluded.computed_at",
+            (row["id"], key, json.dumps(result, ensure_ascii=False, separators=(",", ":")), _now()),
+        )
+        return result
+
+    def _physics_config_required(self) -> dict:
+        cfg = self.physics_config()
+        if not cfg["mass_kg"]:
+            raise PhysicsSetupError("mass_missing")
+        return cfg
+
+    def ride_physics(self, ride_pk: int) -> dict | None:
+        """Volle Fahrphysik einer Fahrt; ``None`` ohne Fahrt, ``PhysicsSetupError`` ohne Systemgewicht."""
+        cfg = self._physics_config_required()
+        with self._lock:
+            row = self.db.one("SELECT id, path, file_id FROM rides WHERE id = ?", (ride_pk,))
+            if not row:
+                return None
+            result = self._physics_for(row, cfg)
+        names = self.mode_names()
+        climbing = result.get("climbing")
+        for item in (climbing or {}).get("assist", []):
+            item["name"] = assist_name(item["level"], names)
+        return {"ride_id": ride_pk, **result}
+
+    def _day_bounds(self, start: str | None, end: str | None) -> tuple[str | None, str | None]:
+        """Lokale Tage ``YYYY-MM-DD`` (einschließlich) als UTC-Grenzen; wirft ``ValueError``."""
+        def day(value, name):
+            try:
+                return datetime.combine(date.fromisoformat(value), datetime.min.time(), tzinfo=self.settings.tz)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} muss ein Datum YYYY-MM-DD sein") from exc
+        lo = day(start, "start").astimezone(UTC).isoformat() if start else None
+        hi = (day(end, "end") + timedelta(days=1)).astimezone(UTC).isoformat() if end else None
+        return lo, hi
+
+    def physics_compare(self, start: str | None = None, end: str | None = None, ride_ids: list[int] | None = None) -> dict:
+        """Kernwerte der Fahrphysik je Fahrt (älteste zuerst) plus Median; Rollwiderstand > 1,25 × Median ist ``outlier``."""
+        cfg = self._physics_config_required()
+        lo, hi = self._day_bounds(start, end)
+        where, args = ["r.start_utc IS NOT NULL"], []
+        if lo:
+            where.append("r.start_utc >= ?"); args.append(lo)
+        if hi:
+            where.append("r.start_utc < ?"); args.append(hi)
+        if ride_ids is not None:
+            where.append(f"r.id IN ({','.join('?' * len(ride_ids))})"); args.extend(ride_ids)
+        rows = self.db.query(
+            "SELECT r.id, r.path, r.file_id, r.ride_id, r.start_utc, m.custom_name, m.places_json FROM rides r LEFT JOIN ride_meta m ON m.path = r.path "
+            f"WHERE {' AND '.join(where)} ORDER BY r.start_utc, r.path", tuple(args))
+        items = [self._physics_item(row, cfg) for row in rows]
+        return {"mass_kg": cfg["mass_kg"], "cda_default": cfg["cda"], "is_estimate": True, "count": len(items),
+                "rides": physics.mark_outliers(items), "median": physics.median_of(items)}
+
+    def _physics_item(self, row, cfg: dict) -> dict:
+        with self._lock:
+            result = self._physics_for(row, cfg)
+        start = datetime.fromisoformat(row["start_utc"]).astimezone(self.settings.tz)
+        item = physics.compare_item(result)
+        return {"id": row["id"], "date": start.strftime("%Y-%m-%d"), "name": self._name_fields(row, None)["name"], **item}
 
     def ride_fit(self, ride_pk: int) -> tuple[bytes, str] | None:
         row = self.db.one("SELECT file_id, path, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
