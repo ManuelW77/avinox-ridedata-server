@@ -195,6 +195,7 @@ erhalten, nach dem Ausstecken nicht). Beim Start steht dort der Reset-Grund samt
 `http://<IP des Geräts>/log` (Login wie die Weboberfläche, Benutzer `avinox`) oder auf der Statusseite „Log anzeigen“;
 „Log leeren“ leert den Puffer. Die USB-Aufzählung (Tags `USBH`, `HUB`, `ENUM`) wird auf DEBUG mitgeschrieben, um zu
 sehen, wo die Erkennung des Display-Laufwerks hängt. Seriennummer, Token und WLAN-Passwort werden nie geloggt.
+Abstürze stehen nach dem Neustart als `!!! PANIC`-Zeile mit Backtrace im Log.
 Im Einrichtungsportal gibt es `/log` bewusst nicht (dort ohne Anmeldung erreichbar).
 
 ## Code

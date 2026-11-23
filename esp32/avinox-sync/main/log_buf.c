@@ -8,6 +8,9 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_app_desc.h"
+#include "esp_debug_helpers.h"
+#include "esp_private/panic_internal.h"
+#include "xtensa_context.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -160,4 +163,77 @@ void log_buf_clear(void)
 uint32_t log_buf_end(void)
 {
     return s_log.total;
+}
+
+/* ---- Panic: Info in den noinit-Puffer schreiben, bevor der IDF-Handler auf den UART ausgibt ----
+ * Läuft im Panic-Zustand: keine Sperren, kein malloc, kein ESP_LOG, kein vsnprintf; s_busy wird ignoriert. */
+static void IRAM_ATTR pput_str(const char *s)
+{
+    if (!s) {
+        s = "(null)";
+    }
+    for (; *s; s++) {
+        s_log.data[s_log.total % LOG_SIZE] = *s;
+        s_log.total++;
+    }
+}
+
+static void IRAM_ATTR pput_hex(uint32_t v)
+{
+    static const char hex[] = "0123456789abcdef";
+    char b[10] = "0x";
+    for (int i = 0; i < 8; i++) {
+        b[2 + i] = hex[(v >> (28 - 4 * i)) & 0xF];
+    }
+    for (int i = 0; i < 10; i++) {
+        s_log.data[s_log.total % LOG_SIZE] = b[i];
+        s_log.total++;
+    }
+}
+
+extern void __real_esp_panic_handler(panic_info_t *info);
+
+void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info)
+{
+    pput_str("\n!!! PANIC core ");
+    pput_hex((uint32_t)info->core);
+    pput_str(" reason: ");
+    pput_str(info->reason);
+    pput_str(" / ");
+    pput_str(info->description);
+    pput_str(" addr: ");
+    pput_hex((uint32_t)info->addr);
+    if (g_panic_abort) {
+        pput_str(" abort: ");
+        pput_str(g_panic_abort_details);
+    }
+    const XtExcFrame *f = (const XtExcFrame *)info->frame;
+    if (f) {
+        pput_str("\n    PC ");
+        pput_hex(f->pc);
+        pput_str(" EXCCAUSE ");
+        pput_hex(f->exccause);
+        pput_str(" EXCVADDR ");
+        pput_hex(f->excvaddr);
+        pput_str(" A0 ");
+        pput_hex(f->a0);
+        pput_str(" SP ");
+        pput_hex(f->a1);
+        pput_str("\n    Backtrace:");
+        /* Start im Ausnahme-Rahmen (nicht im Handler selbst), wie der IDF-Backtrace bei einer Panic */
+        esp_backtrace_frame_t bt = { .pc = f->pc, .sp = f->a1, .next_pc = f->a0, .exc_frame = f };
+        pput_str(" ");
+        pput_hex(bt.pc);
+        pput_str(":");
+        pput_hex(bt.sp);
+        for (int i = 1; i < 16 && bt.next_pc != 0 && esp_backtrace_get_next_frame(&bt); i++) {
+            pput_str(" ");
+            pput_hex(bt.pc);
+            pput_str(":");
+            pput_hex(bt.sp);
+        }
+    }
+    pput_str("\n");
+    s_log.check = calc_check();
+    __real_esp_panic_handler(info);
 }
