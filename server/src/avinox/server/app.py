@@ -969,6 +969,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return page(request, "ride.html", ride=ride, a=ride["analysis"], s=ride["analysis"]["summary"], mode_names=names,
                     hl_active=healthlog.is_active(store.db))
 
+    @app.get("/physics", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
+    def physics_page(request: Request):
+        return page(request, "physics.html")
+
     @app.get("/device", response_class=HTMLResponse, dependencies=[Depends(read_auth)], include_in_schema=False)
     def device_page(request: Request):
         return page(request, "device.html", d=store.device())

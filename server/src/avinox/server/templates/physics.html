@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ t('ph.title') }} – Avinox Ride Data{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
+{% endblock %}
+{% block main %}
+<div class="lead">
+  <div>
+    <h1>{{ t('ph.title') }}</h1>
+    <p>{{ t('ph.sub') }}</p>
+  </div>
+</div>
+
+<div class="block block-first t-hill" id="sec-phys-cmp" data-jump="{{ t('ph.card') }}">
+<section class="card" id="ph-cmp">
+  <div class="toolbar">
+    <div class="segmented" id="ph-range" role="group" aria-label="{{ t('ph.range') }}">
+      <button type="button" data-key="30" aria-pressed="false">{{ t('js.ph.range.30') }}</button>
+      <button type="button" data-key="90" aria-pressed="false">{{ t('js.ph.range.90') }}</button>
+      <button type="button" data-key="365" aria-pressed="false">{{ t('js.ph.range.365') }}</button>
+      <button type="button" data-key="all" aria-pressed="true">{{ t('js.ph.range.all') }}</button>
+    </div>
+    <div class="ph-dates">
+      <label>{{ t('ph.from') }} <input type="date" id="ph-from"></label>
+      <label>{{ t('ph.to') }} <input type="date" id="ph-to"></label>
+    </div>
+  </div>
+  <div id="ph-cmp-body"><p class="muted small">{{ t('js.ph.loading') }}</p></div>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
+<script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
+<script src="{{ url_for('static', path='physics.js').path }}" defer></script>
+{% endblock %}

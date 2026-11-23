@@ -153,6 +153,11 @@
 </div>
 </div>
 
+<div class="block t-hill" id="sec-phys" data-jump="{{ t('ph.card') }}">
+  <h2 class="section-title">{{ t('ph.card') }}</h2>
+  <section class="card ph-card" id="ph-card" data-ride="{{ ride.id }}"><p class="muted small">{{ t('js.ph.loading') }}</p></section>
+</div>
+
 <div class="block t-neutral" id="sec-stats" data-jump="{{ t('ride.sec.stats') }}">
   <h2 class="section-title">{{ t('ride.sec.stats') }}</h2>
 <div class="grid cols-3">
@@ -269,6 +274,7 @@
 <script src="{{ url_for('static', path='vendor/uplot/uPlot.iife.min.js').path }}"></script>
 <script src="{{ url_for('static', path='ai.js').path }}"></script>
 <script src="{{ url_for('static', path='ride.js').path }}"></script>
+<script src="{{ url_for('static', path='physics.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-healthlog.js').path }}" defer></script>
