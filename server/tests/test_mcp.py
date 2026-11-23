@@ -78,7 +78,7 @@ def test_bearer_and_path_token_work(client):
 def test_tools_list_and_calls(client, store):
     token = enable(client)
     names = {t["name"] for t in rpc(client, "tools/list", token=token).json()["result"]["tools"]}
-    assert names == {"list_rides", "get_ride", "get_period", "get_bests", "get_bike_status"}
+    assert names == {"list_rides", "get_ride", "get_period", "get_bests", "get_bike_status", "get_physics"}
     pk = add_ride(store)
     rides = call(client, "list_rides", {"limit": 5}, token)
     assert rides["total"] == 1 and rides["rides"][0]["id"] == pk and rides["rides"][0]["distance_km"] > 0

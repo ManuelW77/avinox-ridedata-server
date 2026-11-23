@@ -348,7 +348,7 @@ def test_settings_server_url_docker(tmp_path, monkeypatch):
 FOOTER_START = "© 2026 Manuel Weiser · Build with "
 FOOTER_END = " by Manuel Weiser in Leipzig · "
 ICON_LABELS = {"de": ("Herz", "Fahrrad"), "en": ("heart", "bike")}
-PAGES = ("/", "/rides", "/device", "/sync", "/settings")
+PAGES = ("/", "/rides", "/physics", "/device", "/sync", "/settings")
 
 
 @pytest.mark.parametrize("path", PAGES)
@@ -529,3 +529,18 @@ def test_delete_ride_unknown_and_auth(settings):
         pk = put(c, settings, ride_bytes()).json()["ride"]
         assert c.delete(f"/api/v1/rides/{pk}").status_code == 401
         assert c.delete(f"/api/v1/rides/{pk}", auth=("fahrer", "geheim")).status_code == 200
+
+
+@pytest.mark.parametrize("lang", ["de", "en"])
+def test_physics_compare_page(client, settings, lang):
+    put(client, settings, ride_bytes())
+    r = client.get("/physics", params={"lang": lang})
+    assert r.status_code == 200
+    assert 'href="/physics"' in r.text and 'id="ph-cmp-body"' in r.text
+    assert 'src="/static/physics.js"' in r.text
+
+
+def test_ride_page_has_physics_card(client, settings):
+    pk = put(client, settings, ride_bytes()).json()["ride"]
+    page = client.get(f"/rides/{pk}").text
+    assert 'id="ph-card"' in page and f'data-ride="{pk}"' in page

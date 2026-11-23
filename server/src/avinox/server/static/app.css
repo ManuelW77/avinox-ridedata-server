@@ -699,3 +699,29 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 /* Einstellungen */
 .ai-form .row-inline { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+/* Fahrphysik */
+.ph-card { display: grid; gap: 1.25rem; }
+.ph-card h3, #ph-cmp h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.5rem 1rem; }
+.ph-grid .figure .k small { color: var(--ink-3); }
+.ph-stack { display: flex; height: 0.9rem; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 0.25rem 0; }
+.ph-stack i { display: block; height: 100%; }
+.ph-stack .roll { background: var(--alt); }
+.ph-stack .air { background: var(--motor); }
+.ph-flat { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem 1.5rem; }
+.ph-flat .ph-legend { font-size: 0.8rem; color: var(--ink-2); display: flex; gap: 0.9rem; flex-wrap: wrap; }
+.ph-flat .ph-legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.3rem; }
+.ph-notes { margin: 0; padding-left: 1.1rem; color: var(--ink-2); font-size: 0.9rem; }
+.ph-scroll { overflow-x: auto; max-width: 100%; }
+.ph-scroll table.plain { min-width: 640px; }
+.ph-scroll table.plain td, .ph-scroll table.plain th { padding-right: 0.9rem; white-space: nowrap; }
+.ph-scroll table.plain td:last-child, .ph-scroll table.plain th:last-child { padding-right: 0; }
+.ph-scroll tr.median td { font-weight: 600; border-top: 2px solid var(--line); }
+.ph-scroll tr.outlier td { color: var(--warn); }
+.ph-dates { display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-2); }
+.ph-dates input { font: inherit; padding: 0.2rem 0.4rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100%; }
+.ph-chart { margin-top: 1rem; max-width: 100%; overflow: hidden; }
+.ph-chart .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--ink-2); margin-bottom: 0.25rem; }
+.ph-chart .legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.3rem; }
+.ph-tip { cursor: help; border-bottom: 1px dotted var(--ink-3); }
