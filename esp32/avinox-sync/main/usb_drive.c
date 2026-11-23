@@ -61,8 +61,21 @@ static void msc_event_cb(const msc_host_event_t *event, void *arg)
     }
 }
 
+/* USB-Stack: Aufzählung (Enumeration) im Log sichtbar machen. Wirkt, weil CONFIG_LOG_MAXIMUM_LEVEL = DEBUG
+ * (sdkconfig.defaults) und die dynamische Pegelsteuerung an ist. HCD DWC bleibt auf INFO (sehr gesprächig). */
+static void usb_log_levels(void)
+{
+    static const char *const dbg[] = { "USBH", "HUB", "ENUM", "USB HOST", "EXT_HUB", "EXT_PORT" };
+    for (size_t i = 0; i < sizeof(dbg) / sizeof(dbg[0]); i++) {
+        esp_log_level_set(dbg[i], ESP_LOG_DEBUG);
+    }
+    esp_log_level_set("HCD DWC", ESP_LOG_INFO);
+}
+
 static void host_task(void *arg)
 {
+    usb_log_levels();
+    ESP_LOGI(TAG, "Installiere USB-Host (FIFO RX=%d NPTX=%d PTX=%d)", FIFO_RX_LINES, FIFO_NPTX_LINES, FIFO_PTX_LINES);
     const usb_host_config_t host_config = {
         .intr_flags = ESP_INTR_FLAG_LOWMED,
         .fifo_settings_custom = {
@@ -98,6 +111,9 @@ static void host_task(void *arg)
     while (true) {
         uint32_t flags;
         usb_host_lib_handle_events(portMAX_DELAY, &flags);
+        ESP_LOGI(TAG, "USB-Host-Ereignis: Flags 0x%" PRIx32 "%s%s", flags,
+                 (flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) ? " (keine Clients)" : "",
+                 (flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) ? " (alle Geräte freigegeben)" : "");
         if (flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
             usb_host_device_free_all();
         }
@@ -115,6 +131,7 @@ static void wchar_to_ascii(const wchar_t *in, char *out, size_t len)
 
 static void on_connected(uint8_t addr)
 {
+    ESP_LOGI(TAG, "USB-Gerät angeschlossen: Adresse %u", (unsigned)addr);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     if (s_dev) {
         xSemaphoreGive(s_lock);
@@ -122,22 +139,27 @@ static void on_connected(uint8_t addr)
         return;
     }
     msc_host_device_handle_t dev = NULL;
+    ESP_LOGI(TAG, "msc_host_install_device(Adresse %u) ...", (unsigned)addr);
     esp_err_t err = msc_host_install_device(addr, &dev);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Anmeldung des Laufwerks fehlgeschlagen: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Anmeldung des Laufwerks fehlgeschlagen (Adresse %u): %s", (unsigned)addr, esp_err_to_name(err));
         s_state = DRIVE_FAILED;
         xSemaphoreGive(s_lock);
         return;
     }
     s_dev = dev;
+    ESP_LOGI(TAG, "MSC-Gerät angemeldet (Adresse %u)", (unsigned)addr);
     msc_host_device_info_t info;
-    if (msc_host_get_device_info(dev, &info) == ESP_OK) {
+    err = msc_host_get_device_info(dev, &info);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "msc_host_get_device_info: %s", esp_err_to_name(err));
+    } else {
         char manu[64], prod[64];
         wchar_to_ascii(info.iManufacturer, manu, sizeof(manu));
         wchar_to_ascii(info.iProduct, prod, sizeof(prod));
         /* Seriennummer bewusst nicht loggen */
-        ESP_LOGI(TAG, "Laufwerk: VID=0x%04X PID=0x%04X '%s' / '%s', %llu MB",
-                 info.idVendor, info.idProduct, manu, prod,
+        ESP_LOGI(TAG, "Laufwerk: VID:PID=%04X:%04X '%s' / '%s', Sektor %u Byte, %llu MB",
+                 info.idVendor, info.idProduct, manu, prod, (unsigned)info.sector_size,
                  ((uint64_t)info.sector_size * info.sector_count) / (1024 * 1024));
     }
     s_generation++;
@@ -147,7 +169,8 @@ static void on_connected(uint8_t addr)
 
 static void on_disconnected(msc_host_device_handle_t handle)
 {
-    ESP_LOGI(TAG, "USB-Gerät abgezogen");
+    ESP_LOGI(TAG, "USB-Gerät abgezogen (Handle %p, unser Gerät: %s)", (void *)handle,
+             (s_dev && s_dev == handle) ? "ja" : "nein");
     drive_state_t prev = s_state;
     s_state = DRIVE_ABSENT;     /* zuerst, damit ein laufender Sync abbricht */
     xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -171,7 +194,10 @@ static void drive_task(void *arg)
 {
     while (true) {
         usb_msg_t msg;
-        if (xQueueReceive(s_queue, &msg, portMAX_DELAY) != pdTRUE) {
+        if (xQueueReceive(s_queue, &msg, pdMS_TO_TICKS(10000)) != pdTRUE) {
+            if (s_state == DRIVE_ABSENT && !s_host_failed) {
+                ESP_LOGI(TAG, "Warte auf USB-Gerät (Host läuft, noch kein Gerät gemeldet)");
+            }
             continue;
         }
         if (msg.id == EV_CONNECTED) {
@@ -228,6 +254,7 @@ esp_err_t usb_drive_mount(void)
         .max_files = 3,
         .allocation_unit_size = 0,
     };
+    ESP_LOGI(TAG, "Hänge Laufwerk unter %s ein ...", USB_MNT_PATH);
     esp_err_t err = msc_host_vfs_register(s_dev, USB_MNT_PATH, &mount_config, &s_vfs);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Einhängen unter %s fehlgeschlagen: %s", USB_MNT_PATH, esp_err_to_name(err));
@@ -235,6 +262,7 @@ esp_err_t usb_drive_mount(void)
         xSemaphoreGive(s_lock);
         return err;
     }
+    ESP_LOGI(TAG, "Laufwerk unter %s eingehängt", USB_MNT_PATH);
     /* Sperre bleibt bis usb_drive_unmount() */
     return ESP_OK;
 }

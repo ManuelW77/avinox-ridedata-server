@@ -188,6 +188,15 @@ Danach:
    (`AVX_OTA_VALIDATE_S`), startet der ESP neu und der Bootloader kehrt zur vorherigen Version zurück; die meldet dann
    einmal `ota`/`rolled_back`. Ohne Konfiguration (Einrichtungsmodus) wird die neue Firmware sofort bestätigt.
 
+## Log im Browser
+
+Alle Log-Meldungen landen zusätzlich in einem 16-KB-Ringpuffer im RAM (bleibt nach Software-Neustart oder Absturz
+erhalten, nach dem Ausstecken nicht). Beim Start steht dort der Reset-Grund samt Firmware-Version. Aufruf im Betrieb:
+`http://<IP des Geräts>/log` (Login wie die Weboberfläche, Benutzer `avinox`) oder auf der Statusseite „Log anzeigen“;
+„Log leeren“ leert den Puffer. Die USB-Aufzählung (Tags `USBH`, `HUB`, `ENUM`) wird auf DEBUG mitgeschrieben, um zu
+sehen, wo die Erkennung des Display-Laufwerks hängt. Seriennummer, Token und WLAN-Passwort werden nie geloggt.
+Im Einrichtungsportal gibt es `/log` bewusst nicht (dort ohne Anmeldung erreichbar).
+
 ## Code
 
 | Datei | Inhalt |
@@ -202,6 +211,7 @@ Danach:
 | `main/usb_drive.c/.h` | USB-Host + MSC (aus usb-probe), Einhängen unter `/usb` |
 | `main/sync.c/.h` | Manifest, Upload-Status, Upload in Stücken, Ergebnis im NVS |
 | `main/sync_paths.c/.h` | Pfadfilter, Manifest-Menge, URL-Kodierung (ohne IDF, Host-Test) |
+| `main/log_buf.c/.h` | Log-Ringpuffer (16 KB, übersteht Neustart), von `GET /log` gelesen |
 | `main/led.c/.h` | Status-LED |
 | `main/ota.c/.h` | Firmware-Update per WLAN, Bestätigung/Rollback |
 | `test/host/test_paths.c` | Host-Test für `sync_paths.c` |
