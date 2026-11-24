@@ -321,6 +321,11 @@
     <button type="submit" class="btn">{{ t('set.fw_upload_btn') }}</button>
     <span id="fw-status" class="muted small" role="status"></span>
   </form>
+  <div class="actions" style="margin-top:0.75rem">
+    <button type="button" class="btn ghost small" id="fw-github">{{ t('set.fw_github_btn') }}</button>
+    <span id="fw-github-status" class="muted small" role="status"></span>
+  </div>
+  <div class="form-row" style="margin-top:0.5rem"><label for="fw-auto" class="switch-row"><input type="checkbox" class="switch" id="fw-auto"> <span>{{ t('set.fw_auto_toggle') }}</span></label></div>
   {% endif %}
 </section>
 </div>
@@ -369,6 +374,7 @@
   <dl class="kv">
     <dt><code>GET /api/v1/firmware/latest?project=…</code></dt><dd>{{ t('set.api.fw_latest') }}</dd>
     <dt><code>GET /api/v1/firmware/&lt;sha256&gt;.bin</code></dt><dd>{{ t('set.api.fw_bin') }}</dd>
+    <dt><code>POST /api/v1/firmware/import-github</code></dt><dd>{{ t('set.api.fw_github') }}</dd>
   </dl>
   <p class="small">{{ t('set.api.full') }} <a href="/api/docs">/api/docs</a></p>
 </section>
