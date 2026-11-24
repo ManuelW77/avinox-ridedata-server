@@ -419,6 +419,31 @@
       }
     });
   }
+  const fwGh = document.getElementById("fw-github");
+  if (fwGh) {
+    const ghStatus = document.getElementById("fw-github-status");
+    fwGh.addEventListener("click", async () => {
+      fwGh.disabled = true;
+      ghStatus.textContent = tr("fw_github_loading");
+      try {
+        const res = await fetch("/api/v1/firmware/import-github", { method: "POST" });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { ghStatus.textContent = tr("error_n", { n: res.status }); return; }
+        if (d.status === "imported") { location.reload(); return; }
+        ghStatus.textContent = d.message || tr("error_n", { n: res.status });
+      } catch (e) {
+        ghStatus.textContent = tr("error_msg", { m: e.message });
+      } finally {
+        fwGh.disabled = false;
+      }
+    });
+    const fwAuto = document.getElementById("fw-auto");
+    fetch("/api/v1/settings/firmware-auto-import").then((r) => r.json()).then((d) => { fwAuto.checked = !!d.enabled; }).catch(() => {});
+    fwAuto.addEventListener("change", async () => {
+      const res = await fetch("/api/v1/settings/firmware-auto-import", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: fwAuto.checked }) });
+      if (!res.ok) { fwAuto.checked = !fwAuto.checked; ghStatus.textContent = tr("error_n", { n: res.status }); }
+    });
+  }
   document.querySelectorAll("[data-fw-current],[data-fw-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const del = btn.hasAttribute("data-fw-delete");

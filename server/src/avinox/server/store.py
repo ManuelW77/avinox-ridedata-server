@@ -162,6 +162,10 @@ class Store:
         row = self.db.one("SELECT * FROM firmware WHERE sha256 = ? LIMIT 1", (sha,))
         return dict(row) if row else None
 
+    def firmware_by_project_version(self, project: str, version: str) -> dict | None:
+        row = self.db.one("SELECT * FROM firmware WHERE project = ? AND version = ?", (project, version))
+        return dict(row) if row else None
+
     def read_firmware(self, sha: str) -> bytes | None:
         path = self.firmware_dir / f"{sha}.bin"
         return path.read_bytes() if path.is_file() else None
