@@ -38,13 +38,14 @@ static const char *TAG = "ota";
 #define OTA_BUF          4096
 #define OTA_VER_MAX      32
 #define OTA_URL_MAX      200
+#define OTA_RETRY_FAILED_S 3600             /* Wartezeit, bevor eine fehlgeschlagene Version erneut versucht wird */
 #define NVS_NS           "ota"
 
 static app_config_t s_cfg;
 static SemaphoreHandle_t s_busy;            /* Sync-Lauf oder Update-Prüfung */
 static volatile bool s_pending;             /* frisch installiert, noch nicht bestätigt */
 static volatile bool s_server_ok;
-static volatile int64_t s_next_check = -1;  /* nächste periodische Prüfung (µs), -1 = noch nicht gesetzt */
+static volatile bool s_update_hint;         /* Server hat eine andere Firmware gemeldet */
 static char s_rolled_back[OTA_VER_MAX];     /* Version der verworfenen Firmware, "" = keine */
 static char s_failed_ver[OTA_VER_MAX];      /* zuletzt fehlgeschlagene Zielversion */
 static int64_t s_failed_at;
@@ -372,9 +373,9 @@ static bool check_once(void)
     const char *cur = running_version();
     if (rc == 1 && strcmp(fw.version, cur) != 0) {
         bool recent_fail = strcmp(fw.version, s_failed_ver) == 0 &&
-                           esp_timer_get_time() - s_failed_at < (int64_t)CONFIG_AVX_OTA_CHECK_S * 1000000;
+                           esp_timer_get_time() - s_failed_at < (int64_t)OTA_RETRY_FAILED_S * 1000000;
         if (recent_fail) {
-            ESP_LOGI(TAG, "Firmware %s zuletzt fehlgeschlagen, nächster Versuch beim nächsten Prüfzeitpunkt", fw.version);
+            ESP_LOGI(TAG, "Firmware %s zuletzt fehlgeschlagen, nächster Versuch später", fw.version);
         } else {
             ESP_LOGW(TAG, "Update %s -> %s", cur, fw.version);
             report_send_ota(&s_cfg, cur, fw.version, "started", NULL);
@@ -400,22 +401,30 @@ static bool check_once(void)
     return rc >= 0;
 }
 
+void ota_request_update(void)
+{
+    s_update_hint = true;
+}
+
 /* Vor dem Auslesen: Aufrufer hält s_busy (ota_sync_begin). Neue Firmware kann das Auslesen ändern. */
 bool ota_check_before_sync(void)
 {
-    bool ok = check_once();
-    s_next_check = esp_timer_get_time() + (int64_t)CONFIG_AVX_OTA_CHECK_S * 1000000;
-    return ok;
+    if (!report_hello(&s_cfg)) {
+        return false;
+    }
+    if (s_update_hint) {
+        s_update_hint = false;
+        check_once();   /* bei Erfolg Neustart, sonst weiter mit dem Auslesen */
+    }
+    return true;
 }
 
 static void ota_task(void *arg)
 {
-    const int64_t period = (int64_t)CONFIG_AVX_OTA_CHECK_S * 1000000;
     const int64_t deadline = (int64_t)CONFIG_AVX_OTA_VALIDATE_S * 1000000;
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
-        int64_t now = esp_timer_get_time();
-        if (s_pending && now >= deadline) {
+        if (s_pending && esp_timer_get_time() >= deadline) {
             ESP_LOGE(TAG, "Neue Firmware hat den Server nicht erreicht: Neustart, Rückkehr zur vorherigen");
             esp_restart();
         }
@@ -431,18 +440,11 @@ static void ota_task(void *arg)
             }
             s_rolled_back[0] = '\0';
         }
-        if (s_next_check < 0) {
-            /* erste Prüfung 30 s nach WLAN (gilt für den Fall ohne Laufwerk, sonst prüft der Sync-Task vorher) */
-            s_next_check = now + 30 * 1000000LL;
+        if (!s_update_hint || xSemaphoreTake(s_busy, 0) != pdTRUE) {
+            continue;   /* kein Hinweis, oder Sync läuft: später */
         }
-        if (now < s_next_check) {
-            continue;
-        }
-        if (xSemaphoreTake(s_busy, 0) != pdTRUE) {
-            continue;   /* Sync läuft: später */
-        }
+        s_update_hint = false;
         check_once();
-        s_next_check = esp_timer_get_time() + period;
         xSemaphoreGive(s_busy);
     }
 }

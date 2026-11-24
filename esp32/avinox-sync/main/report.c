@@ -5,6 +5,7 @@
 #include "report.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
@@ -28,6 +29,7 @@
 static const char *TAG = "report";
 
 #define REPORT_TIMEOUT_MS 10000
+#define REPORT_RESP_MAX   512
 
 static char s_id[24];
 static SemaphoreHandle_t s_lock;
@@ -94,7 +96,7 @@ static char *build_body(const sync_result_t *res)
     return txt;
 }
 
-static int post_report(const app_config_t *cfg, const char *body);
+static int post_report(const app_config_t *cfg, const char *body, char *resp, size_t cap);
 
 bool report_send_ota(const app_config_t *cfg, const char *from, const char *to, const char *result, const char *error)
 {
@@ -126,7 +128,7 @@ bool report_send_ota(const app_config_t *cfg, const char *from, const char *to, 
     }
     bool ok = false;
     if (s_lock && xSemaphoreTake(s_lock, pdMS_TO_TICKS(12000)) == pdTRUE) {
-        int st = post_report(cfg, body);
+        int st = post_report(cfg, body, NULL, 0);
         xSemaphoreGive(s_lock);
         ok = st >= 200 && st < 300;
         if (ok) {
@@ -172,8 +174,9 @@ int report_probe_manifest(const char *base_url, const char *token, int timeout_m
     return st;
 }
 
-/* Sendet body, liefert HTTP-Status oder -1 bei Netzfehler. Aufrufer hält s_lock. */
-static int post_report(const app_config_t *cfg, const char *body)
+/* Sendet body, liefert HTTP-Status oder -1 bei Netzfehler. Antwort (max. cap-1 Byte) landet in resp,
+ * wenn resp != NULL. Aufrufer hält s_lock. */
+static int post_report(const app_config_t *cfg, const char *body, char *resp, size_t cap)
 {
     char url[CFG_URL_MAX + 40];
     snprintf(url, sizeof(url), "%s/api/v1/device/report", cfg->url);
@@ -185,46 +188,88 @@ static int post_report(const app_config_t *cfg, const char *body)
         .disable_auto_redirect = true,
     };
     int st = -1;
-    esp_http_client_handle_t c = esp_http_client_init(&hc);
-    if (c) {
-        report_set_headers(c, cfg->token);
-        esp_http_client_set_header(c, "Content-Type", "application/json");
-        esp_http_client_set_post_field(c, body, strlen(body));
-        if (esp_http_client_perform(c) == ESP_OK) {
-            st = esp_http_client_get_status_code(c);
-        }
-        esp_http_client_cleanup(c);
+    if (resp && cap) {
+        resp[0] = '\0';
     }
+    esp_http_client_handle_t c = esp_http_client_init(&hc);
+    if (!c) {
+        return st;
+    }
+    report_set_headers(c, cfg->token);
+    esp_http_client_set_header(c, "Content-Type", "application/json");
+    int len = (int)strlen(body);
+    if (esp_http_client_open(c, len) == ESP_OK) {
+        if (esp_http_client_write(c, body, len) == len && esp_http_client_fetch_headers(c) >= 0) {
+            st = esp_http_client_get_status_code(c);
+            if (resp && cap > 1) {
+                int n = esp_http_client_read_response(c, resp, (int)cap - 1);
+                resp[n > 0 ? n : 0] = '\0';
+            }
+        }
+        esp_http_client_close(c);
+    }
+    esp_http_client_cleanup(c);
     return st;
 }
 
-void report_send(const app_config_t *cfg, const sync_result_t *res)
+/* Antwort auswerten: "firmware_update" mit anderer Version als der laufenden → Update anfordern. */
+static void handle_reply(const char *resp)
+{
+    cJSON *o = cJSON_Parse(resp);
+    const cJSON *fu = cJSON_GetObjectItemCaseSensitive(o, "firmware_update");
+    const esp_app_desc_t *d = esp_app_get_description();
+    if (cJSON_IsString(fu) && fu->valuestring[0] && (!d || strcmp(fu->valuestring, d->version) != 0)) {
+        ESP_LOGI(TAG, "Server meldet Firmware %s", fu->valuestring);
+        ota_request_update();
+    }
+    cJSON_Delete(o);
+}
+
+/* Heartbeat (res == NULL) oder Sync-Bericht senden. true bei HTTP 2xx. Wartet bis wait_ms auf s_lock. */
+static bool send_report(const app_config_t *cfg, const sync_result_t *res, uint32_t wait_ms)
 {
     if (!s_lock) {
         s_lock = xSemaphoreCreateMutex();
     }
-    /* Sync-Bericht wartet kurz, Heartbeat überspringt, wenn gerade ein Bericht läuft. */
-    if (!s_lock || xSemaphoreTake(s_lock, pdMS_TO_TICKS(res ? 12000 : 0)) != pdTRUE) {
-        return;
+    if (!s_lock || xSemaphoreTake(s_lock, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
+        return false;
     }
     char *body = build_body(res);
-    if (!body) {
+    char *resp = malloc(REPORT_RESP_MAX);
+    if (!body || !resp) {
         ESP_LOGW(TAG, "Bericht: kein Speicher");
+        free(body);
+        free(resp);
         xSemaphoreGive(s_lock);
-        return;
+        return false;
     }
     const char *kind = res ? "sync" : "heartbeat";
-    int st = post_report(cfg, body);
+    int st = post_report(cfg, body, resp, REPORT_RESP_MAX);
+    bool ok = st >= 200 && st < 300;
     if (st < 0) {
         ESP_LOGW(TAG, "Bericht (%s) nicht gesendet", kind);
-    } else if (st >= 200 && st < 300) {
+    } else if (ok) {
         ESP_LOGI(TAG, "Bericht (%s) gesendet", kind);
         ota_server_ok();
+        handle_reply(resp);
     } else {
         ESP_LOGW(TAG, "Bericht (%s): HTTP %d", kind, st);
     }
     free(body);
+    free(resp);
     xSemaphoreGive(s_lock);
+    return ok;
+}
+
+void report_send(const app_config_t *cfg, const sync_result_t *res)
+{
+    /* Sync-Bericht wartet kurz, Heartbeat überspringt, wenn gerade ein Bericht läuft. */
+    send_report(cfg, res, res ? 12000 : 0);
+}
+
+bool report_hello(const app_config_t *cfg)
+{
+    return send_report(cfg, NULL, 12000);
 }
 
 static void heartbeat_task(void *arg)

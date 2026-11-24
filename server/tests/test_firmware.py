@@ -149,3 +149,22 @@ def test_settings_page_hides_admin_without_password(settings):
     with TestClient(create_app(settings)) as c:
         html = c.get("/settings").text
         assert 'id="fw-form"' not in html and "Firmware-Verwaltung nur mit Web-Passwort" in html
+
+
+def test_report_firmware_update_hint(client, settings):
+    def report(event, fw):
+        body = {"device_id": "esp-1", "event": event, "firmware": fw}
+        if event == "sync":
+            body["sync"] = {"result": "ok"}
+        if event == "ota":
+            body["ota"] = {"result": "ok"}
+        r = client.post("/api/v1/device/report", json=body, headers=auth(settings))
+        assert r.status_code == 200
+        return r.json()
+
+    assert "firmware_update" not in report("heartbeat", "0.2.0")  # keine Firmware
+    upload(client, image())
+    assert report("heartbeat", "0.2.0")["firmware_update"] == "0.3.0"
+    assert report("sync", "0.2.0")["firmware_update"] == "0.3.0"
+    assert "firmware_update" not in report("heartbeat", "0.3.0")  # gleiche Version
+    assert "firmware_update" not in report("ota", "0.2.0")

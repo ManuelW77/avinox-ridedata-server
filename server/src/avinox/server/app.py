@@ -518,7 +518,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/v1/device/report", dependencies=[Depends(upload_auth)], tags=["upload"])
     async def device_report(request: Request):
-        """Lebenszeichen/Syncbericht des ESP32 (JSON, höchstens 16 KB)."""
+        """Lebenszeichen/Syncbericht des ESP32 (JSON, höchstens 16 KB).
+
+        Antwort enthält ``firmware_update`` (Version), wenn eine andere Firmware bereitliegt."""
         check_length(request, 16 * 1024)
         raw = await read_body(request, 16 * 1024)
         try:
@@ -566,7 +568,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if body["event"] == "ota":
             keep["ota"] = {k: ota[k] for k in ("from", "to", "result", "error") if k in ota}
         ts = synclog.report(keep, client_ip(request))
-        return {"ok": True, "server_time": ts}
+        resp = {"ok": True, "server_time": ts}
+        running = body.get("firmware")
+        if body["event"] in ("heartbeat", "sync") and isinstance(running, str) and running:
+            fw = store.current_firmware("avinox-sync")
+            if fw and fw["version"] != running:
+                resp["firmware_update"] = fw["version"]
+        return resp
 
     @app.get("/api/v1/firmware/latest", dependencies=[Depends(upload_auth)], tags=["firmware"])
     def firmware_latest(request: Request, project: str = Query("avinox-sync", max_length=64)):
