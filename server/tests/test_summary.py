@@ -74,3 +74,24 @@ def test_avg_power_counts_only_moving_time():
     assert s.header_avg_rider_power_w == 29
     assert s.avg_motor_power_w == 175 and s.avg_motor_assist_power_w == 233
     assert s.header_avg_motor_power_w == 46
+
+
+def _cal_ride(values, **kw):
+    samples = [{**sample(t, speed=10), 52: None if v is None else int(v * 1000)} for t, v in enumerate(values)]
+    samples = [{k: v for k, v in s.items() if v is not None} for s in samples]
+    return parse_ride(ride(samples, **kw))
+
+
+def test_calories_counter_continues_from_previous_ride():
+    s = summarize(_cal_ride([303.8, 350.0, None, 424.3], stats=STATS))
+    assert s.calories_kcal == pytest.approx(120.5)
+
+
+def test_calories_counter_starts_at_zero():
+    s = summarize(_cal_ride([0.0, 2.0, 4.7], stats=STATS))
+    assert s.calories_kcal == pytest.approx(4.7)
+
+
+def test_calories_counter_reset_and_fallback():
+    assert summarize(_cal_ride([300.0, 10.0, 25.0], stats=STATS)).calories_kcal == pytest.approx(25.0)
+    assert summarize(_cal_ride([None, None], stats=STATS)).calories_kcal == pytest.approx(305.244)
