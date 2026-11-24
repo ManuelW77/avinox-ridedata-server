@@ -8,6 +8,8 @@
 
 Fahrdaten vom DJI-Avinox-E-Bike-Antrieb (z. B. Amflow PR) direkt vom USB-Laufwerk des Displays auslesen und auswerten – ohne Avinox-Cloud, ohne Zugangsdaten.
 
+**Webseite mit Handbuch:** [manuelw.de/avinox](https://www.manuelw.de/avinox/)
+
 ## So einfach
 
 **ESP32 an den USB-Port des Displays stecken, einmal WLAN einrichten, fertig.** Jede Fahrt landet danach automatisch auf dem eigenen Server.
