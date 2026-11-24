@@ -20,5 +20,6 @@ void ota_start(const app_config_t *cfg);
 void ota_sync_begin(void);
 void ota_sync_end(void);
 
-/* Nach einem abgeschlossenen Sync prüfen (aus der Sync-Schleife, nach ota_sync_end). */
-void ota_check_now(void);
+/* Vor jedem Auslesen prüfen (zwischen ota_sync_begin und sync_run); lädt bei neuer Version und startet neu.
+   false = Server nicht erreichbar oder Fehlerantwort: dann nicht auslesen. */
+bool ota_check_before_sync(void);

@@ -28,6 +28,7 @@ static const char *TAG = "main";
 #define BOOT_HOLD_MS        3000
 #define BOOT_FACTORY_MS     10000
 #define SYNC_INTERVAL_US    ((int64_t)CONFIG_AVX_SYNC_INTERVAL_MIN * 60 * 1000000)
+#define SERVER_RETRY_US     (60 * 1000000LL)  /* Server nicht erreichbar: nächster Versuch */
 
 static app_config_t s_cfg;
 
@@ -159,9 +160,16 @@ static void sync_task(void *arg)
         led_set_state(LED_SYNC);
         sync_result_t res;
         ota_sync_begin();
+        if (!ota_check_before_sync()) {     /* neue Firmware kann das Auslesen ändern */
+            ota_sync_end();
+            led_set_state(LED_WARN);
+            next_sync = esp_timer_get_time() + SERVER_RETRY_US;
+            ESP_LOGW(TAG, "Server nicht erreichbar: Auslesen übersprungen, neuer Versuch in %d s",
+                     (int)(SERVER_RETRY_US / 1000000));
+            continue;
+        }
         bool ok = sync_run(&s_cfg, &res);
         ota_sync_end();
-        ota_check_now();
         led_set_state(ok ? LED_OK : LED_WARN);
         next_sync = esp_timer_get_time() + SYNC_INTERVAL_US;
         ESP_LOGI(TAG, "Nächster Sync in %d min (oder sofort nach neuem Anstecken/Verbinden)",

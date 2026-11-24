@@ -44,7 +44,7 @@ static app_config_t s_cfg;
 static SemaphoreHandle_t s_busy;            /* Sync-Lauf oder Update-Prüfung */
 static volatile bool s_pending;             /* frisch installiert, noch nicht bestätigt */
 static volatile bool s_server_ok;
-static volatile bool s_check_req;
+static volatile int64_t s_next_check = -1;  /* nächste periodische Prüfung (µs), -1 = noch nicht gesetzt */
 static char s_rolled_back[OTA_VER_MAX];     /* Version der verworfenen Firmware, "" = keine */
 static char s_failed_ver[OTA_VER_MAX];      /* zuletzt fehlgeschlagene Zielversion */
 static int64_t s_failed_at;
@@ -112,11 +112,6 @@ void ota_sync_end(void)
     if (s_busy) {
         xSemaphoreGive(s_busy);
     }
-}
-
-void ota_check_now(void)
-{
-    s_check_req = true;
 }
 
 /* ------------------------------------------------------------ HTTP */
@@ -363,10 +358,11 @@ out:
     return ret;
 }
 
-static void check_once(void)
+/* true = Server hat geantwortet (oder frische Firmware wartet auf Bestätigung durch den Sync). */
+static bool check_once(void)
 {
     if (s_pending) {
-        return;     /* erst bestätigen, dann weiter aktualisieren */
+        return true;    /* erst bestätigen, dann weiter aktualisieren */
     }
     char auth[CFG_TOKEN_MAX + 16];
     snprintf(auth, sizeof(auth), "Bearer %s", s_cfg.token);
@@ -401,13 +397,21 @@ static void check_once(void)
         ESP_LOGI(TAG, "Firmware %s ist aktuell", cur);
     }
     memset(auth, 0, sizeof(auth));
+    return rc >= 0;
+}
+
+/* Vor dem Auslesen: Aufrufer hält s_busy (ota_sync_begin). Neue Firmware kann das Auslesen ändern. */
+bool ota_check_before_sync(void)
+{
+    bool ok = check_once();
+    s_next_check = esp_timer_get_time() + (int64_t)CONFIG_AVX_OTA_CHECK_S * 1000000;
+    return ok;
 }
 
 static void ota_task(void *arg)
 {
     const int64_t period = (int64_t)CONFIG_AVX_OTA_CHECK_S * 1000000;
     const int64_t deadline = (int64_t)CONFIG_AVX_OTA_VALIDATE_S * 1000000;
-    int64_t next = -1;          /* erste Prüfung kurz nach der ersten WLAN-Verbindung */
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         int64_t now = esp_timer_get_time();
@@ -427,18 +431,18 @@ static void ota_task(void *arg)
             }
             s_rolled_back[0] = '\0';
         }
-        if (next < 0) {
-            next = now + 30 * 1000000LL;
+        if (s_next_check < 0) {
+            /* erste Prüfung 30 s nach WLAN (gilt für den Fall ohne Laufwerk, sonst prüft der Sync-Task vorher) */
+            s_next_check = now + 30 * 1000000LL;
         }
-        if (!s_check_req && now < next) {
+        if (now < s_next_check) {
             continue;
         }
         if (xSemaphoreTake(s_busy, 0) != pdTRUE) {
             continue;   /* Sync läuft: später */
         }
-        s_check_req = false;
         check_once();
-        next = esp_timer_get_time() + period;
+        s_next_check = esp_timer_get_time() + period;
         xSemaphoreGive(s_busy);
     }
 }
