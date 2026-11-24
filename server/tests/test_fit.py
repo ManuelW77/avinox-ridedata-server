@@ -58,3 +58,14 @@ def test_fit_without_gps_and_wallclock():
 def test_fit_skips_samples_without_timestamp():
     r = parse_ride(ride([gps_sample(0, 0), {6: 1}, gps_sample(2, 10)], start=T0, end=T0 + 3))
     assert len(by_name(read(to_fit(r)), "record")) == 2
+
+
+def test_fit_calories_start_at_zero_per_ride():
+    import pytest
+    from avinox.summary import summarize
+
+    samples = [{72: T0 + t, 7: 1800, 52: int((303.8 + t * 10) * 1000)} for t in range(3)]
+    r = parse_ride(ride(samples, start=T0, end=T0 + 3))
+    records = by_name(read(to_fit(r)), "record")
+    assert [rec.get_value("calories") for rec in records] == [0, 10, 20]
+    assert summarize(r).calories_kcal == pytest.approx(20.0)

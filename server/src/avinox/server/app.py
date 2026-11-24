@@ -975,7 +975,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             resp = templates.TemplateResponse(request, name, {
                 "map_style": settings.map_style, "current_user": user, "csrf_token": csrf,
-                "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang), **ctx,
+                "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang),
+                "findings_unseen": None if ctx.get("bare") else store.format_findings_unseen(), **ctx,
             })
         finally:
             i18n.reset(token)
@@ -1028,7 +1029,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             seen = datetime.fromisoformat(d["last_seen"]) if d["last_seen"] else None
             d["age_min"] = int((now - seen).total_seconds() // 60) if seen else None
             d["offline"] = d["age_min"] is None or d["age_min"] > 15
-        return page(request, "sync.html", snap=snap, fw_latest=store.current_firmware("avinox-sync"))
+        findings = store.format_findings(200)
+        return page(request, "sync.html", snap=snap, fw_latest=store.current_firmware("avinox-sync"),
+                    fmt_findings=[f for f in findings if f["kind"] != "hms"], hms_findings=[f for f in findings if f["kind"] == "hms"])
+
+    @app.post("/api/v1/sync/findings/seen", dependencies=[Depends(read_auth)], include_in_schema=False)
+    def findings_seen(request: Request):
+        store.mark_findings_seen()
+        return RedirectResponse("/sync", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse, include_in_schema=False)
     def settings_page(request: Request, user: dict | None = Depends(read_auth)):

@@ -15,6 +15,7 @@ from __future__ import annotations
 import struct
 
 from .ride_rec import Ride
+from .summary import calories_offset, ride_calories
 
 FIT_EPOCH_OFFSET = 631_065_600
 _SEMICIRCLE = 2**31 / 180
@@ -139,6 +140,7 @@ def to_fit(ride: Ride, name: str | None = None) -> bytes:
     ]
     w.definition(4, 20, rec_fields, [(num, struct.calcsize("<" + typ[1])) for num, _n, _u, typ, _s, _a, _f in _DEV_FIELDS])
     rec_types = [t for _, t in rec_fields]
+    cal_offset = calories_offset(samples)
     for s in samples:
         has_pos = s.latitude is not None and s.longitude is not None
         values = [
@@ -153,7 +155,7 @@ def to_fit(ride: Ride, name: str | None = None) -> bytes:
             _scaled(s.rider_power_w, 1, hi=0xFFFE),
             _scaled(s.temperature_c, 1, lo=-127, hi=126),
             _scaled(s.gradient_pct, 100, lo=-32767, hi=32766),
-            _scaled(s.calories_kcal, 1, hi=0xFFFE),
+            _scaled(max(0.0, s.calories_kcal - cal_offset) if s.calories_kcal is not None else None, 1, hi=0xFFFE),
         ]
         w.buf.append(4)
         for typ, v in zip(rec_types, values):
@@ -178,7 +180,8 @@ def to_fit(ride: Ride, name: str | None = None) -> bytes:
     avg_hr, max_hr = avg_max([s.heart_rate_bpm for s in samples if s.heart_rate_bpm])
     stats = header.stats
     distance = header.distance_m or (samples[-1].distance_m if samples else 0)
-    calories = _scaled(stats.calories_kcal if stats.calories_kcal == stats.calories_kcal else None, 1, hi=0xFFFE)
+    cal_total = ride_calories(ride)
+    calories = _scaled(cal_total if cal_total == cal_total else None, 1, hi=0xFFFE)
     avg_speed = _scaled(stats.avg_speed_kmh / 3.6, 1000)
     max_speed = _scaled(stats.max_speed_kmh / 3.6, 1000)
     ascent = _scaled(header.ascent_m, 1, hi=0xFFFE)

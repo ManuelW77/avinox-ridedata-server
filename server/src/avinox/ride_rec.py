@@ -67,7 +67,10 @@ class HeaderStats:
     avg_cadence_rpm: float
     max_cadence_rpm: float
     calories_kcal: float
-    """Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter statt neu zu beginnen."""
+    """Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter statt neu zu beginnen.
+
+    Roher Zählerstand; die Fahrtwerte rechnet ``summary.ride_calories`` (letzter minus erster Sample-Wert).
+    """
 
     @classmethod
     def from_header(cls, data: bytes) -> HeaderStats:
@@ -138,7 +141,10 @@ class Sample:
     pressure_kpa: float | None
     heart_rate_bpm: int | None
     calories_kcal: float | None
-    """Feld 52, Kalorien bisher (÷1000). Letzter Wert = Header ``stats.calories_kcal``."""
+    """Feld 52, Kalorien bisher (÷1000). Letzter Wert = Header ``stats.calories_kcal``.
+
+    Zähler läuft über Fahrten hinweg weiter; der Server nimmt je Fahrt die Differenz letzter minus erster Wert.
+    """
     battery_pct: int | None
     odometer_m: int | None
     event: int

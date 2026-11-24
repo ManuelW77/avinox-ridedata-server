@@ -22,7 +22,7 @@ Stand: 12.11.2026. Bike: Amflow PR mit DJI Avinox, App auf dem iPhone.
 | `ride_rec/**/ride_rec_index.dat` | 24 Byte: uint32 erste ID, letzte ID, letzte ID, ein weiterer Wert; Rest 0. |
 | `ebike_log_<n>_<datum>_<zeit>.dat` | 2482 Systemlogs, zusammen ca. 3 GB, einzeln bis 268 MB. Kennung `DGS_EB100` / `DJI_LOG_V3`. Inhalt **verschlüsselt** (Entropie 7,5–7,8 Bit/Byte, sich wiederholende 8-Byte-Blöcke). Ohne DJI-Schlüssel nicht lesbar, wird nicht verfolgt. |
 | `buried_rec/buried_file_cur.json` | **Nutzungsstatistik** („buried point“ = Analytics), JSON-Zeilen mit `event_id`, ca. 1000 Zeilen, siehe unten. Lesbar. |
-| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947, Zeitpunkt des Anschlusses an den Rechner). Codes unbekannt. Parser: `server/src/avinox/hms.py`. |
+| `hms_rec/hms_current_storage.proto` | Meldungen (DJI „HMS“): 32 Byte Header (Magic, Version, Seriennummer ab Offset 8), dann Frames Typ `0x01EB`; Protobuf Feld 1 = Code, Feld 4 = Unix-Zeit. Hier ein Eintrag (Code 43947 = `0xABAB`, Zeitpunkt des Anschlusses an den Rechner); er entsteht bei jedem Anschluss neu, ist also ein Marker und wird vom Server verworfen (`IGNORED_CODES`). Übrige Codes unbekannt. Parser: `server/src/avinox/hms.py`. |
 | `System/ebike_log_index.dat` | 12 Byte, uint32 = Anzahl der `ebike_log`-Dateien (2482). |
 | `System/map/tracks/<hash>/` | Nur eine leere `thumbnail.jpg.tmp`. |
 
@@ -73,7 +73,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 41 | Temperatur °C | signed ÷100, -99900 → unbekannt |
 | 42 | Luftdruck **kPa** | ÷100 (z. B. 101,49) |
 | 51 | Puls | roh |
-| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter |
+| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter; Server rechnet je Fahrt Differenz letzter–erster Sample-Wert |
 | 71 | Akku % | roh |
 | 72 | Zeitstempel | wie Header-Start |
 | 73 | Kilometerstand in m | roh |
