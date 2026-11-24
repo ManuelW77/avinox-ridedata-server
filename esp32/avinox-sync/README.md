@@ -34,7 +34,6 @@ Einstellungen unter `idf.py menuconfig` → „Avinox-Sync“:
 | `AVX_SYNC_INTERVAL_MIN` | 10 | Abstand zwischen zwei Syncs |
 | `AVX_NO_DRIVE_HINT_S` | 30 | Sekunden ohne Laufwerk bis die LED orange blinkt |
 | `AVX_CHUNK_SIZE` | 32768 | Größe eines Upload-Stücks in Byte |
-| `AVX_OTA_CHECK_S` | 21600 | Abstand der Firmware-Update-Prüfung (zusätzlich vor jedem Sync) |
 | `AVX_OTA_VALIDATE_S` | 300 | Frist, in der eine neue Firmware den Server erreichen muss, sonst Rückkehr zur alten |
 
 Flash-Aufteilung (`partitions.csv`, eingestellt sind 4 MB, das Board hat 16 MB): NVS 64 KB, phy_init, App 3 MB.
@@ -175,14 +174,14 @@ Danach:
 1. `PROJECT_VER` in `CMakeLists.txt` erhöhen (vor **jedem** Update – gleiche Version wird nicht installiert).
 2. `idf.py build` → `esp32/avinox-sync/build/avinox-sync.bin` im Server unter *Einstellungen → Firmware* hochladen
    (oder `avinox firmware add`).
-3. Der ESP fragt vor jedem Auslesen (Sync; ist der Server nicht erreichbar, liest er nicht aus und versucht es nach 1 min erneut) und spätestens alle 6 h
-   (`AVX_OTA_CHECK_S`; erstmals 30 s nach der ersten WLAN-Verbindung)
-   `GET /api/v1/firmware/latest?project=avinox-sync` ab. Andere Version → Bericht `ota`/`started`, Download in die
-   freie OTA-Partition, Prüfung von Größe, SHA-256 und Projektname, Umschalten, Bericht `ok`, Neustart. Fehler →
-   Bericht `failed` mit Text, die laufende Firmware bleibt; dieselbe Version wird erst beim nächsten periodischen
-   Prüfzeitpunkt erneut versucht. Die Download-Adresse muss ein relativer Pfad unter `/api/v1/firmware/` sein
-   (wird an die Server-URL gehängt, Weiterleitungen werden nicht verfolgt), sonst Abbruch mit `failed` – so gelangt das
-   Token nie zu einem fremden Host.
+3. Der ESP meldet sich per Heartbeat beim Server (beim Start, vor jedem Auslesen, alle `AVX_HEARTBEAT_S` s). Liegt
+   eine andere Firmware-Version bereit, antwortet der Server mit `firmware_update`. Dann holt der ESP
+   `GET /api/v1/firmware/latest?project=avinox-sync`, meldet `ota`/`started`, lädt in die freie OTA-Partition, prüft
+   Größe, SHA-256 und Projektname, schaltet um, meldet `ok` und startet neu. Vor dem Auslesen: antwortet der Server
+   nicht, liest der ESP nicht aus und versucht es nach 1 min erneut. Fehler → Bericht `failed` mit Text, die laufende
+   Firmware bleibt; dieselbe Version wird frühestens nach 1 h erneut versucht. Die Download-Adresse muss ein
+   relativer Pfad unter `/api/v1/firmware/` sein (wird an die Server-URL gehängt, Weiterleitungen werden nicht
+   verfolgt), sonst Abbruch mit `failed` – so gelangt das Token nie zu einem fremden Host.
 4. **Automatische Rückkehr:** Die neue Firmware gilt erst als gültig, wenn WLAN verbunden ist und der Server einmal
    erfolgreich geantwortet hat (Heartbeat/Bericht 2xx oder Manifest 200). Klappt das nicht binnen 5 min
    (`AVX_OTA_VALIDATE_S`), startet der ESP neu und der Bootloader kehrt zur vorherigen Version zurück; die meldet dann

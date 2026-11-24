@@ -9,8 +9,13 @@
 /* Geräte-ID "avinox-sync-XXXX" (letzte 2 Byte der STA-MAC), wird bei jeder Anfrage als X-Avinox-Device gesendet. */
 const char *report_device_id(void);
 
-/* POST /api/v1/device/report. res == NULL: Heartbeat, sonst Sync-Bericht. Fehler werden nur geloggt. */
+/* POST /api/v1/device/report. res == NULL: Heartbeat, sonst Sync-Bericht. Fehler werden nur geloggt.
+ * Antwort mit firmware_update löst ota_request_update() aus. */
 void report_send(const app_config_t *cfg, const sync_result_t *res);
+
+/* Heartbeat synchron senden (wartet bis 12 s auf einen laufenden Bericht). true bei HTTP 2xx.
+ * Meldet der Server eine andere Firmware (firmware_update), wird ota_request_update() gesetzt. */
+bool report_hello(const app_config_t *cfg);
 
 /* OTA-Bericht (event "ota"): result "started" | "ok" | "failed" | "rolled_back", error optional.
  * true bei HTTP 2xx. */
