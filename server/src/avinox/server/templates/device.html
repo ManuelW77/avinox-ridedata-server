@@ -109,7 +109,7 @@
     {% if rp %}
     {% set peak = rp | map(attribute='delta_mv') | max %}
     <div class="bars wide">
-      {% for p in rp[-30:] %}
+      {% for p in rp[-30:] | reverse %}
       <div class="bar">
         <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill bal-{{ 'crit' if p.delta_mv >= bc else ('warn' if p.delta_mv >= bw else 'ok') }}" style="width: {{ (100 * p.delta_mv / peak) if peak else 0 }}%"></span></span>
