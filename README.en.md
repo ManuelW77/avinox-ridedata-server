@@ -40,15 +40,19 @@ Download in full size: [landscape](video/avinox-erklaervideo-en-quer.mp4) · [po
 <table>
 <tr>
 <td width="50%"><img src="assets/screenshots/dashboard-en.png" alt="Overview with period, rider and motor energy share and charts"><br><sub>Overview: totals, your share vs. the motor, charts</sub></td>
-<td width="50%"><img src="assets/screenshots/ride-en.png" alt="Ride details with key figures and charts"><br><sub>Ride: key figures and charts</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-en.png" alt="Ride details with key figures, calories and AI summary"><br><sub>Ride: key figures, calories, AI summary</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="assets/screenshots/battery-en.png" alt="Battery health with notes, charge cycles and health trend"><br><sub>Battery: health, cycles, trend, voltage drop</sub></td>
 <td width="50%"><img src="assets/screenshots/bests-en.png" alt="Personal bests for power, motor, rides and periods"><br><sub>Personal bests</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="assets/screenshots/stats-en.png" alt="Assist modes, gears and distributions of a ride"><br><sub>Ride: modes, gears and distributions</sub></td>
+<td width="50%"><img src="assets/screenshots/stats-en.png" alt="Assist modes, gears and cadence per gear of a ride"><br><sub>Ride: modes, gears, cadence per gear</sub></td>
 <td width="50%"><img src="assets/screenshots/battery-history-en.png" alt="Battery history: charge level, temperature, cell deviation and current"><br><sub>Battery history per session</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/rides-en.png" alt="Ride list with monthly summary, search and filters"><br><sub>Rides: list with search and filters</sub></td>
+<td width="50%"><img src="assets/screenshots/physics-en.png" alt="Ride physics compared: rolling resistance and power demand per ride"><br><sub>Ride physics compared</sub></td>
 </tr>
 </table>
 
