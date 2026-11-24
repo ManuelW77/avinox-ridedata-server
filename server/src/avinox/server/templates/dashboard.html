@@ -103,7 +103,7 @@
   {% if items %}
   <div class="bests-group t-{{ {'rider':'rider','motor':'motor','ride':'ride'}.get(gkey,'neutral') }}" data-g="{{ gkey }}">
   <h3 class="group-title g-{{ gkey }}">{{ gname }}</h3>
-  <div class="best-grid"{% if gkey == 'period' %} style="--n:{{ items | length }};--ai-start:{{ items | length + 1 }}"{% endif %}>
+  <div class="best-grid"{% if gkey == 'period' %} style="--n:{{ items | length }};--ai-start:{{ (items | length) % 5 + 1 }}"{% if items | length > 3 %} data-many{% endif %}{% endif %}>
     {% for h in items %}
     <article class="best g-{{ gkey }}" title="{{ h.sentence }}" data-start="{{ h.start or '' }}" data-end="{{ h.end or '' }}">
       <div class="best-k">{{ h.title }}</div>

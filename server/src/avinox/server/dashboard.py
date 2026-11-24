@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from markupsafe import Markup, escape
 
-from ..analysis import ASSIST_LEVELS, GRADIENT_BINS, _label
+from ..analysis import ASSIST_LEVELS, GEAR_MIN_MOVING_S, GRADIENT_BINS, _label, _load_hints
 from . import i18n
 from .i18n import t
 
@@ -362,6 +362,8 @@ def mix(rows: list[dict]) -> dict:
     moving_gears: dict[str, float] = {}
     dists: dict[str, dict[str, float] | None] = {k: None for k in DIST_KEYS}
     cad: dict[str, dict] = {}
+    load: dict[str, dict] = {}
+    starts: dict[str, int] = {}
     grad: dict[str, dict] = {}
     for r in rows:
         assist = r.get("assist") or {}
@@ -391,6 +393,17 @@ def mix(rows: list[dict]) -> dict:
             if m.get("avg_cadence_rpm") is not None and w:
                 c["rpm"] += m["avg_cadence_rpm"] * w
                 c["rpm_t"] += w
+        for gear, m in (g.get("per_gear") or {}).items():
+            ld = load.setdefault(gear, {"mv": 0, "high": 0, "grind": 0, "mot": 0.0, "mot_t": 0})
+            mv = m.get("moving_seconds") or 0
+            ld["mv"] += mv
+            ld["high"] += m.get("high_motor_seconds") or 0
+            ld["grind"] += m.get("grinding_seconds") or 0
+            if m.get("avg_motor_assist_power_w") is not None and mv:
+                ld["mot"] += m["avg_motor_assist_power_w"] * mv
+                ld["mot_t"] += mv
+        for gear, n in (g.get("starts_per_gear") or {}).items():
+            starts[gear] = starts.get(gear, 0) + (n or 0)
         for label, x in (r.get("by_gradient") or {}).items():
             b = grad.setdefault(label, {"seconds": 0, "rid": [0.0, 0], "mot": [0.0, 0], "spd": [0.0, 0]})
             secs = x.get("seconds") or 0
@@ -426,6 +439,9 @@ def mix(rows: list[dict]) -> dict:
             }
     cad_per_gear = {k: round(c["rpm"] / c["rpm_t"]) for k, c in sorted(cad.items(), key=lambda kv: _gear_order(kv[0]))
                     if c["mv"] >= 30 and c["rpm_t"]}
+    load_per_gear = {k: {"moving_seconds": ld["mv"], "high_motor_seconds": ld["high"], "grinding_seconds": ld["grind"],
+                         "avg_motor_assist_power_w": round(ld["mot"] / ld["mot_t"]) if ld["mot_t"] else None}
+                     for k, ld in sorted(load.items(), key=lambda kv: _gear_order(kv[0]))}
     return {
         "rides": len(rows),
         "by_gradient": by_gradient,
@@ -434,7 +450,9 @@ def mix(rows: list[dict]) -> dict:
                    "moving_seconds_per_mode": dict(sorted(moving_modes.items(), key=lambda kv: _mode_order(kv[0])))},
         "gears": {"seconds_per_gear": dict(sorted(gears.items(), key=lambda kv: _gear_order(kv[0]))), "changes": gear_changes,
                   "moving_seconds_per_gear": dict(sorted(moving_gears.items(), key=lambda kv: _gear_order(kv[0]))),
-                  "avg_cadence_per_gear": cad_per_gear},
+                  "avg_cadence_per_gear": cad_per_gear,
+                  "per_gear": load_per_gear, "starts_per_gear": dict(sorted(starts.items(), key=lambda kv: _gear_order(kv[0]))),
+                  "min_moving_s": GEAR_MIN_MOVING_S, "load_hints": _load_hints(load_per_gear, starts)},
         "distributions": dists,
     }
 
