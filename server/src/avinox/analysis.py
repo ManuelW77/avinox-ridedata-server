@@ -34,6 +34,14 @@ BEST_EFFORT_S = [5, 10, 30, 60, 300, 600, 1200, 3600]
 STOP_MIN_S = 30
 """Stillstand ab dieser Dauer zählt als Stopp."""
 SERIES_MAX_POINTS = 1000
+HIGH_MOTOR_W = 300
+"""Ab dieser Motorleistung gilt der Motor als stark gefordert."""
+GRIND_MAX_RPM = 60
+"""Unter dieser Trittfrequenz (bei viel Motorleistung) tritt der Fahrer schwer."""
+GRIND_MIN_S = 5
+GEAR_MIN_MOVING_S = 30
+"""Gänge mit weniger Fahrzeit werden in der Karte „Motorlast je Gang“ weder gezeigt noch gemeldet."""
+"""Mindestdauer eines zusammenhängenden Abschnitts mit schwerem Treten."""
 
 
 def assist_name(level: int, custom_names: dict[int, str] | None = None) -> str:
@@ -156,10 +164,62 @@ def _by_gradient(samples: list[Sample], moving_w: list[int]) -> dict:
     return out
 
 
+def _grind_seconds(samples: list[Sample], dts: list[int]) -> list[int]:
+    """Je Sample die Sekunden, die zu einem schweren Abschnitt (>= GRIND_MIN_S, selber Gang) gehören, sonst 0."""
+    out = [0] * len(samples)
+    run: list[int] = []
+
+    def flush() -> None:
+        if sum(dts[i] for i in run) >= GRIND_MIN_S:
+            for i in run:
+                out[i] = dts[i]
+        run.clear()
+
+    for i, s in enumerate(samples):
+        hit = (s.speed_kmh >= MOVING_MIN_KMH and s.motor_power_w >= HIGH_MOTOR_W
+               and 0 < s.cadence_rpm < GRIND_MAX_RPM)
+        if hit and run and samples[run[-1]].gear != s.gear:
+            flush()
+        if hit:
+            run.append(i)
+        else:
+            flush()
+    flush()
+    return out
+
+
+def _starts_per_gear(samples: list[Sample]) -> dict[str, int]:
+    out: Counter = Counter()
+    prev_moving = True  # Fahrtbeginn mitten in der Bewegung zählt nicht als Anfahren
+    for s in samples:
+        moving = s.speed_kmh >= MOVING_MIN_KMH
+        if moving and not prev_moving and s.gear:
+            out[str(s.gear)] += 1
+        prev_moving = moving
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+
+
+def _load_hints(per_gear: dict, starts: dict[str, int]) -> dict[str, list[int]]:
+    """Auffällige Gänge: schweres Treten (nicht im leichtesten Gang) und Anfahren im schweren Gang."""
+    gears = [int(g) for g in per_gear]
+    if not gears:
+        return {"grinding": [], "heavy_starts": []}
+    lo, hi = min(gears), max(gears)
+    grinding = sorted(int(g) for g, m in per_gear.items() if m["grinding_seconds"] >= 60 and int(g) != lo
+                      and m["moving_seconds"] >= GEAR_MIN_MOVING_S)
+    heavy = sorted(int(g) for g, n in starts.items()
+                   if n >= 3 and int(g) * 2 > hi and hi >= 8
+                   and per_gear.get(g, {}).get("moving_seconds", 0) >= GEAR_MIN_MOVING_S)
+    return {"grinding": grinding, "heavy_starts": heavy}
+
+
 def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
+    grind = _grind_seconds(samples, dts)
     groups: dict[object, list[tuple[Sample, int]]] = {}
-    for s, dt in zip(samples, dts):
+    grinds: dict[object, int] = {}
+    for s, dt, g in zip(samples, dts, grind):
         groups.setdefault(key(s), []).append((s, dt))
+        grinds[key(s)] = grinds.get(key(s), 0) + g
     out = {}
     for k, items in sorted(groups.items(), key=lambda kv: kv[0]):
         secs = sum(dt for _, dt in items)
@@ -182,6 +242,8 @@ def _per_level(samples: list[Sample], dts: list[int], key) -> dict:
             "avg_pedaling_power_w": round(sum(s.rider_power_w * dt for s, dt in ped) / pt) if pt else None,
             "avg_cadence_rpm": round(sum(s.cadence_rpm * dt for s, dt in cad) / ct) if ct else None,
             "cadence_seconds": ct,
+            "high_motor_seconds": sum(dt for s, dt in moving if s.motor_power_w >= HIGH_MOTOR_W),
+            "grinding_seconds": grinds.get(k, 0),
         }
     return out
 
@@ -239,6 +301,7 @@ def analyze(
     per_mode = {assist_name(int(k), custom_names): v for k, v in _per_level(s, dts, lambda x: x.assist_level).items()}
     per_gear = {k: v for k, v in _per_level(s, dts, lambda x: x.gear).items() if k != "0"}
 
+    starts = _starts_per_gear(s)
     result = {
         "ride_id": ride.header.ride_id,
         "summary": summary.to_dict(),
@@ -252,6 +315,9 @@ def analyze(
             "seconds_per_gear": {k: v["seconds"] for k, v in per_gear.items()},
             "per_gear": per_gear,
             "changes": _changes([x.gear for x in s]),
+            "starts_per_gear": starts,
+            "min_moving_s": GEAR_MIN_MOVING_S,
+            "load_hints": _load_hints(per_gear, starts),
         },
         "distributions": {
             "rider_power_s": histogram([x.rider_power_w for x in s], moving_w, POWER_BINS),
