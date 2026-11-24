@@ -664,7 +664,7 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .cols-drive > .ai-card { grid-column: 1 / -1; }
 .bests > .ai-card { margin-top: 1rem; }
 @media (min-width: 901px) {
-  .cols-drive:has(> .ai-card:not([hidden])) > :first-child { grid-row: span 2; }
+  .cols-drive:has(> :nth-child(3):not(.ai-card)) > :first-child { grid-row: span 2; }
 }
 @media (min-width: 1000px) {
   .cols-power:has(> .ai-card:not([hidden])) { grid-template-columns: repeat(4, minmax(0, 1fr)); }

@@ -553,8 +553,8 @@ def test_ride_page_has_motor_load_card(client, settings):
         return d
     data = ride([smp(t) for t in range(60)], start=T0, end=T0 + 60, distance=300)
     pk = put(client, settings, data).json()["ride"]
-    assert "Motorlast je Gang" in client.get(f"/rides/{pk}").text
+    assert "<h2>Motorlast je Gang" in client.get(f"/rides/{pk}").text
     plain = ride([gps_sample(t, 5 * t) for t in range(30)], ride_id=2, start=T0 + 5000, end=T0 + 5030, distance=150)
     pk2 = put(client, settings, plain, path="ride_rec/4242/ride_rec_2000.proto").json()["ride"]
     assert pk2 != pk
-    assert "Motorlast je Gang" not in client.get(f"/rides/{pk2}").text
+    assert "<h2>Motorlast je Gang" not in client.get(f"/rides/{pk2}").text

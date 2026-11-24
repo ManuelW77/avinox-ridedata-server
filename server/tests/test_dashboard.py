@@ -375,3 +375,20 @@ def test_rider_wh_and_highlight_range():
     if any(x["period"] == "month" for x in pm):
         m = next(x for x in pm if x["period"] == "month")
         assert (m["start"], m["end"]) == ("2026-11-01", "2026-11-30")
+
+
+def test_mix_load_per_gear():
+    def pg(mv, hi, grind, mot):
+        return {"moving_seconds": mv, "high_motor_seconds": hi, "grinding_seconds": grind, "avg_motor_assist_power_w": mot}
+    rows = [
+        {"gears": {"per_gear": {"2": pg(100, 40, 10, 200), "10": pg(50, 5, 0, 100)}, "starts_per_gear": {"2": 3}}},
+        {"gears": {"per_gear": {"2": pg(300, 60, 70, 100)}, "starts_per_gear": {"2": 2, "10": 1}}},
+        {"gears": {"per_gear": {"2": {"moving_seconds": 20}}}},
+        {},
+    ]
+    g = dash.mix(rows)["gears"]
+    assert g["per_gear"]["2"]["high_motor_seconds"] == 100
+    assert g["per_gear"]["2"]["moving_seconds"] == 420
+    assert g["per_gear"]["2"]["avg_motor_assist_power_w"] == round((200 * 100 + 100 * 300) / 400)
+    assert g["starts_per_gear"] == {"2": 5, "10": 1}
+    assert g["min_moving_s"] == 30 and "grinding" in g["load_hints"]
