@@ -4,6 +4,7 @@ import base64
 
 import httpx2
 from fastapi.testclient import TestClient
+from conftest import web_login
 from test_firmware import clean_env, settings  # noqa: F401
 
 from avinox.server import app as app_mod
@@ -82,12 +83,16 @@ def test_disable_works(monkeypatch, settings):
     seed(settings, [rel("server-v1.5.0", url=URL)])
     settings.web_user, settings.web_password = "fahrer", "geheim"
     with page_app(monkeypatch, settings, "1.4.1", []) as c:
+        web_login(c, "fahrer", "geheim")
         c.headers["Authorization"] = "Basic " + base64.b64encode(b"fahrer:geheim").decode()
         assert 'type="application/json" id="update"' in c.get("/").text
+        c.cookies.clear()  # API per Basic, ohne Session (sonst CSRF-Pflicht)
         assert c.get("/api/v1/settings/update-check").json() == {"enabled": True}
         assert c.put("/api/v1/settings/update-check", json={"enabled": False}).json() == {"enabled": False}
         assert c.put("/api/v1/settings/update-check", json={"enabled": "x"}).status_code == 400
-        assert 'type="application/json" id="update"' not in c.get("/").text
+        web_login(c, "fahrer", "geheim")
+        html = c.get("/").text
+        assert "<nav" in html and 'type="application/json" id="update"' not in html
 
 
 def test_state_stores_result(monkeypatch, settings):
