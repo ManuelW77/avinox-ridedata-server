@@ -66,7 +66,7 @@
       {% if bh.soh.change_pct is not none %}<dt>{{ t('bh.soh.change') }}</dt><dd>{{ bh.soh.change_pct | num(1) }} %</dd>{% endif %}
     </dl>
     <div class="bars wide">
-      {% for p in pts[-30:] %}
+      {% for p in pts[-30:] | reverse %}
       <div class="bar">
         <span class="label">{{ p.time | localtime('%d.%m.%y') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill" style="width: {{ (100 * p.wh / peak) if peak else 0 }}%"></span></span>
@@ -132,7 +132,7 @@
     {% if sp %}
     {% set peak = sp | map(attribute='mv_per_a') | max %}
     <div class="bars wide compact">
-      {% for p in sp[-30:] %}
+      {% for p in sp[-30:] | reverse %}
       <div class="bar">
         <span class="label">{{ p.time | localtime('%d.%m.%y %H:%M') if p.time else t('bh.nodate') }}</span>
         <span class="track"><span class="fill" style="width: {{ (100 * p.mv_per_a / peak) if peak else 0 }}%"></span></span>
