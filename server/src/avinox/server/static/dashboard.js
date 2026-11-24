@@ -285,7 +285,7 @@
       return `<tr><td>${esc(gear)}</td><td style="width:100%"><span class="bar" style="grid-template-columns:1fr 3rem"><span class="track"><span class="fill motor" style="width: ${pct}%; min-width: 0"></span></span><span class="val">${esc(fmt(pct, 0))} %</span></span></td><td class="n">${esc(fmt(m.avg_motor_assist_power_w, 0))} W</td><td class="n">${lgStarts[gear] ? esc(lgStarts[gear]) : ""}</td></tr>`;
     });
     const lgRng = (l) => Math.min(...l) === Math.max(...l) ? String(l[0]) : `${Math.min(...l)}–${Math.max(...l)}`;
-    const loadGearCard = lgRows.length ? `<section class="card"><h2>${esc(tr("mix.d.load_gear"))} <span class="muted small">${esc(tr("mix.d.load_gear_sub"))}</span></h2>
+    const loadGearCard = lgRows.length ? `<section class="card load-gear"><h2>${esc(tr("mix.d.load_gear"))} <span class="muted small">${esc(tr("mix.d.load_gear_sub"))}</span></h2>
       <table class="plain small" style="width:100%;white-space:nowrap"><tr><th>${esc(tr("mix.d.load_gear_th"))}</th><th></th><th class="n">${esc(tr("mix.d.load_assist_th"))}</th><th class="n" style="padding-left:0.8rem">${esc(tr("mix.d.load_starts"))}</th></tr>${lgRows.join("")}</table>
       ${(lgHints.grinding || []).length ? `<p class="small" style="margin-top:0.6rem">${esc(tr("mix.d.load_hint", { r: lgRng(lgHints.grinding) }))}</p>` : ""}
       ${(lgHints.heavy_starts || []).length ? `<p class="small" style="margin-top:0.4rem">${esc(tr("mix.d.load_hint_starts", { r: lgRng(lgHints.heavy_starts) }))}</p>` : ""}</section>` : "";
