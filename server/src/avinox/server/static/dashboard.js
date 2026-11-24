@@ -279,6 +279,16 @@
     ];
     const cadGear = g.avg_cadence_per_gear || {};
     const cadGearCard = Object.keys(cadGear).length ? `<section class="card"><h2>${esc(tr("mix.d.cad_gear"))} <span class="muted small">${esc(tr("mix.d.cad_gear_sub"))}</span></h2>${barsHtml(cadGear, "rider", false, null, tr("mix.d.rpm"), 0)}</section>` : "";
+    const lgMin = g.min_moving_s || 30, lgPer = g.per_gear || {}, lgStarts = g.starts_per_gear || {}, lgHints = g.load_hints || {};
+    const lgRows = Object.entries(lgPer).filter(([, m]) => (m.moving_seconds || 0) >= lgMin).map(([gear, m]) => {
+      const pct = 100 * (m.high_motor_seconds || 0) / m.moving_seconds;
+      return `<tr><td>${esc(gear)}</td><td style="width:100%"><span class="bar" style="grid-template-columns:1fr 3rem"><span class="track"><span class="fill motor" style="width: ${pct}%; min-width: 0"></span></span><span class="val">${esc(fmt(pct, 0))} %</span></span></td><td class="n">${esc(fmt(m.avg_motor_assist_power_w, 0))} W</td><td class="n">${lgStarts[gear] ? esc(lgStarts[gear]) : ""}</td></tr>`;
+    });
+    const lgRng = (l) => Math.min(...l) === Math.max(...l) ? String(l[0]) : `${Math.min(...l)}–${Math.max(...l)}`;
+    const loadGearCard = lgRows.length ? `<section class="card"><h2>${esc(tr("mix.d.load_gear"))} <span class="muted small">${esc(tr("mix.d.load_gear_sub"))}</span></h2>
+      <table class="plain small" style="width:100%;white-space:nowrap"><tr><th>${esc(tr("mix.d.load_gear_th"))}</th><th></th><th class="n">${esc(tr("mix.d.load_assist_th"))}</th><th class="n" style="padding-left:0.8rem">${esc(tr("mix.d.load_starts"))}</th></tr>${lgRows.join("")}</table>
+      ${(lgHints.grinding || []).length ? `<p class="small" style="margin-top:0.6rem">${esc(tr("mix.d.load_hint", { r: lgRng(lgHints.grinding) }))}</p>` : ""}
+      ${(lgHints.heavy_starts || []).length ? `<p class="small" style="margin-top:0.4rem">${esc(tr("mix.d.load_hint_starts", { r: lgRng(lgHints.heavy_starts) }))}</p>` : ""}</section>` : "";
     const hasCad = Object.keys(cadGear).length > 0;
     const aiCard = (key) => `<section class="card ai-card ai-${key}" data-ai="${key}" hidden><div class="ai-body"></div></section>`;
     const grp = (cls, key, inner, t) => `<div class="${t}"><h3 class="group-title ${cls}">${esc(tr(key))}</h3>${inner}</div>`;
@@ -288,6 +298,7 @@
           <table class="plain" style="margin-top:0.9rem"><tr><th>${esc(tr("mix.th.mode"))}</th><th class="n">${esc(tr("mix.th.distance"))}</th><th class="n">${esc(tr("mix.th.avg_kmh"))}</th><th class="n">${esc(tr("mix.th.avg_motor"))}</th><th class="n">${esc(tr("mix.th.avg_rider"))}</th></tr>${modeRows}</table></section>
         <section class="card"><div class="chart-head"><h2>${esc(tr("mix.gears"))} <span class="muted small">${esc(tr("mix.while_moving"))}</span></h2><span class="muted small">${esc(tr("mix.gear_changes", { n: fmt(g.changes || 0, 0) }))}</span></div>${barsHtml(g.moving_seconds_per_gear || g.seconds_per_gear, "")}</section>
         ${cadGearCard}
+        ${loadGearCard}
         ${aiCard("drive")}
       </div>`, "t-motor") +
       grp("g-rider", "mix.sec.power", `<div class="grid cols-3 cols-power${d.heart_rate_s ? " has-hr" : ""}">${powerCards.join("")}${aiCard("power")}</div>`, "t-rider") +
