@@ -40,15 +40,19 @@ Herunterladen in voller Größe: [quer](video/avinox-erklaervideo-de-quer.mp4) �
 <table>
 <tr>
 <td width="50%"><img src="assets/screenshots/dashboard-de.png" alt="Übersicht mit Zeitraum, Energieanteil Fahrer und Motor und Diagrammen"><br><sub>Übersicht: Bilanz, Energieanteil von dir und Motor, Diagramme</sub></td>
-<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen und Verläufen"><br><sub>Fahrt: Kennzahlen und Verläufe</sub></td>
+<td width="50%"><img src="assets/screenshots/ride-de.png" alt="Fahrtdetails mit Kennzahlen, Kalorien und KI-Auswertung"><br><sub>Fahrt: Kennzahlen, Kalorien, KI-Auswertung</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="assets/screenshots/battery-de.png" alt="Akku-Zustand mit Hinweisen, Ladezyklen und Gesundheitstrend"><br><sub>Akku: Zustand, Zyklen, Gesundheitstrend, Spannungseinbruch</sub></td>
 <td width="50%"><img src="assets/screenshots/bests-de.png" alt="Bestwerte für Leistung, Motor, Fahrten und Zeiträume"><br><sub>Bestwerte</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="assets/screenshots/stats-de.png" alt="Unterstützungsmodi, Gänge und Verteilungen einer Fahrt"><br><sub>Fahrt: Modi, Gänge und Verteilungen</sub></td>
+<td width="50%"><img src="assets/screenshots/stats-de.png" alt="Unterstützungsmodi, Gänge und Trittfrequenz je Gang einer Fahrt"><br><sub>Fahrt: Modi, Gänge, Trittfrequenz je Gang</sub></td>
 <td width="50%"><img src="assets/screenshots/battery-history-de.png" alt="Akku-Verlauf: Ladestand, Temperatur, Zellabweichung und Strom"><br><sub>Akku-Verlauf je Sitzung</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/screenshots/rides-de.png" alt="Fahrtenliste mit Monatsübersicht, Suche und Filtern"><br><sub>Fahrten: Liste mit Suche und Filtern</sub></td>
+<td width="50%"><img src="assets/screenshots/physics-de.png" alt="Fahrphysik im Vergleich: Rollwiderstand und Leistungsbedarf je Fahrt"><br><sub>Fahrphysik im Vergleich</sub></td>
 </tr>
 </table>
 
