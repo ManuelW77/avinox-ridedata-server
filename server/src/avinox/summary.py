@@ -104,6 +104,23 @@ def _intervals(samples: list[Sample]) -> list[int]:
     return out
 
 
+def calories_offset(samples: list[Sample]) -> float:
+    """Erster gültiger Kalorien-Zählerstand (Zähler läuft über Fahrten hinweg weiter)."""
+    return next((x.calories_kcal for x in samples if x.calories_kcal is not None), 0.0)
+
+
+def ride_calories(ride: Ride) -> float:
+    """Kalorien dieser Fahrt: letzter minus erster Zählerstand der Samples.
+
+    Fallback ohne Sample-Werte: Header-Wert. Springt der Zähler zurück (Neustart
+    bei 0), ist der letzte Stand bereits der Fahrtwert; nie negativ.
+    """
+    vals = [x.calories_kcal for x in ride.samples if x.calories_kcal is not None]
+    if not vals:
+        return ride.header.stats.calories_kcal
+    return vals[-1] - vals[0] if vals[-1] >= vals[0] else max(0.0, vals[-1])
+
+
 def climb(altitudes: list[float], threshold: float = CLIMB_THRESHOLD_M) -> tuple[float, float]:
     """Anstieg und Abstieg mit Hysterese.
 
@@ -193,7 +210,7 @@ def summarize(ride: Ride) -> Summary:
         max_total_torque_nm=st.max_total_torque_nm,
         avg_cadence_rpm=st.avg_cadence_rpm,
         max_cadence_rpm=st.max_cadence_rpm,
-        calories_kcal=st.calories_kcal,
+        calories_kcal=ride_calories(ride),
         avg_heart_rate_bpm=_mean(hr),
         max_heart_rate_bpm=max(hr, default=None),
         battery_start_pct=battery[0] if battery else None,

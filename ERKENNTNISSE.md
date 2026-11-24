@@ -73,7 +73,7 @@ Fehlende Felder: Protobuf lässt Nullwerte weg. Leistung, Geschwindigkeit, Stufe
 | 41 | Temperatur °C | signed ÷100, -99900 → unbekannt |
 | 42 | Luftdruck **kPa** | ÷100 (z. B. 101,49) |
 | 51 | Puls | roh |
-| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter |
+| 52 | Kalorien kcal bisher | ÷1000; letzter Wert = Header-Kalorien. Läuft bei kurz aufeinanderfolgenden Fahrten teils weiter; Server rechnet je Fahrt Differenz letzter–erster Sample-Wert |
 | 71 | Akku % | roh |
 | 72 | Zeitstempel | wie Header-Start |
 | 73 | Kilometerstand in m | roh |
