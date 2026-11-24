@@ -8,6 +8,8 @@
 
 Read and analyse ride data from the DJI Avinox e-bike drive (e.g. Amflow PR) straight from the display's USB drive – no Avinox cloud, no credentials.
 
+**Website with manual:** [manuelw.de/avinox/en](https://www.manuelw.de/avinox/en/)
+
 ## It is that simple
 
 **Plug an ESP32 into the display's USB port, set up Wi-Fi once, done.** From then on every ride lands on your own server automatically.
