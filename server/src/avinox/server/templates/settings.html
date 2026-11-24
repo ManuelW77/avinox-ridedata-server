@@ -283,6 +283,24 @@
 </section>
 </div>
 
+<div class="block t-neutral" id="update" data-jump="{{ t('set.upd') }}">
+  <h2 class="section-title">{{ t('set.upd') }}</h2>
+<section class="card">
+  {% if not upd_known %}
+  <p class="muted small">{{ t('set.upd_dev') }}</p>
+  {% else %}
+  <p>{{ t('set.upd_installed') }} <strong>{{ app_version }}</strong>
+  {% if upd.enabled and upd.newer %} · {{ t('set.upd_new') }} <strong>{{ upd.latest }}</strong>
+    {% if upd.url %}· <a href="{{ upd.url }}" rel="noopener">{{ t('set.upd_notes') }}</a>{% endif %}
+  {% elif upd.enabled and upd.checked_at %} · <strong>{{ t('set.upd_current') }}</strong> <span class="muted small">({{ t('set.upd_checked') }} {{ upd.checked_at | localtime }})</span>
+  {% elif upd.enabled %} · <span class="muted">{{ t('set.upd_pending') }}</span>{% endif %}</p>
+  {% if upd.enabled and upd.newer %}<p class="small">{{ t('set.upd_how') }} <a href="{{ manual_url }}" rel="noopener">{{ t('set.upd_manual') }}</a></p>{% endif %}
+  {% endif %}
+  <div class="form-row" style="margin-top:0.5rem"><label for="upd-check" class="switch-row"><input type="checkbox" class="switch" id="upd-check" {% if upd.enabled %}checked{% endif %}{% if not fw_admin %} disabled{% endif %}> <span>{{ t('set.upd_toggle') }}</span></label>
+  <span id="upd-status" class="muted small" role="status"></span></div>
+</section>
+</div>
+
 <div class="block t-neutral" id="firmware" data-jump="{{ t('set.fw') }}">
   <h2 class="section-title">{{ t('set.fw') }}</h2>
   <p class="muted small block-desc">{{ t('set.fw_text_html') }}</p>

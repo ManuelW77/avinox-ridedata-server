@@ -28,6 +28,7 @@ from . import ai
 from . import mcp_server
 from . import healthlog
 from . import firmware_github
+from . import update_check
 from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next, valid_issuer
 from .geocode import Nominatim
 from .config import Settings, load_settings
@@ -222,9 +223,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         while not geo_stop.wait(delay):
             delay = 6 * 3600
             try:
-                if store.db.get_setting("firmware_auto_import", False):
-                    res = firmware_github.import_latest_release(store)
-                    log.info("Firmware-Autoimport: %s – %s", res["status"], res["message"])
+                want_fw = bool(store.db.get_setting("firmware_auto_import", False))
+                want_up = update_check.enabled(store) and APP_VERSION != "dev"
+                if want_fw or want_up:
+                    try:
+                        releases = firmware_github.fetch_releases()  # eine Abfrage für beides
+                    except firmware_github.GithubError as exc:
+                        log.info("GitHub-Abfrage: %s", exc)
+                        continue
+                    if want_up:
+                        update_check.run(store, releases)
+                    if want_fw:
+                        res = firmware_github.import_latest_release(store, releases)
+                        log.info("Firmware-Autoimport: %s – %s", res["status"], res["message"])
             except Exception:  # Worker darf nie sterben
                 log.exception("Firmware-Worker")
 
@@ -641,6 +652,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.db.set_setting("firmware_auto_import", payload["enabled"])
         return get_fw_auto_import()
 
+    @app.get("/api/v1/settings/update-check", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_update_check():
+        return {"enabled": update_check.enabled(store)}
+
+    @app.put("/api/v1/settings/update-check", dependencies=[Depends(firmware_admin_auth)], tags=["einstellungen"])
+    def put_update_check(payload: dict):
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(400, "enabled muss true oder false sein")
+        store.db.set_setting(update_check.KEY_ENABLED, payload["enabled"])
+        return get_update_check()
+
     # ------------------------------------------------------------ Fahrphysik
 
     def physics_state() -> dict:
@@ -965,6 +987,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ------------------------------------------------------------ Webseite
 
+    def _update_hint() -> dict | None:
+        st = update_check.state(store, APP_VERSION)
+        return {"latest": st["latest"], "url": st["url"]} if st["newer"] else None
+
     def page(request: Request, name: str, **ctx) -> HTMLResponse:
         lang = ctx.pop("lang", None) or lang_of(request)
         params = [(k, v) for k, v in request.query_params.multi_items() if k != "lang"]
@@ -976,7 +1002,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resp = templates.TemplateResponse(request, name, {
                 "map_style": settings.map_style, "current_user": user, "csrf_token": csrf,
                 "lang": lang, "lang_links": lang_links, "js_i18n": i18n.js_texts(lang),
-                "findings_unseen": None if ctx.get("bare") else store.format_findings_unseen(), **ctx,
+                "findings_unseen": None if ctx.get("bare") else store.format_findings_unseen(),
+                "update_hint": None if ctx.get("bare") else _update_hint(), **ctx,
             })
         finally:
             i18n.reset(token)
@@ -1062,6 +1089,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             token_hint="AVINOX_UPLOAD_TOKEN" if os.environ.get("AVINOX_UPLOAD_TOKEN") else str(settings.data_dir / "upload_token"),
             patterns=[p.pattern for p in PATTERNS.values()],
             firmware=store.list_firmware(),
+            upd=update_check.state(store, APP_VERSION), manual_url=update_check.MANUAL_URL.get(lang_of(request), update_check.MANUAL_URL["en"]), upd_known=APP_VERSION != "dev",
             upload_files=UPLOAD_FILES,
             not_uploaded=NOT_UPLOADED,
         )
