@@ -444,6 +444,15 @@
       if (!res.ok) { fwAuto.checked = !fwAuto.checked; ghStatus.textContent = tr("error_n", { n: res.status }); }
     });
   }
+  const updCheck = document.getElementById("upd-check");
+  if (updCheck) {
+    updCheck.addEventListener("change", async () => {
+      const res = await fetch("/api/v1/settings/update-check", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: updCheck.checked }) });
+      const st = document.getElementById("upd-status");
+      if (!res.ok) { updCheck.checked = !updCheck.checked; if (st) st.textContent = tr("error_n", { n: res.status }); }
+      else if (st) st.textContent = "";
+    });
+  }
   document.querySelectorAll("[data-fw-current],[data-fw-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const del = btn.hasAttribute("data-fw-delete");
