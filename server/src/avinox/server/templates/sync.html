@@ -15,6 +15,47 @@
   </div>
 </div>
 
+{% set unseen = findings_unseen or {} %}
+<div class="block t-neutral" id="sec-format" data-jump="{{ t('sync.fmt.title') }}">
+  <h2 class="section-title">{{ t('sync.fmt.title') }}</h2>
+  <section class="card">
+    <p class="muted small">{{ t('sync.fmt.text') }}</p>
+    {% if fmt_findings %}
+    <ul>
+      {% for f in fmt_findings %}
+      {% set p = f.detail.split('|') if f.detail else [] %}
+      <li>{% if not f.seen %}<span class="pill warn">{{ t('sync.findings.new') }}</span> {% endif %}
+        {%- if f.kind == 'header_version' %}{{ t('sync.fmt.header_version', v=f.key) }}
+        {%- elif f.kind == 'frame_type' %}{{ t('sync.fmt.frame_type', k=f.key, n=p[0] if p else '') }}
+        {%- elif f.kind == 'ride_field' %}{{ t('sync.fmt.ride_field', k=f.key, n=p[0] if p else '') }}
+        {%- elif f.kind == 'buried_event' %}{{ t('sync.fmt.buried_event', k=f.key) }}
+        {%- else %}{{ t('sync.fmt.buried_key', k=f.key) }}{% endif %}
+        <span class="muted small">· {{ t('sync.fmt.seen_count', n=f.count, t=f.last_seen | localtime('%d.%m.%Y %H:%M')) }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p>{{ t('sync.fmt.none') }}</p>{% endif %}
+  </section>
+</div>
+
+<div class="block t-neutral" id="sec-hms-findings" data-jump="{{ t('sync.hms.title') }}">
+  <h2 class="section-title">{{ t('sync.hms.title') }}</h2>
+  <section class="card">
+    <p class="muted small">{{ t('sync.hms.text') }}</p>
+    {% if hms_findings %}
+    <ul>
+      {% for f in hms_findings %}
+      {% set p = f.detail.split('|') %}
+      <li>{% if not f.seen %}<span class="pill warn">{{ t('sync.findings.new') }}</span> {% endif %}{{ t('sync.hms.item', c=p[0], h=p[1] if p|length > 1 else '', t=f.key.split('@', 1)[1][:16].replace('T', ' ') if '@' in f.key else '–') }}</li>
+      {% endfor %}
+    </ul>
+    <p><a href="/device#sec-hms">{{ t('sync.hms.link') }}</a></p>
+    {% else %}<p>{{ t('sync.fmt.none') }}</p>{% endif %}
+    {% if unseen.format.count or unseen.hms.count %}
+    <form method="post" action="/api/v1/sync/findings/seen"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn small">{{ t('sync.findings.mark') }}</button></form>
+    {% endif %}
+  </section>
+</div>
+
 {% if not snap.devices and not snap.events %}
 <section class="card empty">
   <p>{{ t('sync.empty') }}</p>

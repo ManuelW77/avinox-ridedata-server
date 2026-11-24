@@ -19,7 +19,7 @@ import threading
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from .. import battery
+from .. import battery, formatwatch
 from ..analysis import CUSTOM_MODE_MIN, analyze, assist_name
 from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
@@ -231,8 +231,40 @@ class Store:
             elif kind == "buried":
                 self._sessions = None
                 self._refresh_device_stats()
+            if kind in ("ride", "buried", "hms"):
+                try:
+                    self._record_findings(formatwatch.check(kind, path, data), path)
+                except Exception:  # der Wächter darf den Upload nie scheitern lassen
+                    log.exception("Format-Wächter fehlgeschlagen: %s", path)
             log.info("Datei angenommen: %s (%d Byte, %s)", path, len(data), kind)
             return {"file_id": file_id, "kind": kind, "new": True, "ride": ride}
+
+    # ------------------------------------------------------------ Format-Wächter
+
+    def _record_findings(self, findings, path: str) -> None:
+        now = _now()
+        for f in findings:
+            self.db.execute(
+                "INSERT INTO format_findings(kind, key, detail, file_path, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(kind, key) DO UPDATE SET count = count + 1, last_seen = excluded.last_seen",
+                (f.kind, f.key, f.detail, path, now, now),
+            )
+
+    def format_findings(self, limit: int = 200) -> list[dict]:
+        rows = self.db.query("SELECT * FROM format_findings ORDER BY last_seen DESC, id DESC LIMIT ?", (limit,))
+        return [dict(r) for r in rows]
+
+    def format_findings_unseen(self) -> dict:
+        """Ungesehene Funde je Gruppe: ``{"format": {"count", "max_id"}, "hms": {...}}``."""
+        out = {"format": {"count": 0, "max_id": 0}, "hms": {"count": 0, "max_id": 0}}
+        for r in self.db.query(
+            "SELECT kind = 'hms' AS is_hms, COUNT(*) AS n, MAX(id) AS m FROM format_findings WHERE seen = 0 GROUP BY is_hms"
+        ):
+            out["hms" if r["is_hms"] else "format"] = {"count": r["n"], "max_id": r["m"] or 0}
+        return out
+
+    def mark_findings_seen(self) -> None:
+        self.db.execute("UPDATE format_findings SET seen = 1 WHERE seen = 0")
 
     def _ride_id_for_file(self, file_id: int) -> int | None:
         row = self.db.one("SELECT id FROM rides WHERE file_id = ?", (file_id,))

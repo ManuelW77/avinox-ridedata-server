@@ -18,7 +18,7 @@
     svg.appendChild(path);
     return svg;
   }
-  window.avinoxToast = (text, kind) => {
+  window.avinoxToast = (text, kind, ms) => {
     kind = kind === "error" ? "error" : "ok";
     if (!el) {
       el = document.createElement("div");
@@ -36,7 +36,7 @@
     el.appendChild(span);
     void el.offsetWidth; // Übergang neu starten
     el.classList.add("show");
-    timer = setTimeout(() => { el.classList.remove("show"); }, 2500);
+    timer = setTimeout(() => { el.classList.remove("show"); }, ms || 2500);
   };
 
   // Einmaliger Hinweis nach Seitenneuladen (Sprache gespeichert)
@@ -44,6 +44,24 @@
     if (sessionStorage.getItem("avinox-toast") === "lang") {
       sessionStorage.removeItem("avinox-toast");
       window.avinoxToast(I.lang_saved || "OK");
+    }
+  } catch (e) {}
+
+  // Format-Funde: Zahlen aus <script id="findings">; einmal je neuer Fund-ID (localStorage)
+  try {
+    const F = JSON.parse(document.getElementById("findings").textContent) || {};
+    const groups = [["hms", "error", I.findings_hms], ["format", "ok", I.findings_format]];
+    for (const [g, kind, text] of groups) {
+      const x = F[g];
+      if (!x || !x.count || !text) continue;
+      const k = "avinox-findings-" + g;
+      let last = 0;
+      try { last = parseInt(localStorage.getItem(k) || "0", 10) || 0; } catch (e) {}
+      if (x.max_id > last) {
+        window.avinoxToast(text, kind, 6000);
+        try { localStorage.setItem(k, String(x.max_id)); } catch (e) {}
+        break; // ein Hinweis je Seitenaufruf, Fehler zuerst
+      }
     }
   } catch (e) {}
 

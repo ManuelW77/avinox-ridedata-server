@@ -160,6 +160,20 @@ CREATE TABLE IF NOT EXISTS geocache (
     name       TEXT,                -- NULL = Dienst kannte nichts
     fetched_at TEXT NOT NULL
 );
+
+-- Format-Wächter: Abweichungen vom bekannten Datenformat (kind != hms) und Rad-Meldungen (kind = hms)
+CREATE TABLE IF NOT EXISTS format_findings (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    detail     TEXT,
+    file_path  TEXT,
+    first_seen TEXT NOT NULL,
+    last_seen  TEXT NOT NULL,
+    count      INTEGER NOT NULL DEFAULT 1,
+    seen       INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(kind, key)
+);
 """
 
 
