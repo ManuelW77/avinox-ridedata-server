@@ -27,6 +27,7 @@ from . import i18n
 from . import ai
 from . import mcp_server
 from . import healthlog
+from . import firmware_github
 from .auth import COOKIE as AUTH_COOKIE, CSRF_COOKIE, MIN_PASSWORD, OIDC_COOKIE, USERNAME_RE, AuthStore, LoginThrottle, Oidc, OidcError, password_problem, safe_next, valid_issuer
 from .geocode import Nominatim
 from .config import Settings, load_settings
@@ -213,9 +214,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not geo_stop.is_set() and not ai_queue.wake.is_set():
                 ai_queue.wake.wait(600)
 
+    # Firmware von GitHub: erste Prüfung nach 5 min, dann alle 6 h, nur bei eingeschaltetem Schalter
+    fw_thread: threading.Thread | None = None
+
+    def fw_worker() -> None:
+        delay = 300
+        while not geo_stop.wait(delay):
+            delay = 6 * 3600
+            try:
+                if store.db.get_setting("firmware_auto_import", False):
+                    res = firmware_github.import_latest_release(store)
+                    log.info("Firmware-Autoimport: %s – %s", res["status"], res["message"])
+            except Exception:  # Worker darf nie sterben
+                log.exception("Firmware-Worker")
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        nonlocal geo_thread, hl_thread, ai_thread
+        nonlocal geo_thread, hl_thread, ai_thread, fw_thread
+        fw_thread = threading.Thread(target=fw_worker, name="firmware-github", daemon=True)
+        fw_thread.start()
         hl_thread = threading.Thread(target=hl_worker, name="healthlog", daemon=True)
         hl_thread.start()
         ai_thread = threading.Thread(target=ai_worker, name="ai", daemon=True)
@@ -242,6 +259,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ai_thread.join(timeout=15)
             if geo_thread:
                 geo_thread.join(timeout=15)
+            if fw_thread:
+                fw_thread.join(timeout=15)
             store.close()
 
     app = FastAPI(title="Avinox Ride Data", version=APP_VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
@@ -597,6 +616,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result == "current":
             raise HTTPException(409, "Die aktuelle Firmware kann nicht gelöscht werden")
         return {"ok": True}
+
+    @app.post("/api/v1/firmware/import-github", dependencies=[Depends(firmware_admin_auth)], tags=["firmware"])
+    def firmware_import_github():
+        """Neueste Firmware (Tag ``fw-v*``) aus den GitHub-Releases holen und aktivieren."""
+        return firmware_github.import_latest_release(store)
+
+    @app.get("/api/v1/settings/firmware-auto-import", dependencies=[Depends(read_auth)], tags=["einstellungen"])
+    def get_fw_auto_import():
+        return {"enabled": bool(store.db.get_setting("firmware_auto_import", False))}
+
+    @app.put("/api/v1/settings/firmware-auto-import", dependencies=[Depends(firmware_admin_auth)], tags=["einstellungen"])
+    def put_fw_auto_import(payload: dict):
+        if not isinstance(payload.get("enabled"), bool):
+            raise HTTPException(400, "enabled muss true oder false sein")
+        store.db.set_setting("firmware_auto_import", payload["enabled"])
+        return get_fw_auto_import()
 
     # ------------------------------------------------------------ Fahrphysik
 
