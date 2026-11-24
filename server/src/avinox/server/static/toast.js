@@ -65,6 +65,19 @@
     }
   } catch (e) {}
 
+  // Update-Hinweis: einmal je neuer Version (localStorage), unabhängig von den Funden
+  try {
+    const U = JSON.parse(document.getElementById("update").textContent) || {};
+    if (U.latest && I.update_new && !document.querySelector(".toast.show")) {
+      let seen = "";
+      try { seen = localStorage.getItem("avinox-update-seen") || ""; } catch (e) {}
+      if (seen !== U.latest) {
+        window.avinoxToast(I.update_new.replace("{v}", U.latest), "ok", 6000);
+        try { localStorage.setItem("avinox-update-seen", U.latest); } catch (e) {}
+      }
+    }
+  } catch (e) {}
+
   // ---- Nach-oben-Knopf
   const btn = document.getElementById("to-top");
   if (btn) {

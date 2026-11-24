@@ -40,13 +40,16 @@ def _host_allowed(url: str) -> bool:
     return parsed.scheme == "https" and (host in ALLOWED_HOSTS or host.endswith(".githubusercontent.com"))
 
 
-def _version_key(tag: str) -> tuple[int, ...]:
-    m = TAG_RE.match(tag)
+SERVER_TAG_RE = re.compile(r"^server-v(\d+(?:\.\d+)*)$")
+
+
+def _version_key(tag: str, tag_re: re.Pattern = TAG_RE) -> tuple[int, ...]:
+    m = tag_re.match(tag)
     return tuple(int(p) for p in m.group(1).split(".")) if m else ()
 
 
-def fetch_latest_fw_release(client: httpx2.Client | None = None) -> dict | None:
-    """Höchstes veröffentlichtes ``fw-v*``-Release (ohne Entwürfe/Vorabversionen) oder None."""
+def fetch_releases(client: httpx2.Client | None = None) -> list:
+    """Release-Liste des Repos (eine einzige API-Abfrage für Firmware und Server)."""
     own = client is None
     client = client or _client()
     try:
@@ -61,14 +64,29 @@ def fetch_latest_fw_release(client: httpx2.Client | None = None) -> dict | None:
             client.close()
     if not isinstance(releases, list):
         raise GithubError("Unerwartete Antwort von GitHub.")
+    return releases
+
+
+def latest_release(releases: list, tag_re: re.Pattern) -> dict | None:
+    """Höchstes veröffentlichtes Release mit passendem Tag (ohne Entwürfe/Vorabversionen) oder None."""
     best = None
     for rel in releases:
         if not isinstance(rel, dict) or rel.get("draft") or rel.get("prerelease"):
             continue
         tag = str(rel.get("tag_name", ""))
-        if _version_key(tag) and (best is None or _version_key(tag) > _version_key(str(best["tag_name"]))):
+        if _version_key(tag, tag_re) and (best is None or _version_key(tag, tag_re) > _version_key(str(best["tag_name"]), tag_re)):
             best = rel
     return best
+
+
+def fetch_latest_fw_release(client: httpx2.Client | None = None, releases: list | None = None) -> dict | None:
+    """Höchstes veröffentlichtes ``fw-v*``-Release oder None."""
+    return latest_release(releases if releases is not None else fetch_releases(client), TAG_RE)
+
+
+def fetch_latest_server_release(client: httpx2.Client | None = None, releases: list | None = None) -> dict | None:
+    """Höchstes veröffentlichtes ``server-v*``-Release oder None."""
+    return latest_release(releases if releases is not None else fetch_releases(client), SERVER_TAG_RE)
 
 
 def _download(client: httpx2.Client, url: str) -> bytes:
@@ -93,12 +111,12 @@ def _download(client: httpx2.Client, url: str) -> bytes:
     raise GithubError("Zu viele Weiterleitungen.")
 
 
-def import_latest_release(store) -> dict:
+def import_latest_release(store, releases: list | None = None) -> dict:
     """Lädt die neueste Firmware und setzt sie als aktuell; wirft nie, liefert immer ein Ergebnis."""
     result = {"release": None, "version": None, "status": "failed", "message": ""}
     try:
         with _client() as client:
-            rel = fetch_latest_fw_release(client)
+            rel = fetch_latest_fw_release(client, releases)
             if rel is None:
                 return {**result, "status": "none", "message": "Auf GitHub gibt es noch keine Firmware-Version."}
             result["release"] = str(rel["tag_name"])

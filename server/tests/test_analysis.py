@@ -80,3 +80,56 @@ def test_share_gradient_cadence():
     assert bg["3–6"] == {"seconds": 10, "avg_rider_power_w": 150, "avg_motor_power_w": 50, "avg_speed_kmh": 18.0}
     assert a["gears"]["per_gear"]["5"]["avg_cadence_rpm"] == 73
     json.dumps(a)
+
+
+def test_motor_load_per_gear():
+    def g(t, speed=18.0, motor=400, cad=40, gear=9):
+        d = s(t, speed=speed, motor=motor, gear=gear)
+        d[9] = int(cad * 100)
+        return d
+    samples = [g(t, motor=100, cad=80) for t in range(5)]        # nicht hoch
+    samples += [g(5 + t) for t in range(4)]                      # 4 s schwer: zählt nicht
+    samples += [g(9 + t, motor=100, cad=80) for t in range(2)]
+    samples += [g(11 + t) for t in range(6)]                     # 6 s schwer: zählt
+    samples += [g(17 + t, speed=0.0, motor=0, cad=0) for t in range(3)]  # Halt
+    samples += [g(20 + t, gear=7, cad=80) for t in range(3)]     # Anfahren in Gang 7, hohe Last, nicht schwer
+    a = analyze(parse_ride(ride(samples, start=T0, end=T0 + 25)))
+    pg = a["gears"]["per_gear"]
+    assert pg["9"]["high_motor_seconds"] == 10
+    assert pg["9"]["grinding_seconds"] == 6
+    assert pg["7"]["high_motor_seconds"] == 3 and pg["7"]["grinding_seconds"] == 0
+    assert a["gears"]["starts_per_gear"] == {"7": 1}
+
+
+def test_load_hints():
+    def g(t, gear, cad=40, motor=400, speed=18.0):
+        d = s(t, speed=speed, motor=motor, gear=gear)
+        d[9] = int(cad * 100)
+        return d
+    # Gang 2 (leichtester) und Gang 9: je 70 s schwer; Gang 9 dazu 3 Anfahrten
+    samples = [g(t, 2) for t in range(70)] + [g(70 + t, 9) for t in range(70)]
+    t0 = 140
+    for k in range(3):
+        samples += [g(t0, 9, speed=0.0, motor=0, cad=0), g(t0 + 1, 9, cad=80, motor=0)]
+        t0 += 2
+    a = analyze(parse_ride(ride(samples, start=T0, end=T0 + t0)))
+    assert a["gears"]["load_hints"] == {"grinding": [9], "heavy_starts": [9]}
+    # nur ein Gang genutzt: nichts melden
+    a = analyze(parse_ride(ride([g(t, 3) for t in range(70)], start=T0, end=T0 + 70)))
+    assert a["gears"]["load_hints"] == {"grinding": [], "heavy_starts": []}
+
+
+def test_load_hints_ignore_short_gears():
+    def g(t, gear, speed=18.0, cad=40):
+        d = s(t, speed=speed, motor=400, gear=gear)
+        d[9] = int(cad * 100)
+        return d
+    samples = [g(t, 2) for t in range(40)] + [g(40 + t, 4) for t in range(70)]
+    t0 = 110
+    for k in range(3):  # 3 Anfahrten in Gang 6, aber nur ca. 6 s Fahrzeit
+        samples += [g(t0, 6, speed=0.0), g(t0 + 1, 6, cad=80), g(t0 + 2, 6, cad=80)]
+        t0 += 3
+    samples += [g(t0 + k, 8, cad=80) for k in range(2)]
+    a = analyze(parse_ride(ride(samples, start=T0, end=T0 + t0 + 2)))
+    assert a["gears"]["starts_per_gear"]["6"] == 3
+    assert a["gears"]["load_hints"] == {"grinding": [4], "heavy_starts": []}

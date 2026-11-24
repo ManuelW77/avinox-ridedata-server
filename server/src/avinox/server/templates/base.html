@@ -69,6 +69,7 @@
   })();
   </script>
   {% if findings_unseen %}<script type="application/json" id="findings">{{ findings_unseen | tojson }}</script>{% endif %}
+  {% if update_hint %}<script type="application/json" id="update">{{ update_hint | tojson }}</script>{% endif %}
   <script src="{{ url_for('static', path='toast.js').path }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>

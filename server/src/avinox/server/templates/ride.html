@@ -123,6 +123,17 @@
     {{ bars(mv_gears if mv_gears else a.gears.seconds_per_gear, '', 's', 0, {}) }}
   </section>
   {% if cad_gear %}<section class="card"><h2>{{ t('ride.d.cad_gear') }} <span class="muted small">{{ t('ride.d.cad_gear_sub') }}</span></h2>{{ bars(cad_gear, 'rider', t('ride.d.rpm'), 0, {}) }}</section>{% endif %}
+{% set lh = a.gears.load_hints or {} %}{% set starts = a.gears.starts_per_gear or {} %}
+{% set lg_rows = [] %}{% for g, m in (a.gears.per_gear or {}).items() %}{% if (m.moving_seconds or 0) >= (a.gears.min_moving_s or 30) %}{% set _ = lg_rows.append((g, m)) %}{% endif %}{% endfor %}
+{% macro rng(l) %}{{ l | min }}{% if l | min != l | max %}–{{ l | max }}{% endif %}{% endmacro %}
+{% if lg_rows %}<section class="card"><h2>{{ t('ride.d.load_gear') }} <span class="muted small">{{ t('ride.d.load_gear_sub') }}</span></h2>
+<table class="plain small" style="width:100%;white-space:nowrap">
+<tr><th>{{ t('ride.d.load_gear_th') }}</th><th></th><th class="n">{{ t('ride.d.load_assist_th') }}</th><th class="n" style="padding-left:0.8rem">{{ t('ride.d.load_starts') }}</th></tr>
+{% for g, m in lg_rows %}{% set pct = 100 * (m.high_motor_seconds or 0) / m.moving_seconds %}<tr><td>{{ g }}</td><td style="width:100%"><span class="bar" style="grid-template-columns:1fr 3rem"><span class="track"><span class="fill motor" style="width: {{ pct }}%; min-width: 0"></span></span><span class="val">{{ pct | num(0) }} %</span></span></td><td class="n">{{ m.avg_motor_assist_power_w | num }} W</td><td class="n">{{ starts.get(g, '') }}</td></tr>
+{% endfor %}</table>
+{% if lh.grinding %}<p class="small" style="margin-top:0.6rem">{{ t('ride.d.load_hint', r=rng(lh.grinding) | trim) }}</p>{% endif %}
+{% if lh.heavy_starts %}<p class="small" style="margin-top:0.4rem">{{ t('ride.d.load_hint_starts', r=rng(lh.heavy_starts) | trim) }}</p>{% endif %}
+</section>{% endif %}
 <section class="card ai-card ai-drive" data-ai="drive" hidden><div class="ai-body"></div></section>
 </div>
 </div>

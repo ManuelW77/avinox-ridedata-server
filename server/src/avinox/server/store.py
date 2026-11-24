@@ -34,7 +34,7 @@ from .db import Database
 
 log = logging.getLogger("avinox.store")
 
-PARSER_VERSION = 6
+PARSER_VERSION = 7
 """Erhöhen, wenn sich Parser oder Auswertung ändern – dann wird alles neu berechnet."""
 
 _SEG = r"[A-Za-z0-9_-]{1,64}"
