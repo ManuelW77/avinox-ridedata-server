@@ -4,6 +4,9 @@ Aufbau wie die Fahrtdateien, nur kürzer: Magic ``0xA5A5A5A5``, uint32 Version,
 Seriennummer (Offset 8, 18 Byte), 4 Byte unbekannt, danach Frames
 ``uint16 typ (0x01EB) | uint16 länge | Protobuf | 2 Byte Prüfsumme``.
 Protobuf: Feld 1 = Meldungscode, Feld 4 = Unix-Zeit. Bedeutung der Codes unbekannt.
+
+Code 43947 (``0xABAB``) schreibt das Display bei jedem Anschluss an einen Rechner
+neu. Er ist ein Marker und keine Meldung, deshalb wird er standardmäßig verworfen.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from .ride_rec import MAGIC
 
 HEADER_SIZE = 32
 FRAME_TYPE_HMS = 0x01EB
+IGNORED_CODES = frozenset({0xABAB})
 
 
 @dataclass(slots=True)
@@ -27,7 +31,7 @@ class HmsEntry:
     extra: dict[int, int | bytes] = field(default_factory=dict)
 
 
-def parse_hms(data: bytes) -> list[HmsEntry]:
+def parse_hms(data: bytes, *, include_ignored: bool = False) -> list[HmsEntry]:
     if len(data) < HEADER_SIZE or struct.unpack_from("<I", data, 0)[0] != MAGIC:
         return []
     entries: list[HmsEntry] = []
@@ -43,6 +47,9 @@ def parse_hms(data: bytes) -> list[HmsEntry]:
             except ProtobufError:
                 f = {}
             ts = f.get(4)
+            if not include_ignored and f.get(1) in IGNORED_CODES:
+                pos = end + 2
+                continue
             entries.append(
                 HmsEntry(
                     code=f.get(1) if isinstance(f.get(1), int) else None,
