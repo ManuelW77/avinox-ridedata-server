@@ -13,12 +13,16 @@ void ota_boot(bool configured);
  * Bestätigt eine frisch installierte Firmware, wenn WLAN verbunden ist. */
 void ota_server_ok(void);
 
-/* Task: Bestätigungsfrist, einmaliger Rollback-Bericht, Prüfung alle CONFIG_AVX_OTA_CHECK_S. */
+/* Task: Bestätigungsfrist, einmaliger Rollback-Bericht, Update bei Hinweis des Servers. */
 void ota_start(const app_config_t *cfg);
+
+/* Der Server hat in einer Antwort eine andere Firmware gemeldet (firmware_update). */
+void ota_request_update(void);
 
 /* Sync-Schleife: um sync_run() klammern, damit keine Prüfung während eines Uploads läuft. */
 void ota_sync_begin(void);
 void ota_sync_end(void);
 
-/* Nach einem abgeschlossenen Sync prüfen (aus der Sync-Schleife, nach ota_sync_end). */
-void ota_check_now(void);
+/* Vor jedem Auslesen (zwischen ota_sync_begin und sync_run): Hallo an den Server; meldet er eine neue
+   Version, wird sie geladen und neu gestartet. false = Server nicht erreichbar: dann nicht auslesen. */
+bool ota_check_before_sync(void);
