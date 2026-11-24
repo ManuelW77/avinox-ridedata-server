@@ -665,7 +665,6 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .bests > .ai-card { margin-top: 1rem; }
 @media (min-width: 901px) {
   .cols-drive:has(> .ai-card:not([hidden])) > :first-child { grid-row: span 2; }
-  .cols-drive > .ai-card { grid-column: 2 / -1; }
 }
 @media (min-width: 1000px) {
   .cols-power:has(> .ai-card:not([hidden])) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -694,8 +693,8 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   .best-grid > .ai-trend { grid-column: var(--ai-start, 3) / -1; }
 }
 @media (min-width: 900px) and (max-width: 1199px) {
-  .best-grid:has(> .ai-trend:not([hidden])) { grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)) minmax(0, 2fr); }
-  .best-grid > .ai-trend { grid-column: auto; }
+  .best-grid:not([data-many]):has(> .ai-trend:not([hidden])) { grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)) minmax(0, 2fr); }
+  .best-grid:not([data-many]) > .ai-trend { grid-column: auto; }
 }
 /* Einstellungen */
 .ai-form .row-inline { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
