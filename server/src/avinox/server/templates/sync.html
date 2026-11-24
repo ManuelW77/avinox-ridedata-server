@@ -16,10 +16,10 @@
 </div>
 
 {% set unseen = findings_unseen or {} %}
-<div class="block t-neutral" id="sec-format" data-jump="{{ t('sync.fmt.title') }}">
+<div class="block t-neutral block-first" id="sec-format" data-jump="{{ t('sync.fmt.title') }}">
   <h2 class="section-title">{{ t('sync.fmt.title') }}</h2>
+  <p class="muted small block-desc">{{ t('sync.fmt.text') }}</p>
   <section class="card">
-    <p class="muted small">{{ t('sync.fmt.text') }}</p>
     {% if fmt_findings %}
     <ul>
       {% for f in fmt_findings %}
@@ -39,17 +39,17 @@
 
 <div class="block t-neutral" id="sec-hms-findings" data-jump="{{ t('sync.hms.title') }}">
   <h2 class="section-title">{{ t('sync.hms.title') }}</h2>
+  <p class="muted small block-desc">{{ t('sync.hms.text') }}</p>
   <section class="card">
-    <p class="muted small">{{ t('sync.hms.text') }}</p>
     {% if hms_findings %}
     <ul>
       {% for f in hms_findings %}
       {% set p = f.detail.split('|') %}
-      <li>{% if not f.seen %}<span class="pill warn">{{ t('sync.findings.new') }}</span> {% endif %}{{ t('sync.hms.item', c=p[0], h=p[1] if p|length > 1 else '', t=f.key.split('@', 1)[1][:16].replace('T', ' ') if '@' in f.key else '–') }}</li>
+      <li>{% if not f.seen %}<span class="pill warn">{{ t('sync.findings.new') }}</span> {% endif %}{{ t('sync.hms.item', c=p[0], h=p[1] if p|length > 1 else '', t=(f.key.split('@', 1)[1] | localtime('%d.%m.%Y %H:%M')) if '@' in f.key and f.key.split('@', 1)[1] != '?' else '–') }}</li>
       {% endfor %}
     </ul>
     <p><a href="/device#sec-hms">{{ t('sync.hms.link') }}</a></p>
-    {% else %}<p>{{ t('sync.fmt.none') }}</p>{% endif %}
+    {% else %}<p>{{ t('sync.hms.none') }}</p>{% endif %}
     {% if unseen.format.count or unseen.hms.count %}
     <form method="post" action="/api/v1/sync/findings/seen"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn small">{{ t('sync.findings.mark') }}</button></form>
     {% endif %}
@@ -62,7 +62,7 @@
   <p><a href="/settings">{{ t('sync.setup') }}</a></p>
 </section>
 {% else %}
-<div class="block t-motor block-first" id="sec-devices" data-jump="{{ t('sync.sec.devices') }}">
+<div class="block t-motor" id="sec-devices" data-jump="{{ t('sync.sec.devices') }}">
   <h2 class="section-title">{{ t('sync.sec.devices') }}</h2>
 <div class="grid cols-2">
   {% for d in snap.devices %}
