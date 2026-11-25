@@ -706,11 +706,17 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
   .cols-power:has(> .ai-card:not([hidden])) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .cols-power.has-hr > .ai-card { grid-column: span 3; }
 }
-/* KI-Karte der Bestwerte: volle Breite unter den Gruppen (seitlich daneben dehnte langer Text die Zeilen) */
-.bests > .ai-bests { margin-left: calc(110px + 1rem); }
-@media (max-width: 640px) { .bests > .ai-bests { margin-left: 0; } }
-/* KI-Trend der Zeiträume: eigene Zeile unter den Kacheln, sonst dehnt langer Text die Kacheln */
+/* KI-Karte der Bestwerte: als Zusammenfassung direkt unter dem Tafelkopf, volle Breite
+   (seitlich als schmale Spalte dehnte langer Text die Kachelzeilen) */
+.bests:has(> .ai-bests:not([hidden])) { display: flex; flex-direction: column; }
+.bests > .section-title { order: -2; }
+.bests > .ai-bests { order: -1; margin: 0 0 1rem; }
+/* KI-Trend der Zeiträume: füllt den freien Platz neben 1–3 Kacheln, ab 4 Kacheln eigene Zeile darunter */
 .best-grid > .ai-trend { grid-column: 1 / -1; }
+@media (min-width: 1200px) {
+  .best-grid:not([data-many]):has(> .ai-trend:not([hidden])) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .best-grid:not([data-many]) > .ai-trend { grid-column: var(--ai-start, 3) / -1; }
+}
 /* Einstellungen */
 .ai-form .row-inline { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 
