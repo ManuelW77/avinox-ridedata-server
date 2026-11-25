@@ -35,7 +35,7 @@ from .config import Settings, load_settings
 from .firmware import MAX_FIRMWARE_BYTES
 from .dashboard import PERIODS, day_text, emphasize
 from .sync_log import DEVICE_ID, SyncLog
-from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, PhysicsSetupError, Store, UploadError
+from .store import NOT_UPLOADED, PATTERNS, normalize_path, UPLOAD_FILES, MergeError, PhysicsSetupError, Store, UploadError
 
 log = logging.getLogger("avinox.server")
 HERE = Path(__file__).parent
@@ -724,6 +724,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with localized(request):
             ride = ride_or_404(ride_pk)
         return {"name": ride["name"], "name_custom": ride["name_custom"]}
+
+    @app.post("/api/v1/rides/merge", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def merge_rides(request: Request, payload: dict):
+        """Führt mindestens zwei Fahrten zu einer zusammen (``{"ids": [..]}``). Alle brauchen eine Startzeit."""
+        ids = payload.get("ids")
+        if not isinstance(ids, list) or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+            raise HTTPException(400, "ids muss eine Liste von Fahrt-IDs sein")
+        try:
+            pk = store.merge_rides(ids)
+        except MergeError as exc:
+            code = {"not_found": 404, "too_few": 400, "no_start": 409, "unreadable": 422}.get(exc.code, 400)
+            raise HTTPException(code, {"error": exc.code, "message": f"Zusammenführen nicht möglich ({exc.code})"}) from exc
+        return {"ok": True, "id": pk}
+
+    @app.post("/api/v1/rides/{ride_pk}/split", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def split_ride(ride_pk: int):
+        """Trennt eine zusammengeführte Fahrt wieder in die Einzelfahrten."""
+        ids = store.split_ride(ride_pk)
+        if ids is None:
+            raise HTTPException(404, "Keine zusammengeführte Fahrt")
+        return {"ok": True, "ids": ids}
 
     @app.delete("/api/v1/rides/{ride_pk}", dependencies=[Depends(read_auth)], tags=["fahrten"])
     def delete_ride(ride_pk: int):

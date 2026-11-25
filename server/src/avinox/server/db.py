@@ -93,6 +93,14 @@ CREATE TABLE IF NOT EXISTS deleted_rides (
     deleted_at  TEXT NOT NULL
 );
 
+-- Zusammengeführte Fahrten: die Teile stehen NICHT mehr in rides (nur in files), die Gruppe als eine Zeile mit
+-- path = group_path ("merge:<Pfad der ersten Teilfahrt>"). Überlebt Neuberechnung; Trennen löscht die Zeile.
+CREATE TABLE IF NOT EXISTS ride_merges (
+    group_path        TEXT PRIMARY KEY,
+    member_paths_json TEXT NOT NULL,   -- ["ride_rec/…", …] zeitlich sortiert
+    created_at        TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ride_meta (
     path        TEXT PRIMARY KEY,   -- = rides.path (bleibt bei Neuberechnung stabil)
     custom_name TEXT,               -- von Hand gesetzt, NULL = automatisch
