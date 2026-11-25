@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% from "_macros.html" import ico with context %}
 {% block title %}{{ t('set.title') }} – Avinox Ride Data{% endblock %}
 {% block main %}
 <div class="lead"><div><h1>{{ t('set.title') }}</h1></div></div>
 
 <div class="block t-neutral block-first" id="language" data-jump="{{ t('set.lang') }}">
-  <h2 class="section-title">{{ t('set.lang') }}</h2>
+  <h2 class="section-title">{{ ico('globe') }}{{ t('set.lang') }}</h2>
   <p class="muted small block-desc">{{ t('set.lang_text') }}</p>
 <section class="card">
   <form method="get" action="/settings" class="actions">
@@ -18,7 +19,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-auth" data-jump="{{ t('set.auth') }}">
-  <h2 class="section-title">{{ t('set.auth') }}</h2>
+  <h2 class="section-title">{{ ico('lock') }}{{ t('set.auth') }}</h2>
   <p class="muted small block-desc">{{ t('set.auth_text') }}</p>
 <section class="card stack">
   {% if current_user %}
@@ -116,7 +117,7 @@
 </div>
 
 <div class="block t-motor" id="sec-modes" data-jump="{{ t('set.modes') }}">
-  <h2 class="section-title">{{ t('set.modes') }}</h2>
+  <h2 class="section-title">{{ ico('cog') }}{{ t('set.modes') }}</h2>
   <p class="muted small block-desc">{{ t('set.modes_text_html') }}</p>
 <section class="card">
   {% if levels %}
@@ -136,7 +137,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-geo" data-jump="{{ t('set.geo') }}">
-  <h2 class="section-title">{{ t('set.geo') }}</h2>
+  <h2 class="section-title">{{ ico('map') }}{{ t('set.geo') }}</h2>
   <p class="muted small block-desc">{{ t('set.geo_text') }}</p>
 <section class="card">
   <div class="form-row">
@@ -148,7 +149,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-phys" data-jump="{{ t('set.phys') }}">
-  <h2 class="section-title">{{ t('set.phys') }}</h2>
+  <h2 class="section-title">{{ ico('gauge') }}{{ t('set.phys') }}</h2>
   <p class="muted small block-desc">{{ t('set.phys_text') }}</p>
 <section class="card">
   <form id="phys-form" class="stack" autocomplete="off">
@@ -167,7 +168,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-hl" data-jump="{{ t('set.hl') }}">
-  <h2 class="section-title">{{ t('set.hl') }}</h2>
+  <h2 class="section-title">{{ ico('heart') }}{{ t('set.hl') }}</h2>
   <p class="muted small block-desc">{{ t('set.hl_text') }}</p>
 <section class="card stack">
   <div class="form-row">
@@ -194,7 +195,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-ai" data-jump="{{ t('set.ai') }}">
-  <h2 class="section-title">{{ t('set.ai') }}</h2>
+  <h2 class="section-title">{{ ico('sparkle') }}{{ t('set.ai') }}</h2>
   <p class="muted small block-desc">{{ t('set.ai_text') }}</p>
 <section class="card stack ai-form">
   <div class="form-row">
@@ -224,7 +225,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-mcp" data-jump="{{ t('set.mcp') }}">
-  <h2 class="section-title">{{ t('set.mcp') }}</h2>
+  <h2 class="section-title">{{ ico('plug') }}{{ t('set.mcp') }}</h2>
   <p class="muted small block-desc">{{ t('set.mcp_text') }}</p>
 <section class="card stack ai-form">
   <div class="form-row">
@@ -253,7 +254,7 @@
 </div>
 
 <div class="block t-neutral" id="upload" data-jump="{{ t('set.upload') }}">
-  <h2 class="section-title">{{ t('set.upload') }}</h2>
+  <h2 class="section-title">{{ ico('upload') }}{{ t('set.upload') }}</h2>
   <p class="muted small block-desc">{{ t('set.upload_text_html') }}</p>
 <section class="card">
   <p class="small"><strong>{{ t('set.accepted') }}</strong></p>
@@ -284,7 +285,7 @@
 </div>
 
 <div class="block t-neutral" id="update" data-jump="{{ t('set.upd') }}">
-  <h2 class="section-title">{{ t('set.upd') }}</h2>
+  <h2 class="section-title">{{ ico('refresh') }}{{ t('set.upd') }}</h2>
 <section class="card">
   {% if not upd_known %}
   <p class="muted small">{{ t('set.upd_dev') }}</p>
@@ -302,7 +303,7 @@
 </div>
 
 <div class="block t-neutral" id="firmware" data-jump="{{ t('set.fw') }}">
-  <h2 class="section-title">{{ t('set.fw') }}</h2>
+  <h2 class="section-title">{{ ico('chip') }}{{ t('set.fw') }}</h2>
   <p class="muted small block-desc">{{ t('set.fw_text_html') }}</p>
 <section class="card">
   {% set cur = firmware | selectattr('is_current') | list %}
@@ -349,7 +350,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-api" data-jump="{{ t('set.api') }}">
-  <h2 class="section-title">{{ t('set.api') }}</h2>
+  <h2 class="section-title">{{ ico('code') }}{{ t('set.api') }}</h2>
 <section class="card">
   <div class="form-row" style="margin-bottom:0.75rem;align-items:start">
     <label>{{ t('set.server_url') }}</label>

@@ -1,3 +1,34 @@
+{# Tafelkopf-Icon: 28-px-Quadrat mit 16-px-Strichsymbol (neutral) #}
+{% set ICONS = {
+  'calendar': '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  'chart': '<path d="M5 20v-8M12 20V5M19 20v-5"/>',
+  'trophy': '<path d="M8 4h8v5a4 4 0 0 1-8 0V4zM8 6H4.5v1.5A3.5 3.5 0 0 0 8 11M16 6h3.5v1.5A3.5 3.5 0 0 1 16 11M12 13v4M8.5 20h7M10 17h4"/>',
+  'list': '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  'sparkle': '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+  'map': '<path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6zM9 4v14M15 6v14"/>',
+  'trend': '<path d="M3 17l5-6 4 3 5-8 4 5"/>',
+  'cog': '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  'bolt': '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>',
+  'mountain': '<path d="M3 19 9.5 7l4 7 2-3L21 19z"/>',
+  'battery': '<rect x="3" y="7.5" width="16" height="9" rx="2"/><path d="M21.5 10.5v3M7 10.5v3M11 10.5v3"/>',
+  'cloud': '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/>',
+  'lock': '<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  'globe': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  'upload': '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  'info': '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  'alert': '<path d="M12 4 2.5 20h19zM12 10v4M12 17h.01"/>',
+  'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  'gauge': '<path d="M4 17a8 8 0 1 1 16 0M12 17l4-5"/>',
+  'heart': '<path d="M12 20s-7.5-4.6-9-9.3C2 7.5 4 4.5 7 4.5c2 0 3.5 1 5 3 1.5-2 3-3 5-3 3 0 5 3 4 6.2C19.5 15.4 12 20 12 20z"/>',
+  'plug': '<path d="M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 0 1-11 0zM12 16.5V21"/>',
+  'chip': '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  'code': '<path d="M8 8 3 12l5 4M16 8l5 4-5 4M14 5l-4 14"/>',
+  'refresh': '<path d="M20 11a8 8 0 0 0-14.5-3.5L4 9M4 4v5h5M4 13a8 8 0 0 0 14.5 3.5L20 15M20 20v-5h-5"/>'
+} %}
+{% macro ico(name) -%}
+<span class="ph-ico" aria-hidden="true"><svg viewBox="0 0 24 24">{{ ICONS[name] | safe }}</svg></span>
+{%- endmacro %}
+
 {% macro figure(value, label, unit='', digits=0, cls='') -%}
 <div class="figure {{ cls }}"><div class="v">{{ value | num(digits) }}{% if unit %}<small>{{ unit }}</small>{% endif %}</div><div class="k">{{ label }}</div></div>
 {%- endmacro %}
