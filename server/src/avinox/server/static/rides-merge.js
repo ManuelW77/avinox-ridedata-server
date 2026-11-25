@@ -45,8 +45,12 @@
   const boxes = () => Array.from(list.querySelectorAll("input.merge-sel"));
   const picked = () => boxes().filter((c) => c.checked);
 
+  const del = document.getElementById("merge-delete");
+  const dlg = document.getElementById("rides-delete-dialog");
+
   function refresh() {
     const n = picked().length;
+    if (del) del.disabled = n < 1;
     count.textContent = n >= 2 ? tr("merge.count", { n }) : (n ? tr("merge.count", { n }) + " · " : "") + tr("merge.count_hint");
     go.disabled = n < 2;
   }
@@ -64,4 +68,33 @@
     const ids = picked().map((c) => Number(c.closest("li").dataset.id));
     if (ids.length >= 2) merge(ids, [go, cancel]);
   });
+
+  // Löschen: Rückfrage im Dialog, dann alle ausgewählten Fahrten entfernen
+  if (del && dlg && typeof dlg.showModal === "function") {
+    dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close("cancel"); });
+    del.addEventListener("click", () => {
+      const sel = picked();
+      if (!sel.length) return;
+      const merged = sel.some((c) => Number(c.closest("li").dataset.merged) > 0);
+      document.getElementById("rides-delete-text").textContent =
+        tr("rides.delete.text", { n: sel.length }) + (merged ? " " + tr("rides.delete.merged") : "");
+      dlg.showModal();
+    });
+    dlg.addEventListener("close", async () => {
+      if (dlg.returnValue !== "delete") return;
+      const ids = picked().map((c) => Number(c.closest("li").dataset.id));
+      [go, del, cancel].forEach((b) => { b.disabled = true; });
+      try {
+        const res = await fetch("/api/v1/rides/delete", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error(res.status);
+        window.location.reload();
+      } catch (e) {
+        cancel.disabled = false;
+        refresh();
+        toast(tr("rides.delete.failed"));
+      }
+    });
+  }
 })();

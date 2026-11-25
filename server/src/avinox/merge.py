@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import fields, replace
 from datetime import datetime
 
+from .buried import RideStats
 from .ride_rec import HeaderStats, Ride
 from .summary import calories_offset, ride_calories
 
@@ -74,3 +75,61 @@ def suggest_pairs(items: list[dict]) -> dict[int, int]:
         if -60 <= gap < GAP_SUGGEST_S:
             out[cur["id"]] = prev["id"]
     return out
+
+
+def _sum_opt(vals):
+    vals = [v for v in vals if v is not None]
+    return sum(vals) if vals else None
+
+
+def _weighted(parts: list[RideStats], name: str):
+    pairs = [(getattr(p, name), p.duration_s) for p in parts if getattr(p, name) is not None]
+    total = sum(w for _, w in pairs)
+    if not pairs:
+        return None
+    if total <= 0:
+        return sum(v for v, _ in pairs) / len(pairs)
+    return sum(v * w for v, w in pairs) / total
+
+
+def _max_opt(parts: list[RideStats], name: str):
+    vals = [getattr(p, name) for p in parts if getattr(p, name) is not None]
+    return max(vals) if vals else None
+
+
+def _sum_dicts(dicts: list[dict]) -> dict:
+    out: dict = {}
+    for d in dicts:
+        for k, v in d.items():
+            out[k] = out.get(k, 0) + v
+    return out
+
+
+def combine_device_stats(parts: list[RideStats]) -> RideStats:
+    """Display-Statistik mehrerer Teilfahrten (zeitlich sortiert) zu einer zusammenfassen."""
+    if not parts:
+        raise ValueError("keine Statistik")
+    duration = sum(p.duration_s for p in parts)
+    distance = sum(p.distance_km for p in parts)
+    return RideStats(
+        end_time=parts[-1].end_time,
+        duration_s=duration,
+        distance_km=distance,
+        avg_speed_kmh=distance / duration * 3600 if duration else 0.0,
+        elev_gain_m=sum(p.elev_gain_m for p in parts),
+        elev_start_m=parts[0].elev_start_m,
+        battery_used_pct=_sum_opt(p.battery_used_pct for p in parts),
+        avg_cadence_rpm=_weighted(parts, "avg_cadence_rpm"),
+        max_cadence_rpm=_max_opt(parts, "max_cadence_rpm"),
+        avg_rider_torque_nm=_weighted(parts, "avg_rider_torque_nm"),
+        max_rider_torque_nm=_max_opt(parts, "max_rider_torque_nm"),
+        avg_heart_rate_bpm=_weighted(parts, "avg_heart_rate_bpm"),
+        max_heart_rate_bpm=_max_opt(parts, "max_heart_rate_bpm"),
+        seconds_per_gear=_sum_dicts([p.seconds_per_gear for p in parts]),
+        seconds_per_assist_mode=_sum_dicts([p.seconds_per_assist_mode for p in parts]),
+        assist_mode_changes=_sum_opt(p.assist_mode_changes for p in parts),
+        boost_s=_sum_opt(p.boost_s for p in parts),
+        motor_torque_s=_sum_dicts([p.motor_torque_s for p in parts]),
+        power_s=_sum_dicts([p.power_s for p in parts]),
+        session=parts[-1].session,
+    )
