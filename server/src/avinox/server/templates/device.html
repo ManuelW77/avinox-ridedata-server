@@ -28,7 +28,7 @@
     <p class="muted small">{{ t('bh.hints.text') }}</p>
     <ul class="hint-list">
       {% for h in bh.hints %}
-      <li><span class="dot {{ h.level }}"></span><span>{{ t('bh.hint.' ~ h.key, **h.params) }}</span></li>
+      <li><span class="dot {{ h.level }}"></span><span>{{ t('bh.hint.' ~ h.key, **h.params) }}{% if h.at %} ({% if h.params.n and h.params.n > 1 %}{{ t('bh.hint.last') }} {% endif %}{% if h.ride_id %}<a href="/rides/{{ h.ride_id }}">{{ h.at | localtime('%d.%m.%Y, %H:%M') }}</a>{% else %}{{ h.at | localtime('%d.%m.%Y, %H:%M') }}{% endif %}){% endif %}</span></li>
       {% endfor %}
     </ul>
   </section>

@@ -23,6 +23,7 @@ from .. import battery, formatwatch
 from ..analysis import CUSTOM_MODE_MIN, analyze, assist_name
 from ..buried import Session, device_info, parse_buried
 from ..hms import parse_hms
+from ..merge import merge_rides, suggest_pairs
 from .. import physics
 from ..ride_rec import RideRecError, parse_ride
 from ..fit import to_fit
@@ -70,6 +71,18 @@ class UploadError(ValueError):
     pass
 
 
+class MergeError(ValueError):
+    """Zusammenführen nicht möglich; ``code``: not_found | too_few | no_start | unreadable."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+MERGE_PREFIX = "merge:"
+"""Pfad-Präfix der synthetischen Zeile einer zusammengeführten Fahrt in ``rides``."""
+
+
 def classify(path: str) -> str | None:
     for kind, pattern in PATTERNS.items():
         if pattern.match(path):
@@ -98,7 +111,7 @@ def apply_mode_names(analysis: dict, names: dict[int, str]) -> dict:
         return analysis
     mapping = {f"eigen_{level}": name for level, name in names.items()}
     assist = analysis.get("assist") or {}
-    for key in ("seconds_per_mode", "per_mode"):
+    for key in ("seconds_per_mode", "moving_seconds_per_mode", "per_mode"):
         if key in assist:
             assist[key] = {mapping.get(k, k): v for k, v in assist[key].items()}
     return analysis
@@ -346,6 +359,9 @@ class Store:
     def _process_ride(self, file_id: int, path: str, data: bytes) -> int | None:
         if self.db.one("SELECT 1 FROM deleted_rides WHERE path = ?", (path,)):
             return None  # vom Nutzer gelöscht: nur in files vermerkt
+        group = self._merge_group_of(path)
+        if group:  # Teil einer zusammengeführten Fahrt: Gruppe neu aufbauen
+            return self._rebuild_merge(group)
         current = self.db.one("SELECT r.id, r.file_id, f.size FROM rides r JOIN files f ON f.id = r.file_id WHERE r.path = ?", (path,))
         if current and current["file_id"] != file_id and current["size"] > len(data):
             return current["id"]  # ältere, kürzere Fassung einer schon bekannten Fahrt
@@ -354,6 +370,10 @@ class Store:
         except RideRecError as exc:
             log.warning("Fahrt %s nicht lesbar: %s", path, exc)
             return None
+        return self._store_ride(file_id, path, ride, hr_source)
+
+    def _store_ride(self, file_id: int, path: str, ride, hr_source: str | None) -> int:
+        """Wertet eine (ggf. zusammengeführte) Fahrt aus und schreibt die Zeile in ``rides``."""
         analysis = analyze(ride, self.sessions())
         analysis["hr_source"] = hr_source
         s = analysis["summary"]
@@ -390,23 +410,31 @@ class Store:
         return self.db.one("SELECT id FROM rides WHERE path = ?", (path,))["id"]
 
     def _refresh_device_stats(self) -> None:
-        for row in self.db.query("SELECT file_id, path FROM rides WHERE has_device_stats = 0"):
+        for row in self.db.query(f"SELECT file_id, path FROM rides WHERE has_device_stats = 0 AND path NOT LIKE '{MERGE_PREFIX}%'"):
             self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
 
     def reprocess(self, only_outdated: bool = True) -> int:
         """Berechnet Fahrten neu (nach Parser-Update). Gibt die Anzahl zurück."""
         with self._lock:
             self._sessions = None
-            sql = "SELECT file_id, path FROM rides" + (" WHERE parser_version < ?" if only_outdated else "")
+            sql = f"SELECT file_id, path FROM rides WHERE path NOT LIKE '{MERGE_PREFIX}%'" + (" AND parser_version < ?" if only_outdated else "")
             rows = self.db.query(sql, (PARSER_VERSION,) if only_outdated else ())
             # Fahrt-Dateien ohne Eintrag (z. B. früher unlesbar) ebenfalls versuchen
             orphans = self.db.query(
                 "SELECT f.id AS file_id, f.path FROM files f WHERE f.kind = 'ride' AND NOT EXISTS (SELECT 1 FROM rides r WHERE r.path = f.path) "
-                "AND f.path NOT IN (SELECT path FROM deleted_rides)"
+                "AND f.path NOT IN (SELECT path FROM deleted_rides) "
+                "AND f.path NOT IN (SELECT value FROM ride_merges, json_each(member_paths_json))"
             )
             for row in [*rows, *orphans]:
                 self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
-            return len(rows) + len(orphans)
+            merges = 0
+            for g in self.db.query(
+                "SELECT m.group_path, r.parser_version FROM ride_merges m LEFT JOIN rides r ON r.path = m.group_path"
+            ):
+                if not only_outdated or g["parser_version"] is None or g["parser_version"] < PARSER_VERSION:
+                    self._rebuild_merge(g["group_path"])
+                    merges += 1
+            return len(rows) + len(orphans) + merges
 
     # ------------------------------------------------------------------ Lesen
 
@@ -454,26 +482,37 @@ class Store:
             "SELECT r.id, r.path, r.ride_id, r.start_utc, r.duration_s, r.moving_time_s, r.distance_m, r.ascent_m, r.descent_m, "
             "r.avg_speed_kmh, r.max_speed_kmh, r.avg_rider_power_w, r.avg_motor_power_w, r.avg_cadence_rpm, r.calories_kcal, "
             "r.battery_start_pct, r.battery_end_pct, r.has_gps, r.has_device_stats, r.warnings, r.updated_at, "
+            "json_extract(r.analysis_json, '$.summary.elapsed_s') AS elapsed_s, "
+            "(SELECT json_array_length(g.member_paths_json) FROM ride_merges g WHERE g.group_path = r.path) AS merged_count, "
             "m.custom_name, m.places_json FROM rides r LEFT JOIN ride_meta m ON m.path = r.path "
             "ORDER BY r.start_utc IS NULL, r.start_utc DESC, r.path DESC"
         )
+        hints = suggest_pairs([{"id": r["id"], "start": r["start_utc"], "elapsed_s": r["elapsed_s"]} for r in rows])
         out = []
         for row in rows:
-            d = {k: row[k] for k in row.keys() if k not in ("updated_at", "custom_name", "places_json")}
+            d = {k: row[k] for k in row.keys() if k not in ("updated_at", "custom_name", "places_json", "elapsed_s")}
+            d["merged_count"] = row["merged_count"] or 0
+            d["merge_prev"] = hints.get(row["id"])
             thumb, loop = self._derived(row["id"], row["updated_at"]) if row["has_gps"] else (None, None)
             d.update(self._name_fields(row, loop))
             d["thumb"] = thumb
             out.append(d)
+        names = {r["id"]: r["name"] for r in out}
+        for d in out:
+            d["merge_prev_name"] = names.get(d["merge_prev"])
         return out
 
     def get_ride(self, ride_pk: int) -> dict | None:
         row = self.db.one(
-            "SELECT r.*, m.custom_name, m.places_json FROM rides r LEFT JOIN ride_meta m ON m.path = r.path WHERE r.id = ?", (ride_pk,)
+            "SELECT r.*, m.custom_name, m.places_json, "
+            "(SELECT json_array_length(g.member_paths_json) FROM ride_merges g WHERE g.group_path = r.path) AS merged_count "
+            "FROM rides r LEFT JOIN ride_meta m ON m.path = r.path WHERE r.id = ?", (ride_pk,)
         )
         if not row:
             return None
-        hidden = ("analysis_json", "geojson", "custom_name", "places_json")
+        hidden = ("analysis_json", "geojson", "custom_name", "places_json", "merged_count")
         out = {k: row[k] for k in row.keys() if k not in hidden}
+        out["merged_count"] = row["merged_count"] or 0
         out["analysis"] = apply_mode_names(json.loads(row["analysis_json"]), self.mode_names())
         loop = self._derived(row["id"], row["updated_at"], row["geojson"])[1] if row["has_gps"] else None
         out.update(self._name_fields(row, loop))
@@ -499,22 +538,169 @@ class Store:
             if not row:
                 return False
             path = row["path"]
-            self.db.execute("INSERT OR REPLACE INTO deleted_rides(path, deleted_at) VALUES (?, ?)", (path, _now()))
-            self.db.execute("DELETE FROM rides WHERE id = ?", (ride_pk,))
-            self.db.execute("DELETE FROM ride_meta WHERE path = ?", (path,))
-            self.db.execute("DELETE FROM ride_hr WHERE path = ?", (path,))
-            self.db.execute("DELETE FROM ai_texts WHERE kind = 'ride' AND ref = ?", (str(ride_pk),))
-            for key in [k for k in self._derived_cache if k[0] == ride_pk]:
-                del self._derived_cache[key]
+            members = self._merge_members(path)  # zusammengeführte Fahrt: alle Teile löschen
+            if members is not None:
+                self.db.execute("DELETE FROM ride_merges WHERE group_path = ?", (path,))
+                self.db.execute("DELETE FROM ride_meta WHERE path = ?", (path,))
+            self._drop_ride_row(ride_pk)
+            for member in members if members is not None else [path]:
+                self.db.execute("INSERT OR REPLACE INTO deleted_rides(path, deleted_at) VALUES (?, ?)", (member, _now()))
+                self.db.execute("DELETE FROM ride_meta WHERE path = ?", (member,))
+                self.db.execute("DELETE FROM ride_hr WHERE path = ?", (member,))
             self._sessions = None
-            for f in self.db.query("SELECT DISTINCT sha256 FROM files WHERE path = ?", (path,)):
-                shared = self.db.one(
-                    "SELECT 1 FROM files WHERE sha256 = ? AND path != ? AND path NOT IN (SELECT path FROM deleted_rides)",
-                    (f["sha256"], path),
-                )
-                if not shared:
-                    self._raw_path(f["sha256"]).unlink(missing_ok=True)
+            for member in members if members is not None else [path]:
+                for f in self.db.query("SELECT DISTINCT sha256 FROM files WHERE path = ?", (member,)):
+                    shared = self.db.one(
+                        "SELECT 1 FROM files WHERE sha256 = ? AND path != ? AND path NOT IN (SELECT path FROM deleted_rides)",
+                        (f["sha256"], member),
+                    )
+                    if not shared:
+                        self._raw_path(f["sha256"]).unlink(missing_ok=True)
             return True
+
+    def _drop_ride_row(self, ride_pk: int) -> None:
+        """Entfernt die Zeile in ``rides`` samt KI-Text und Zwischenspeichern (Physik fällt per CASCADE)."""
+        self.db.execute("DELETE FROM rides WHERE id = ?", (ride_pk,))
+        self.db.execute("DELETE FROM ai_texts WHERE kind = 'ride' AND ref = ?", (str(ride_pk),))
+        for key in [k for k in self._derived_cache if k[0] == ride_pk]:
+            del self._derived_cache[key]
+
+    # ------------------------------------------------------------- Zusammenführen
+
+    def _merge_members(self, group_path: str) -> list[str] | None:
+        row = self.db.one("SELECT member_paths_json FROM ride_merges WHERE group_path = ?", (group_path,))
+        return json.loads(row["member_paths_json"]) if row else None
+
+    def _merge_group_of(self, path: str) -> str | None:
+        row = self.db.one("SELECT group_path FROM ride_merges, json_each(member_paths_json) WHERE value = ?", (path,))
+        return row["group_path"] if row else None
+
+    def _best_file(self, path: str):
+        """Größte (= vollständigste) Datei zu einem Fahrtpfad."""
+        return self.db.one("SELECT id FROM files WHERE path = ? ORDER BY size DESC, id DESC LIMIT 1", (path,))
+
+    def _load_merged(self, group_path: str):
+        """Zusammengeführte Fahrt aus den Teildateien. Gibt (Ride, Pulsquelle) zurück."""
+        members = self._merge_members(group_path) or []
+        parts = []
+        for path in members:
+            f = self._best_file(path)
+            if not f:
+                raise MergeError("unreadable")
+            try:
+                parts.append(self._load_ride(path, self.read_raw(f["id"])))
+            except RideRecError as exc:
+                raise MergeError("unreadable") from exc
+        parts.sort(key=lambda p: p[0].header.start)
+        sources = {src for _, src in parts}
+        if "belt" in sources:
+            source = "belt"
+        elif None in sources:
+            source = None if sources == {None} else "healthlog_mixed"
+        else:
+            source = sources.pop() if len(sources) == 1 else "healthlog_mixed"
+        return merge_rides([r for r, _ in parts]), source
+
+    def _rebuild_merge(self, group_path: str) -> int | None:
+        """Berechnet die Zeile einer zusammengeführten Fahrt neu (Teile bleiben unverändert in files)."""
+        try:
+            ride, source = self._load_merged(group_path)
+        except MergeError as exc:
+            log.warning("Zusammengeführte Fahrt %s nicht lesbar: %s", group_path, exc.code)
+            return None
+        first = self._best_file(self._merge_members(group_path)[0])
+        pk = self._store_ride(first["id"], group_path, ride, source)
+        # Ortsnamen neu holen lassen (Strecke kann sich durch eine neuere Teildatei geändert haben)
+        self.db.execute(
+            "INSERT INTO ride_meta(path, geocoded_at) VALUES (?, NULL) ON CONFLICT(path) DO UPDATE SET geocoded_at = NULL",
+            (group_path,),
+        )
+        return pk
+
+    def merge_rides(self, ride_pks: list[int]) -> int:
+        """Führt Fahrten zu einer zusammen und gibt deren ID zurück. Schon zusammengeführte Fahrten in der
+        Auswahl werden aufgelöst und mit ihren Teilen neu zusammengesetzt. Wirft ``MergeError``."""
+        with self._lock:
+            members: set[str] = set()
+            old_groups: list[str] = []
+            for pk in dict.fromkeys(ride_pks):
+                row = self.db.one("SELECT path, start_utc FROM rides WHERE id = ?", (pk,))
+                if not row:
+                    raise MergeError("not_found")
+                parts = self._merge_members(row["path"])
+                if parts is None:
+                    if not row["start_utc"]:
+                        raise MergeError("no_start")
+                    members.add(row["path"])
+                else:
+                    old_groups.append(row["path"])
+                    members.update(parts)
+            if len(members) < 2:
+                raise MergeError("too_few")
+            ordered = self._order_paths(members)
+            group = MERGE_PREFIX + ordered[0]
+            custom = self.db.one("SELECT custom_name FROM ride_meta WHERE path = ?", (ordered[0],))
+            self._dissolve([*old_groups])
+            for path in ordered:
+                row = self.db.one("SELECT id FROM rides WHERE path = ?", (path,))
+                if row:
+                    self._drop_ride_row(row["id"])
+            self.db.execute(
+                "INSERT OR REPLACE INTO ride_merges(group_path, member_paths_json, created_at) VALUES (?, ?, ?)",
+                (group, json.dumps(ordered), _now()),
+            )
+            self.db.execute(
+                "INSERT INTO ride_meta(path, custom_name) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET custom_name = excluded.custom_name, "
+                "places_json = NULL, geocoded_at = NULL",
+                (group, custom["custom_name"] if custom else None),
+            )
+            pk = self._rebuild_merge(group)
+            if pk is None:  # nicht lesbar: alles zurücknehmen
+                self.split_group(group)
+                raise MergeError("unreadable")
+            return pk
+
+    def _order_paths(self, paths) -> list[str]:
+        """Pfade nach Startzeit der Fahrt sortieren (Startzeit aus der Datei)."""
+        keyed = []
+        for path in paths:
+            f = self._best_file(path)
+            try:
+                keyed.append((parse_ride(self.read_raw(f["id"])).header.start, path))
+            except (RideRecError, TypeError) as exc:
+                raise MergeError("unreadable") from exc
+        return [p for _, p in sorted(keyed)]
+
+    def _dissolve(self, group_paths: list[str]) -> None:
+        for g in group_paths:
+            row = self.db.one("SELECT id FROM rides WHERE path = ?", (g,))
+            if row:
+                self._drop_ride_row(row["id"])
+            self.db.execute("DELETE FROM ride_merges WHERE group_path = ?", (g,))
+            self.db.execute("DELETE FROM ride_meta WHERE path = ?", (g,))
+
+    def split_group(self, group_path: str) -> list[int]:
+        """Löst eine Gruppe auf und berechnet die Teilfahrten aus den Dateien neu."""
+        with self._lock:
+            members = self._merge_members(group_path) or []
+            self._dissolve([group_path])
+            ids = []
+            for path in members:
+                if self.db.one("SELECT 1 FROM deleted_rides WHERE path = ?", (path,)):
+                    continue
+                f = self._best_file(path)
+                if f:
+                    pk = self._process_ride(f["id"], path, self.read_raw(f["id"]))
+                    if pk:
+                        ids.append(pk)
+            return ids
+
+    def split_ride(self, ride_pk: int) -> list[int] | None:
+        """Trennt eine zusammengeführte Fahrt wieder. ``None`` = Fahrt unbekannt oder nicht zusammengeführt."""
+        row = self.db.one("SELECT path FROM rides WHERE id = ?", (ride_pk,))
+        if not row or self._merge_members(row["path"]) is None:
+            return None
+        return self.split_group(row["path"])
 
     # ------------------------------------------------------------------ KI-Texte
 
@@ -557,7 +743,7 @@ class Store:
         """Fahrten ohne Gurt-Puls und ohne erfolgreichen HealthLog-Abruf (mit Uhrzeit)."""
         return self.db.query(
             "SELECT r.id, r.file_id, r.path, r.start_utc, r.duration_s, h.status, h.fetched_at FROM rides r "
-            "LEFT JOIN ride_hr h ON h.path = r.path WHERE r.start_utc IS NOT NULL "
+            f"LEFT JOIN ride_hr h ON h.path = r.path WHERE r.start_utc IS NOT NULL AND r.path NOT LIKE '{MERGE_PREFIX}%' "
             "AND json_extract(r.analysis_json, '$.hr_source') IS NOT 'belt' AND (h.status IS NULL OR h.status != 'ok') "
             "ORDER BY r.start_utc DESC"
         )
@@ -626,6 +812,8 @@ class Store:
             "FROM rides WHERE id = ?", (ride_pk,))
         if not row:
             return None
+        if row["path"].startswith(MERGE_PREFIX):
+            return {"status": "merged", "source": None}
         if row["hr_source"] == "belt":
             return {"status": "belt", "source": None}
         if not row["start_utc"]:
@@ -696,7 +884,7 @@ class Store:
         row = self.db.one("SELECT file_id, path, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
         if not row:
             return None
-        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
+        ride = self._ride_object(row)
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.gpx"
         return to_gpx(ride), name
 
@@ -717,13 +905,21 @@ class Store:
         self.db.set_setting("physics_cda", cda)
         self.db.set_setting("physics_battery_wh", battery_wh)
 
+    def _ride_object(self, row):
+        """Geparste Fahrt zu einer rides-Zeile (``path``, ``file_id``); bei Zusammenführungen aus allen Teilen."""
+        if row["path"].startswith(MERGE_PREFIX):
+            return self._load_merged(row["path"])[0]
+        return self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
+
     def _physics_for(self, row, cfg: dict) -> dict:
         """Fahrphysik einer Fahrt, aus ``ride_physics`` oder frisch berechnet (Schlüssel: Datei, Gewicht, CdA, Akku, Code-Version)."""
-        key = json.dumps([row["file_id"], cfg["mass_kg"], cfg["cda"], cfg["battery_wh"], physics.PHYSICS_VERSION])
+        stamp = self.db.one("SELECT created_at, member_paths_json FROM ride_merges WHERE group_path = ?", (row["path"],))
+        ride_updated = self.db.one("SELECT updated_at FROM rides WHERE id = ?", (row["id"],))
+        key = json.dumps([row["file_id"], (stamp["member_paths_json"], ride_updated["updated_at"]) if stamp else None, cfg["mass_kg"], cfg["cda"], cfg["battery_wh"], physics.PHYSICS_VERSION])
         cached = self.db.one("SELECT cache_key, result_json FROM ride_physics WHERE ride_id = ?", (row["id"],))
         if cached and cached["cache_key"] == key:
             return json.loads(cached["result_json"])
-        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
+        ride = self._ride_object(row)
         result = physics.analyze_physics(ride.samples, cfg["mass_kg"], cfg["cda"], battery_wh=cfg["battery_wh"])
         self.db.execute(
             "INSERT INTO ride_physics(ride_id, cache_key, result_json, computed_at) VALUES (?, ?, ?, ?) "
@@ -792,14 +988,14 @@ class Store:
         row = self.db.one("SELECT file_id, path, ride_id, start_utc FROM rides WHERE id = ?", (ride_pk,))
         if not row:
             return None
-        ride = self._load_ride(row["path"], self.read_raw(row["file_id"]))[0]
+        ride = self._ride_object(row)
         name = f"avinox-{row['start_utc'][:10] if row['start_utc'] else 'fahrt'}-{row['ride_id']}.fit"
         return to_fit(ride), name
 
     def ride_raw(self, ride_pk: int) -> tuple[bytes, str] | None:
         row = self.db.one("SELECT file_id, path FROM rides WHERE id = ?", (ride_pk,))
-        if not row:
-            return None
+        if not row or row["path"].startswith(MERGE_PREFIX):
+            return None  # Zusammenführung hat keine eigene Rohdatei
         return self.read_raw(row["file_id"]), Path(row["path"]).name
 
     def stats(self) -> dict:
@@ -849,8 +1045,8 @@ class Store:
             if s.battery
         ]
         ride_rows = self.db.query(
-            "SELECT start_utc AS time, json_extract(analysis_json, '$.battery.motor_wh_per_pct') AS motor_wh_per_pct, "
-            "json_extract(analysis_json, '$.battery.used_pct') AS used_pct FROM rides WHERE start_utc IS NOT NULL AND json_extract(analysis_json, '$.battery.motor_wh_per_pct') IS NOT NULL "
+            "SELECT id, start_utc AS time, duration_s, json_extract(analysis_json, '$.battery.motor_wh_per_pct') AS motor_wh_per_pct, "
+            "json_extract(analysis_json, '$.battery.used_pct') AS used_pct FROM rides WHERE start_utc IS NOT NULL "
             "ORDER BY start_utc"
         )
         info["battery_health"] = battery.health(battery_in, [dict(r) for r in ride_rows])

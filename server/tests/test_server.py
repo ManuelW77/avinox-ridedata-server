@@ -558,3 +558,12 @@ def test_ride_page_has_motor_load_card(client, settings):
     pk2 = put(client, settings, plain, path="ride_rec/4242/ride_rec_2000.proto").json()["ride"]
     assert pk2 != pk
     assert "<h2>Motorlast je Gang" not in client.get(f"/rides/{pk2}").text
+
+
+def test_apply_mode_names_covers_moving_seconds():
+    from avinox.server.store import apply_mode_names
+    a = {"assist": {"seconds_per_mode": {"eigen_21": 5}, "moving_seconds_per_mode": {"eigen_21": 4, "eco": 1},
+                    "per_mode": {"eigen_21": {"seconds": 5}}}}
+    apply_mode_names(a, {21: "Buddy"})
+    assert set(a["assist"]["moving_seconds_per_mode"]) == {"Buddy", "eco"}
+    assert "Buddy" in a["assist"]["seconds_per_mode"] and "Buddy" in a["assist"]["per_mode"]

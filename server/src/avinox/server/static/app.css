@@ -122,6 +122,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 0.5rem 1.25rem 2.5rem; }
 .grid { display: grid; gap: 1rem; }
 .cols-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .cols-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+/* Drei-Karten-Raster: je ein Drittel der Breite, kein leerer vierter Platz */
+@media (min-width: 901px) { .cols-3:not(.cols-power) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .stack > * + * { margin-top: 1rem; }
 
 /* Kennzahlen */
@@ -725,3 +727,13 @@ input[type=checkbox].switch:disabled { opacity: 0.5; cursor: not-allowed; }
 .ph-chart .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--ink-2); margin-bottom: 0.25rem; }
 .ph-chart .legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.3rem; }
 .ph-tip { cursor: help; border-bottom: 1px dotted var(--ink-3); }
+
+/* Fahrten zusammenführen */
+.merge-bar { position: sticky; top: 0.5rem; z-index: 5; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin: 0 0 0.75rem; padding: 0.6rem 0.9rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+.merge-bar[hidden] { display: none; }
+.merge-bar span { flex: 1; color: var(--ink-2); }
+.rides.selecting li:not([hidden]):not(.group-head) { display: flex; align-items: center; gap: 0.6rem; }
+.rides.selecting li .ride-row { flex: 1; min-width: 0; }
+.rides.selecting .merge-hint { display: none; }
+.rides .merge-sel { width: 1.2rem; height: 1.2rem; flex: none; }
+.merge-hint { margin: 0.2rem 0 0 1rem; font-size: 0.8rem; color: var(--ink-3); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }

@@ -245,7 +245,8 @@
     const thead = el("thead"); thead.appendChild(hr); tbl.appendChild(thead);
     const tb = el("tbody");
     const cell = (txt, cls) => el("td", cls || "n", txt);
-    rides.forEach((r) => {
+    // Tabelle: neueste Fahrt oben (der Verlauf darunter bleibt chronologisch)
+    rides.slice().reverse().forEach((r) => {
       const row = el("tr", r.outlier ? "outlier" : "");
       row.appendChild(cell(r.date, ""));
       const nm = el("td"); const a = el("a", null, r.name || ("#" + r.id)); a.href = "/rides/" + r.id; nm.appendChild(a);

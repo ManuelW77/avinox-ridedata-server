@@ -46,18 +46,25 @@
     <option value="hm">{{ t('rides.f.sort_hm') }}</option>
     <option value="dur">{{ t('rides.f.sort_dur') }}</option>
   </select>
+  <button type="button" class="btn ghost" id="rt-select" aria-pressed="false">{{ t('rides.merge.select') }}</button>
   <button type="button" class="btn ghost" id="rt-reset" hidden>{{ t('rides.f.reset') }}</button>
 </div>
 <div class="rides-head">
   <span>{{ t('col.ride') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span>
 </div>
+<div class="merge-bar" id="merge-bar" hidden>
+  <span id="merge-count" aria-live="polite"></span>
+  <button type="button" class="btn" id="merge-go" disabled>{{ t('rides.merge.go') }}</button>
+  <button type="button" class="btn ghost" id="merge-cancel">{{ t('rides.merge.cancel') }}</button>
+</div>
 <ul class="rides" id="rides-list">
   {% for r in rides %}
-  <li data-name="{{ r.name }}" data-search="{{ r.name }} {{ (r.places.values() | select | join(' ')) if r.places else '' }}" data-start="{{ r.start_utc | localtime('%Y-%m-%dT%H:%M') if r.start_utc else '' }}" data-ym="{{ r.start_utc | localtime('%Y-%m') if r.start_utc else '' }}" data-km="{{ (r.distance_m or 0) / 1000 }}" data-hm="{{ r.ascent_m or 0 }}" data-dur="{{ r.duration_s or 0 }}" data-mov="{{ r.moving_time_s or 0 }}" data-gps="{{ 1 if r.has_gps else 0 }}">
+  <li data-id="{{ r.id }}" data-name="{{ r.name }}" data-search="{{ r.name }} {{ (r.places.values() | select | join(' ')) if r.places else '' }}" data-start="{{ r.start_utc | localtime('%Y-%m-%dT%H:%M') if r.start_utc else '' }}" data-ym="{{ r.start_utc | localtime('%Y-%m') if r.start_utc else '' }}" data-km="{{ (r.distance_m or 0) / 1000 }}" data-hm="{{ r.ascent_m or 0 }}" data-dur="{{ r.duration_s or 0 }}" data-mov="{{ r.moving_time_s or 0 }}" data-gps="{{ 1 if r.has_gps else 0 }}">
+    {% if r.start_utc %}<input type="checkbox" class="merge-sel" aria-label="{{ t('rides.merge.pick', name=r.name) }}" hidden>{% endif %}
     <a class="ride-row" href="/rides/{{ r.id }}">
       <span class="when">
         {% if r.thumb %}<svg class="thumb" viewBox="0 0 64 40" width="64" height="40" aria-hidden="true"><path d="{{ r.thumb }}"/></svg>{% else %}<span class="thumb"></span>{% endif %}
-        <span class="when-text"><strong>{{ r.name }}</strong><span>{{ r.start_utc | localtime('%a %d.%m.%Y · %H:%M') if r.start_utc else t('ride_n', n=r.ride_id) }}{% if r.is_loop %} <i class="loop" title="{{ t('loop_hint') }}" aria-label="{{ t('loop_hint') }}" role="img">&#8635;</i>{% endif %}</span></span>
+        <span class="when-text"><strong>{{ r.name }}</strong><span>{{ r.start_utc | localtime('%a %d.%m.%Y · %H:%M') if r.start_utc else t('ride_n', n=r.ride_id) }}{% if r.merged_count %} <span class="pill" title="{{ t('rides.merge.pill_tip') }}">{{ t('rides.merge.pill', n=r.merged_count) }}</span>{% endif %}{% if r.is_loop %} <i class="loop" title="{{ t('loop_hint') }}" aria-label="{{ t('loop_hint') }}" role="img">&#8635;</i>{% endif %}</span></span>
       </span>
       <span class="n">{{ (r.distance_m / 1000) | num(1) }}<small>km</small></span>
       <span class="n">{{ r.duration_s | duration }}</span>
@@ -65,6 +72,7 @@
       <span class="n opt">{{ r.avg_rider_power_w | num }}<small>W</small></span>
       <span class="n opt">{% if r.battery_start_pct is not none %}{{ r.battery_start_pct }}→{{ r.battery_end_pct }}<small>%</small>{% else %}–{% endif %}</span>
     </a>
+    {% if r.merge_prev %}<div class="merge-hint"><span>{{ t('rides.merge.hint', name=r.merge_prev_name) }}</span> <button type="button" class="btn ghost small" data-merge="{{ r.merge_prev }},{{ r.id }}">{{ t('rides.merge.go') }}</button></div>{% endif %}
   </li>
   {% endfor %}
 </ul>
@@ -83,5 +91,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', path='rides.js').path }}" defer></script>
+<script src="{{ url_for('static', path='rides-merge.js').path }}" defer></script>
 <script src="{{ url_for('static', path='jumpnav.js').path }}" defer></script>
 {% endblock %}

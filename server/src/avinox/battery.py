@@ -48,6 +48,24 @@ def _iso(value) -> str | None:
     return str(value) if t else None
 
 
+RIDE_SLACK_S = 600  # Toleranz: Einschalt-Aufzeichnung endet kurz nach der Fahrt
+
+
+def _ride_for(t: datetime | None, rides: list[dict]) -> int | None:
+    """Primärschlüssel der Fahrt, in deren Zeitfenster ``t`` liegt (sonst None)."""
+    if not t:
+        return None
+    for r in rides or []:
+        start = _time(r.get("time"))
+        if not start or r.get("id") is None or not r.get("duration_s"):
+            continue
+        if (t.tzinfo is None) != (start.tzinfo is None):
+            continue
+        if 0 <= (t - start).total_seconds() <= r["duration_s"] + RIDE_SLACK_S:
+            return r["id"]
+    return None
+
+
 def _num(s: dict, key: str) -> float:
     v = s.get(key)
     return v if isinstance(v, (int, float)) else 0
@@ -192,34 +210,55 @@ def health(sessions_battery: list[dict], rides: list[dict]) -> dict:
     if last_full_time and newest:
         full_days = int((newest - _time(last_full_time)).total_seconds() // 86400)
 
+    def at(value) -> dict:
+        """Zeitbezug für einen Hinweis: ``at`` (ISO) und ggf. ``ride_id``."""
+        iso = _iso(value)
+        if not iso:
+            return {}
+        out = {"at": iso}
+        ride = _ride_for(_time(iso), rides)
+        if ride is not None:
+            out["ride_id"] = ride
+        return out
+
+    def last_time(items: list[dict], key: str = "time"):
+        times = [(_time(i.get(key)), i.get(key)) for i in items if _time(i.get(key))]
+        return max(times, key=lambda x: x[0])[1] if times else None
+
+    low_cell_ss = [s for s in ss if 0 < _num(s, "min_cell_mv") < DEEP_CELL_MV]
+    cold_ss = [s for s in ss if (_num(s, "start_temp_c") > 0 or _num(s, "end_temp_c") > 0) and _num(s, "max_temp_c") < COLD_C]
+    hot_ss = [s for s in ss if _num(s, "max_temp_c") >= HOT_C]
+    limit_ss = [s for s in ss if s.get("thermal_limit")]
+    rest_at = at(rest[-1]["time"]) if rest else {}
+
     hints = []
     if deep_discharge["count"]:
-        hints.append({"level": "warn", "key": "deep", "params": {"n": deep_discharge["count"]}})
+        hints.append({"level": "warn", "key": "deep", "params": {"n": deep_discharge["count"]}, **at(last_time(deep))})
     elif deep_discharge["low_cell_count"]:
-        hints.append({"level": "warn", "key": "lowcell", "params": {"n": deep_discharge["low_cell_count"]}})
+        hints.append({"level": "warn", "key": "lowcell", "params": {"n": deep_discharge["low_cell_count"]}, **at(last_time(low_cell_ss))})
     vals = [p["delta_mv"] for p in rest]
     latest = rest_balance["latest_mv"]
     if latest is not None:
         if latest >= BALANCE_CRIT_MV:
-            hints.append({"level": "crit", "key": "balance_crit", "params": {"mv": latest}})
+            hints.append({"level": "crit", "key": "balance_crit", "params": {"mv": latest}, **rest_at})
         elif latest >= BALANCE_WARN_MV:
-            hints.append({"level": "warn", "key": "balance", "params": {"mv": latest}})
+            hints.append({"level": "warn", "key": "balance", "params": {"mv": latest}, **rest_at})
         if latest < BALANCE_CRIT_MV and len(vals) >= 3 and vals[-3] < vals[-2] < vals[-1] and latest >= BALANCE_WARN_MV:
-            hints.append({"level": "warn", "key": "balance_rising", "params": {"mv": latest}})
+            hints.append({"level": "warn", "key": "balance_rising", "params": {"mv": latest}, **rest_at})
         if len(vals) >= 2 and vals[-2] >= BALANCE_WARN_MV and vals[-1] <= vals[-2] - BALANCE_DROP_MV:
-            hints.append({"level": "info", "key": "balance_down", "params": {"mv": latest}})
+            hints.append({"level": "info", "key": "balance_down", "params": {"mv": latest}, **rest_at})
     if change is not None and change < SOH_WARN_PCT:
         hints.append({"level": "warn", "key": "soh", "params": {"pct": abs(change)}})
     if cold_charges:
-        hints.append({"level": "info", "key": "coldcharge", "params": {"n": len(cold_charges)}})
+        hints.append({"level": "info", "key": "coldcharge", "params": {"n": len(cold_charges)}, **at(last_time(cold_charges))})
     if storage:
-        hints.append({"level": "info", "key": "storage", "params": {"n": len(storage), "days": max(x["days"] for x in storage)}})
+        hints.append({"level": "info", "key": "storage", "params": {"n": len(storage), "days": max(x["days"] for x in storage)}, **at(last_time(storage))})
     if hot:
-        hints.append({"level": "warn", "key": "hot", "params": {"n": hot}})
+        hints.append({"level": "warn", "key": "hot", "params": {"n": hot}, **at(last_time(hot_ss))})
     if cold:
-        hints.append({"level": "info", "key": "cold", "params": {"n": cold}})
+        hints.append({"level": "info", "key": "cold", "params": {"n": cold}, **at(last_time(cold_ss))})
     if limit:
-        hints.append({"level": "info", "key": "limit", "params": {"n": limit}})
+        hints.append({"level": "info", "key": "limit", "params": {"n": limit}, **at(last_time(limit_ss))})
     if full_days is not None and full_days > FULL_REMIND_DAYS:
         hints.append({"level": "info", "key": "fullcharge_days", "params": {"days": full_days}})
     elif rides_since >= FULL_REMIND_RIDES:
