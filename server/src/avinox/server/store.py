@@ -98,7 +98,7 @@ def apply_mode_names(analysis: dict, names: dict[int, str]) -> dict:
         return analysis
     mapping = {f"eigen_{level}": name for level, name in names.items()}
     assist = analysis.get("assist") or {}
-    for key in ("seconds_per_mode", "per_mode"):
+    for key in ("seconds_per_mode", "moving_seconds_per_mode", "per_mode"):
         if key in assist:
             assist[key] = {mapping.get(k, k): v for k, v in assist[key].items()}
     return analysis
