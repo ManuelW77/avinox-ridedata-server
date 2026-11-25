@@ -55,11 +55,12 @@
 <div class="merge-bar" id="merge-bar" hidden>
   <span id="merge-count" aria-live="polite"></span>
   <button type="button" class="btn" id="merge-go" disabled>{{ t('rides.merge.go') }}</button>
+  <button type="button" class="btn btn-danger" id="merge-delete" disabled>{{ t('rides.delete.go') }}</button>
   <button type="button" class="btn ghost" id="merge-cancel">{{ t('rides.merge.cancel') }}</button>
 </div>
 <ul class="rides" id="rides-list">
   {% for r in rides %}
-  <li data-id="{{ r.id }}" data-name="{{ r.name }}" data-search="{{ r.name }} {{ (r.places.values() | select | join(' ')) if r.places else '' }}" data-start="{{ r.start_utc | localtime('%Y-%m-%dT%H:%M') if r.start_utc else '' }}" data-ym="{{ r.start_utc | localtime('%Y-%m') if r.start_utc else '' }}" data-km="{{ (r.distance_m or 0) / 1000 }}" data-hm="{{ r.ascent_m or 0 }}" data-dur="{{ r.duration_s or 0 }}" data-mov="{{ r.moving_time_s or 0 }}" data-gps="{{ 1 if r.has_gps else 0 }}">
+  <li data-id="{{ r.id }}" data-name="{{ r.name }}" data-search="{{ r.name }} {{ (r.places.values() | select | join(' ')) if r.places else '' }}" data-start="{{ r.start_utc | localtime('%Y-%m-%dT%H:%M') if r.start_utc else '' }}" data-ym="{{ r.start_utc | localtime('%Y-%m') if r.start_utc else '' }}" data-km="{{ (r.distance_m or 0) / 1000 }}" data-hm="{{ r.ascent_m or 0 }}" data-dur="{{ r.duration_s or 0 }}" data-mov="{{ r.moving_time_s or 0 }}" data-gps="{{ 1 if r.has_gps else 0 }}" data-merged="{{ r.merged_count or 0 }}">
     {% if r.start_utc %}<input type="checkbox" class="merge-sel" aria-label="{{ t('rides.merge.pick', name=r.name) }}" hidden>{% endif %}
     <a class="ride-row" href="/rides/{{ r.id }}">
       <span class="when">
@@ -76,6 +77,16 @@
   </li>
   {% endfor %}
 </ul>
+<dialog class="confirm-dialog" id="rides-delete-dialog" aria-labelledby="rides-delete-title">
+  <form method="dialog">
+    <h2 id="rides-delete-title">{{ t('rides.delete.title') }}</h2>
+    <p id="rides-delete-text"></p>
+    <div class="actions">
+      <button type="submit" class="btn ghost" value="cancel" autofocus>{{ t('ride.delete_cancel') }}</button>
+      <button type="submit" class="btn btn-danger" value="delete">{{ t('rides.delete.go') }}</button>
+    </div>
+  </form>
+</dialog>
 <div class="rides-more"><button type="button" class="btn ghost" id="rides-more" hidden></button></div>
 <div class="card empty" id="rides-empty" hidden>
   <p>{{ t('rides.f.none') }}</p>

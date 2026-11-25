@@ -746,6 +746,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "Keine zusammengeführte Fahrt")
         return {"ok": True, "ids": ids}
 
+    @app.post("/api/v1/rides/delete", dependencies=[Depends(read_auth)], tags=["fahrten"])
+    def delete_rides(payload: dict):
+        """Löscht mehrere Fahrten (``{"ids": [..]}``); unbekannte IDs werden übersprungen. Gibt die gelöschten IDs zurück."""
+        ids = payload.get("ids")
+        if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+            raise HTTPException(400, "ids muss eine nicht leere Liste von Fahrt-IDs sein")
+        deleted = [pk for pk in dict.fromkeys(ids) if store.delete_ride(pk)]
+        return {"ok": True, "deleted": deleted}
+
     @app.delete("/api/v1/rides/{ride_pk}", dependencies=[Depends(read_auth)], tags=["fahrten"])
     def delete_ride(ride_pk: int):
         if not store.delete_ride(ride_pk):

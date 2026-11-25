@@ -20,10 +20,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from .. import battery, formatwatch
-from ..analysis import CUSTOM_MODE_MIN, analyze, assist_name
-from ..buried import Session, device_info, parse_buried
+from ..analysis import CUSTOM_MODE_MIN, _ride_stats_dict, analyze, assist_name
+from ..buried import Session, device_info, match_ride, parse_buried
 from ..hms import parse_hms
-from ..merge import merge_rides, suggest_pairs
+from ..merge import combine_device_stats, merge_rides, suggest_pairs
 from .. import physics
 from ..ride_rec import RideRecError, parse_ride
 from ..fit import to_fit
@@ -372,9 +372,17 @@ class Store:
             return None
         return self._store_ride(file_id, path, ride, hr_source)
 
-    def _store_ride(self, file_id: int, path: str, ride, hr_source: str | None) -> int:
-        """Wertet eine (ggf. zusammengeführte) Fahrt aus und schreibt die Zeile in ``rides``."""
-        analysis = analyze(ride, self.sessions())
+    def _store_ride(self, file_id: int, path: str, ride, hr_source: str | None, parts: list | None = None) -> int:
+        """Wertet eine (ggf. zusammengeführte) Fahrt aus und schreibt die Zeile in ``rides``.
+
+        ``parts``: Teilfahrten einer Zusammenführung; die Display-Statistik wird aus den Teilen kombiniert."""
+        sessions = self.sessions()
+        analysis = analyze(ride, sessions)
+        if parts is not None:
+            matched = [match_ride(p, sessions) for p in parts]
+            analysis["device_stats"] = (
+                _ride_stats_dict(combine_device_stats(matched)) if sessions and all(matched) else None
+            )
         analysis["hr_source"] = hr_source
         s = analysis["summary"]
         row = {
@@ -412,6 +420,8 @@ class Store:
     def _refresh_device_stats(self) -> None:
         for row in self.db.query(f"SELECT file_id, path FROM rides WHERE has_device_stats = 0 AND path NOT LIKE '{MERGE_PREFIX}%'"):
             self._process_ride(row["file_id"], row["path"], self.read_raw(row["file_id"]))
+        for row in self.db.query(f"SELECT path FROM rides WHERE has_device_stats = 0 AND path LIKE '{MERGE_PREFIX}%'"):
+            self._rebuild_merge(row["path"])
 
     def reprocess(self, only_outdated: bool = True) -> int:
         """Berechnet Fahrten neu (nach Parser-Update). Gibt die Anzahl zurück."""
@@ -580,7 +590,7 @@ class Store:
         return self.db.one("SELECT id FROM files WHERE path = ? ORDER BY size DESC, id DESC LIMIT 1", (path,))
 
     def _load_merged(self, group_path: str):
-        """Zusammengeführte Fahrt aus den Teildateien. Gibt (Ride, Pulsquelle) zurück."""
+        """Zusammengeführte Fahrt aus den Teildateien. Gibt (Ride, Pulsquelle, Teilfahrten) zurück."""
         members = self._merge_members(group_path) or []
         parts = []
         for path in members:
@@ -599,17 +609,18 @@ class Store:
             source = None if sources == {None} else "healthlog_mixed"
         else:
             source = sources.pop() if len(sources) == 1 else "healthlog_mixed"
-        return merge_rides([r for r, _ in parts]), source
+        rides = [r for r, _ in parts]
+        return merge_rides(rides), source, rides
 
     def _rebuild_merge(self, group_path: str) -> int | None:
         """Berechnet die Zeile einer zusammengeführten Fahrt neu (Teile bleiben unverändert in files)."""
         try:
-            ride, source = self._load_merged(group_path)
+            ride, source, parts = self._load_merged(group_path)
         except MergeError as exc:
             log.warning("Zusammengeführte Fahrt %s nicht lesbar: %s", group_path, exc.code)
             return None
         first = self._best_file(self._merge_members(group_path)[0])
-        pk = self._store_ride(first["id"], group_path, ride, source)
+        pk = self._store_ride(first["id"], group_path, ride, source, parts=parts)
         # Ortsnamen neu holen lassen (Strecke kann sich durch eine neuere Teildatei geändert haben)
         self.db.execute(
             "INSERT INTO ride_meta(path, geocoded_at) VALUES (?, NULL) ON CONFLICT(path) DO UPDATE SET geocoded_at = NULL",
