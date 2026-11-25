@@ -136,3 +136,21 @@ def test_status_good_watch_and_sorting():
     levels = [h["level"] for h in r["hints"]]
     assert levels == sorted(levels, key=["crit", "warn", "info", "ok"].index)
     assert levels[0] == "crit" and r["status"] == "check"
+
+
+def test_hints_event_time_and_ride_link():
+    ss = [
+        S(time="2026-03-01T10:00:00+00:00", start=80, end=8),
+        S(time="2026-03-05T12:30:00+00:00", start=80, end=5),
+    ]
+    rides = [{"id": 7, "time": "2026-03-05T11:00:00+00:00", "duration_s": 5400, "motor_wh_per_pct": None}]
+    h = next(x for x in health(ss, rides)["hints"] if x["key"] == "deep")
+    assert h["at"] == "2026-03-05T12:30:00+00:00"
+    assert h["ride_id"] == 7
+    h = next(x for x in health(ss, [])["hints"] if x["key"] == "deep")
+    assert h["at"] == "2026-03-05T12:30:00+00:00" and "ride_id" not in h
+
+
+def test_hint_without_time_has_no_at():
+    h = next(x for x in health([S(time=None, start=80, end=5)], [])["hints"] if x["key"] == "deep")
+    assert "at" not in h and "ride_id" not in h
