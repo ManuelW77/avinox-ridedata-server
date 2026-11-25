@@ -12,6 +12,7 @@
     <h1 id="ride-title" data-ride="{{ ride.id }}" data-custom="{{ ride.name_custom or '' }}"><span id="ride-title-text">{{ ride.name }}</span>
       <button type="button" class="rename-btn" id="rename-btn" title="{{ t('ride.rename') }}" aria-label="{{ t('ride.rename') }}">✎</button></h1>
     <p>{{ ride.start_utc | localtime('%a %d.%m.%Y, %H:%M Uhr') if ride.start_utc else t('ride_no_time', n=ride.ride_id) }} · {{ t('ride.sub', n=ride.ride_id) }} · <span class="mono">{{ ride.path.split('/')[-1] }}</span>
+      {% if ride.merged_count %}<span class="pill">{{ t('ride.merged_note', n=ride.merged_count) }}</span> <button type="button" class="btn ghost small" id="split-btn" data-ride="{{ ride.id }}">{{ t('ride.split') }}</button>{% endif %}
       {% if a.warnings %}<span class="pill warn" title="{{ a.warnings | join('; ') }}">{{ t('ride.warnings', n=a.warnings | length) }}</span>{% endif %}
     </p>
   </div>
@@ -21,8 +22,8 @@
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/fit">FIT</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/geojson" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.geojson">GeoJSON</a>
     <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}" download="{{ t('ride.file_prefix') }}-{{ ride.ride_id }}.json">JSON</a>
-    <a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>
-    {% if hl_active and a.hr_source != 'belt' %}<button type="button" class="btn ghost" id="hl-fetch" data-ride="{{ ride.id }}" title="{{ t('ride.hl_fetch_tip') }}">{{ t('ride.hl_fetch') }}</button>{% endif %}
+    {% if not ride.merged_count %}<a class="btn ghost" href="/api/v1/rides/{{ ride.id }}/raw">{{ t('ride.raw') }}</a>{% endif %}
+    {% if hl_active and a.hr_source != 'belt' and not ride.merged_count %}<button type="button" class="btn ghost" id="hl-fetch" data-ride="{{ ride.id }}" title="{{ t('ride.hl_fetch_tip') }}">{{ t('ride.hl_fetch') }}</button>{% endif %}
   </div>
 </div>
 
@@ -269,7 +270,7 @@
   <form method="dialog">
     <h2 id="delete-dialog-title">{{ t('ride.delete_title') }}</h2>
     <p><strong>{{ ride.name }}</strong></p>
-    <p>{{ t('ride.delete_text') }}</p>
+    <p>{{ t('ride.delete_text_merged', n=ride.merged_count) if ride.merged_count else t('ride.delete_text') }}</p>
     <div class="actions">
       <button type="submit" class="btn ghost" value="cancel" autofocus>{{ t('ride.delete_cancel') }}</button>
       <button type="submit" class="btn btn-danger" value="delete" id="delete-confirm">{{ t('ride.delete') }}</button>
@@ -288,5 +289,6 @@
 <script src="{{ url_for('static', path='physics.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-name.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-delete.js').path }}" defer></script>
+<script src="{{ url_for('static', path='ride-split.js').path }}" defer></script>
 <script src="{{ url_for('static', path='ride-healthlog.js').path }}" defer></script>
 {% endblock %}
