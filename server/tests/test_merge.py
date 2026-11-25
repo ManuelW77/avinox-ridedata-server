@@ -181,3 +181,88 @@ def test_list_shows_hint(client, settings):
     html = client.get("/rides").text
     assert f'data-merge="{a},{b}"' in html
     assert html.count("data-merge=") == 1
+
+
+def _buried_for(offsets, durations=(40, 40)):
+    """Synthetische Nutzungsstatistik mit je einer Fahrt zu ``ride_at(offset)`` (Display-Zeit = UTC+8)."""
+    from datetime import UTC, datetime, timedelta
+
+    lines = ['{"general_msg":{"Product_type":"EB100","boot_times":1}}']
+    for k, (off, dur) in enumerate(zip(offsets, durations)):
+        end = datetime.fromtimestamp(T0 + off + dur, UTC) + timedelta(hours=8)
+        ts = f"{end.year}-{end.month}-{end.day}-{end.hour}:{end.minute}:{end.second}"
+        lines.append(
+            f'{{"event_id":"single_ride","time_now":"{ts}","avg_speed":"{5 * 3.6}","elev_gain":"{10 + k * 10}","duration":"{dur}.0000"}}'
+        )
+        lines.append(f'{{"event_id":"single_ride","time_now":"{ts}","distance":"{5 * dur / 1000}","battery":"{1 + k}","elev_start":"{500 + k}"}}')
+        lines.append(f'{{"event_id":"rider_cadence","time_now":"{ts}","average":"{60 + 20 * k}","max":"{100 + k * 10}"}}')
+        lines.append(f'{{"event_id":"gear_shift","time_now":"{ts}","gear_shift_1":"{10 * (k + 1)}","gear_shift_2":"5"}}')
+        lines.append(f'{{"event_id":"assist_mode_usage","time_now":"{ts}","eco_duration":"{k + 1}","change_number":"{k + 2}"}}')
+    return "\n".join(lines).encode()
+
+
+BURIED = "buried_rec/buried_file_cur.json"
+
+
+def test_combine_device_stats():
+    from avinox.buried import parse_buried
+    from avinox.merge import combine_device_stats
+
+    rs = [s for sess in parse_buried(_buried_for([0, 600]).decode()) for s in sess.rides]
+    assert len(rs) == 2
+    c = combine_device_stats(rs)
+    assert c.duration_s == 80 and c.distance_km == pytest.approx(0.4)
+    assert c.avg_speed_kmh == pytest.approx(0.4 / 80 * 3600)
+    assert c.elev_gain_m == 30 and c.elev_start_m == rs[0].elev_start_m
+    assert c.battery_used_pct == 3 and c.assist_mode_changes == 5
+    assert c.avg_cadence_rpm == pytest.approx(70) and c.max_cadence_rpm == 110
+    assert c.seconds_per_gear == {1: 30, 2: 10} and c.seconds_per_assist_mode["eco"] == 3
+    assert c.end_time == rs[-1].end_time
+    # None-Werte zählen nicht; ohne jeden Wert bleibt None
+    assert combine_device_stats([rs[0]]).boost_s == rs[0].boost_s
+
+
+def test_merged_ride_gets_device_stats_after_buried_upload(client, settings):
+    a, b = upload(client, settings, [0, 600])
+    mid = client.post("/api/v1/rides/merge", json={"ids": [a, b]}).json()["id"]
+    assert client.get(f"/api/v1/rides/{mid}").json()["has_device_stats"] == 0
+    put(client, settings, _buried_for([0, 600]), path=BURIED)
+    d = client.get(f"/api/v1/rides/{mid}").json()
+    assert d["has_device_stats"] == 1
+    ds = d["analysis"]["device_stats"]
+    assert ds["duration_s"] == 80 and ds["battery_used_pct"] == 3
+    assert ds["seconds_per_gear"] == {"1": 30, "2": 10}
+    # Seite rendert (de/en)
+    for lang in ("de", "en"):
+        assert client.get(f"/rides/{mid}?lang={lang}").status_code == 200
+
+
+def test_merged_without_all_parts_matched_has_no_device_stats(client, settings):
+    a = put(client, settings, ride_at(0), path=path(0)).json()["ride"]
+    b = put(client, settings, ride_at(600, n=50), path=path(1)).json()["ride"]  # andere Dauer: keine Zufallszuordnung
+    put(client, settings, _buried_for([0], (40,)), path=BURIED)  # nur der erste Teil
+    mid = client.post("/api/v1/rides/merge", json={"ids": [a, b]}).json()["id"]
+    assert client.get(f"/api/v1/rides/{mid}").json()["has_device_stats"] == 0
+    put(client, settings, _buried_for([0, 600], (40, 50)), path=BURIED)  # später vollständig
+    assert client.get(f"/api/v1/rides/{mid}").json()["has_device_stats"] == 1
+
+
+def test_bulk_delete_and_no_reimport(client, settings):
+    a, b, c = upload(client, settings, [0, 600, 100_000])
+    mid = client.post("/api/v1/rides/merge", json={"ids": [a, b]}).json()["id"]
+    assert client.post("/api/v1/rides/delete", json={"ids": []}).status_code == 400
+    assert client.post("/api/v1/rides/delete", json={"ids": ["x"]}).status_code == 400
+    r = client.post("/api/v1/rides/delete", json={"ids": [mid, c, 99999]})
+    assert r.status_code == 200 and sorted(r.json()["deleted"]) == sorted([mid, c])
+    assert client.get("/api/v1/rides").json() == []
+    for i, off in enumerate([0, 600, 100_000]):
+        assert put(client, settings, ride_at(off), path=path(i)).json()["ride"] is None
+    assert client.get("/api/v1/rides").json() == []
+
+
+def test_list_page_has_delete_bar(client, settings):
+    upload(client, settings, [0, 600])
+    for lang in ("de", "en"):
+        r = client.get(f"/rides?lang={lang}")
+        assert r.status_code == 200 and 'id="merge-delete"' in r.text and 'id="rides-delete-dialog"' in r.text
+        assert "rides.delete.text" in r.text
