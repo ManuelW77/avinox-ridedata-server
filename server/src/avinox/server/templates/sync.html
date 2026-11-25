@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import ico with context %}
 {% block title %}{{ t('sync.title') }} – Avinox Ride Data{% endblock %}
 {% block main %}
 {% set bad = ['upload_chunk_error', 'auth_error'] %}
@@ -17,7 +18,7 @@
 
 {% set unseen = findings_unseen or {} %}
 <div class="block t-neutral block-first" id="sec-format" data-jump="{{ t('sync.fmt.title') }}">
-  <h2 class="section-title">{{ t('sync.fmt.title') }}</h2>
+  <h2 class="section-title">{{ ico('info') }}{{ t('sync.fmt.title') }}</h2>
   <p class="muted small block-desc">{{ t('sync.fmt.text') }}</p>
   <section class="card">
     {% if fmt_findings %}
@@ -38,7 +39,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-hms-findings" data-jump="{{ t('sync.hms.title') }}">
-  <h2 class="section-title">{{ t('sync.hms.title') }}</h2>
+  <h2 class="section-title">{{ ico('alert') }}{{ t('sync.hms.title') }}</h2>
   <p class="muted small block-desc">{{ t('sync.hms.text') }}</p>
   <section class="card">
     {% if hms_findings %}
@@ -63,7 +64,7 @@
 </section>
 {% else %}
 <div class="block t-motor" id="sec-devices" data-jump="{{ t('sync.sec.devices') }}">
-  <h2 class="section-title">{{ t('sync.sec.devices') }}</h2>
+  <h2 class="section-title">{{ ico('cloud') }}{{ t('sync.sec.devices') }}</h2>
 <div class="grid cols-2">
   {% for d in snap.devices %}
   {% set r = d.last_report or {} %}
@@ -113,7 +114,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-events" data-jump="{{ t('sync.events') }}">
-  <h2 class="section-title">{{ t('sync.events') }}</h2>
+  <h2 class="section-title">{{ ico('list') }}{{ t('sync.events') }}</h2>
 <section class="card">
   <div style="overflow-x:auto">
   <table class="plain sync">

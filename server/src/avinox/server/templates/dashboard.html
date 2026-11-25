@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import figure, figure_text with context %}
+{% from "_macros.html" import figure, figure_text, ico with context %}
 {% block title %}{{ t('dash.title') }} – Avinox Ride Data{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', path='vendor/uplot/uPlot.min.css').path }}">
@@ -26,8 +26,9 @@
 
 {# ------------------------------------------------------------ Zeitraum #}
 <div class="block block-first t-ride" id="sec-overview" data-jump="{{ t('jump.overview') }}">
-<section class="card period" id="period" aria-live="polite">
-  <div class="toolbar">
+<div class="ph">
+  <h2 class="section-title">{{ ico('calendar') }}{{ t('dash.period') }}</h2>
+  <div class="tools">
     <div class="segmented" id="period-by" role="group" aria-label="{{ t('dash.period') }}">
       {% for key, name in (('day', t('period.day')), ('week', t('period.week')), ('month', t('period.month')), ('year', t('period.year')), ('all', t('period.all'))) %}
       <button type="button" data-key="{{ key }}" aria-pressed="{{ 'true' if dash.period == key else 'false' }}">{{ name }}</button>
@@ -43,7 +44,8 @@
       <button type="button" id="period-next" aria-label="{{ t('dash.next') }}">›</button>
     </div>
   </div>
-
+</div>
+<section class="card period" id="period" aria-live="polite">
   <div class="hero">
     <div class="hero-main">
       <div class="hero-k" id="hero-name">{{ dash.current.name }}</div>
@@ -89,7 +91,7 @@
 
 {# ------------------------------------------------------------ Verteilung (per JS) #}
 <section class="block mix-section t-neutral" id="mix-section" data-jump="{{ t('dash.mix.title') }}" hidden>
-  <h2 class="section-title">{{ t('dash.mix.title') }}</h2>
+  <h2 class="section-title">{{ ico('chart') }}{{ t('dash.mix.title') }}</h2>
   <div id="mix"></div>
 </section>
 
@@ -97,7 +99,7 @@
 {% set groups = [('rider', t('group.rider')), ('motor', t('group.motor')), ('ride', t('group.ride')), ('period', t('group.period'))] %}
 {% if dash.highlights %}
 <section class="block bests t-neutral" id="sec-bests" data-jump="{{ t('bests.title') }}">
-  <h2 class="section-title">{{ t('bests.title') }}</h2>
+  <h2 class="section-title">{{ ico('trophy') }}{{ t('bests.title') }}</h2>
   {% for gkey, gname in groups %}
   {% set items = dash.highlights | selectattr('group', 'equalto', gkey) | list %}
   {% if items %}
@@ -128,10 +130,11 @@
 
 {# ------------------------------------------------------------ Letzte Fahrten + Gesamt #}
 <div class="block t-ride" id="sec-recent" data-jump="{{ t('dash.sec.recent') }}">
-<h2 class="section-title">{{ t('dash.sec.recent') }}</h2>
+<h2 class="section-title">{{ ico('list') }}{{ t('dash.sec.recent') }}</h2>
 <div class="grid cols-2 bottom">
   <section class="card">
     <div class="chart-head"><h2>{{ t('recent.title') }}</h2><a class="small" href="/rides">{{ t('recent.all') }}</a></div>
+    <div class="recent-head"><span>{{ t('col.date') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('fig.rider_energy') }}</span></div>
     <ul class="recent">
       {% for r in dash.recent %}
       <li>
@@ -165,7 +168,7 @@
 </div>
 
 <div class="block t-neutral" id="sec-ai" data-ai="summary tips" data-jump="{{ t('ai.dash.title') }}" hidden>
-  <h2 class="section-title">{{ t('ai.dash.title') }}</h2>
+  <h2 class="section-title">{{ ico('sparkle') }}{{ t('ai.dash.title') }}</h2>
   <section class="card ai-card"><div class="ai-body"></div></section>
 </div>
 {% endif %}

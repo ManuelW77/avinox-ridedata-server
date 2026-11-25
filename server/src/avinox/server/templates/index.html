@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import ico with context %}
 {% block main %}
 <div class="lead">
   <div>
@@ -11,7 +12,7 @@
 {% if stats.months %}
 {% set max_km = stats.months.values() | map(attribute='distance_km') | max %}
 <div class="block t-ride block-first" id="sec-months" data-jump="{{ t('rides.per_month') }}">
-  <h2 class="section-title">{{ t('rides.per_month') }}</h2>
+  <h2 class="section-title">{{ ico('calendar') }}{{ t('rides.per_month') }}</h2>
 <section class="card">
   <div class="bars wide">
     {% for month, m in stats.months.items() %}
@@ -28,7 +29,7 @@
 
 {% if rides %}
 <div class="block t-ride{% if not stats.months %} block-first{% endif %}" id="sec-list" data-jump="{{ t('rides.sec.list') }}">
-  <h2 class="section-title">{{ t('rides.sec.list') }}</h2>
+  <h2 class="section-title">{{ ico('list') }}{{ t('rides.sec.list') }}</h2>
 <div class="rides-tools" id="rides-tools" role="search">
   <label class="rt-search"><span aria-hidden="true">&#9906;</span><input type="search" id="rt-q" placeholder="{{ t('rides.f.search') }}" aria-label="{{ t('rides.f.search') }}" autocomplete="off"></label>
   <div class="segmented" id="rt-year" role="group" aria-label="{{ t('rides.f.year') }}" hidden></div>
@@ -49,14 +50,14 @@
   <button type="button" class="btn ghost" id="rt-select" aria-pressed="false">{{ t('rides.merge.select') }}</button>
   <button type="button" class="btn ghost" id="rt-reset" hidden>{{ t('rides.f.reset') }}</button>
 </div>
-<div class="rides-head">
-  <span>{{ t('col.ride') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span>
-</div>
 <div class="merge-bar" id="merge-bar" hidden>
   <span id="merge-count" aria-live="polite"></span>
   <button type="button" class="btn" id="merge-go" disabled>{{ t('rides.merge.go') }}</button>
   <button type="button" class="btn btn-danger" id="merge-delete" disabled>{{ t('rides.delete.go') }}</button>
   <button type="button" class="btn ghost" id="merge-cancel">{{ t('rides.merge.cancel') }}</button>
+</div>
+<div class="rides-head">
+  <span>{{ t('col.ride') }}</span><span>{{ t('col.distance') }}</span><span>{{ t('col.duration') }}</span><span class="opt">{{ t('col.height') }}</span><span class="opt">{{ t('col.avg_rider') }}</span><span class="opt">{{ t('col.battery') }}</span>
 </div>
 <ul class="rides" id="rides-list">
   {% for r in rides %}
