@@ -849,8 +849,8 @@ class Store:
             if s.battery
         ]
         ride_rows = self.db.query(
-            "SELECT start_utc AS time, json_extract(analysis_json, '$.battery.motor_wh_per_pct') AS motor_wh_per_pct, "
-            "json_extract(analysis_json, '$.battery.used_pct') AS used_pct FROM rides WHERE start_utc IS NOT NULL AND json_extract(analysis_json, '$.battery.motor_wh_per_pct') IS NOT NULL "
+            "SELECT id, start_utc AS time, duration_s, json_extract(analysis_json, '$.battery.motor_wh_per_pct') AS motor_wh_per_pct, "
+            "json_extract(analysis_json, '$.battery.used_pct') AS used_pct FROM rides WHERE start_utc IS NOT NULL "
             "ORDER BY start_utc"
         )
         info["battery_health"] = battery.health(battery_in, [dict(r) for r in ride_rows])
